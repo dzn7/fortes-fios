@@ -1,5 +1,21 @@
 # Progress
 
+## [2026-08-14] Fidelidade dos banners entre recorte, prévia e site
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** eliminar o zoom adicional dos banners desktop e mobile e permitir a conferência explícita das duas telas no editor.
+**Arquivos alterados:** `src/components/HeroVitrine.tsx`, `src/app/admin/vitrine/page.tsx`, `src/components/admin/ModalRecorteImagem.tsx`, `src/app/globals.css`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- O hero público deixou de sobrescrever a proporção salva com altura fixa no desktop ou limite de viewport no celular.
+- As imagens passam a preservar integralmente o recorte; metadados legados inconsistentes geram respiro neutro em vez de novo corte ou zoom.
+- O editor exibe a arte desktop na proporção realmente escolhida e oferece uma única seta para alternar a prévia entre Desktop e Celular.
+- A prévia identifica quando o celular usa a imagem desktop como fallback e reproduz Quiche Sans no título e Raleway ExtraLight no texto complementar.
+- A miniatura do modal de recorte também passou a usar as fontes públicas.
+**Decisões tomadas:** fidelidade da composição aprovada prevalece sobre preencher o contêiner a qualquer custo; `object-contain` impede recortes secundários caso imagem e metadado divirjam.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros); demais verificações registradas no fechamento desta task.
+**Pendências / próximos passos:** nenhuma conhecida dentro da fidelidade e alternância das prévias.
+**Armadilhas descobertas:** salvar a proporção não basta se o componente publicado impõe uma altura concorrente; `object-cover` então transforma essa diferença em zoom aparente.
+
 ## [2026-08-14] Gestos livres nos cards e transição do menu público
 
 **Agente/Modelo:** Codex GPT-5
@@ -12,7 +28,7 @@
 - O menu público mantém o `Sheet` existente, mas abre e fecha em tempos mais curtos; conteúdo e rodapé recebem entrada sutil em duas camadas.
 - A animação do menu é desativada por `prefers-reduced-motion`.
 **Decisões tomadas:** não adicionar handlers manuais de touch; o scroll é nativo e mais confiável entre Safari e Chromium. A animação ocorre por blocos, não item a item, para evitar aparência artificial e custo desnecessário.
-**Verificação:** pendente até a execução final de typecheck, build, lint, `ui-review`, `bug-hunter` e `verification-before-completion`.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · `ui-review` ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓ · busca confirmou remoção de `touch-pan-x`, presença de inércia, redução de movimento e ausência de resíduos novos ✓ · `npm run lint` indisponível pelo script legado `next lint` incompatível com Next 16.
 **Pendências / próximos passos:** nenhuma conhecida dentro dos gestos do catálogo e da abertura do menu.
 **Armadilhas descobertas:** `touch-pan-x` em um trilho nativo não significa apenas “permitir swipe horizontal”; ele também nega explicitamente o pan vertical iniciado naquela região.
 
