@@ -5,6 +5,7 @@ type DadosClientePedido = {
   telefone: string
   endereco?: string | null
   bairro?: string | null
+  cidade?: string | null
 }
 
 type ClienteRegistrado = {
@@ -19,6 +20,7 @@ export async function registrarClientePedido({
   telefone,
   endereco,
   bairro,
+  cidade,
 }: DadosClientePedido): Promise<ClienteRegistrado> {
   const telefoneNormalizado = normalizarTelefoneCliente(telefone)
   if (!telefoneNormalizado) {
@@ -34,10 +36,12 @@ export async function registrarClientePedido({
   const nomeNormalizado = nome.trim()
   const enderecoNormalizado = endereco?.trim() || ''
   const bairroNormalizado = bairro?.trim() || ''
+  const cidadeNormalizada = cidade?.trim() || ''
 
   if (nomeNormalizado) dados.nome = nomeNormalizado
   if (enderecoNormalizado) dados.endereco = enderecoNormalizado
   if (bairroNormalizado) dados.bairro = bairroNormalizado
+  if (cidadeNormalizada) dados.cidade = cidadeNormalizada
 
   const { data, error } = await supabase
     .from('usuarios_cliente')

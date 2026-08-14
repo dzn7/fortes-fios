@@ -10,6 +10,7 @@ import {
 import { buscarProximoNumeroPedidoDiario, normalizarNumeroPedido, sincronizarNumeroPedidoDiario } from '@/lib/pedidos/numero-diario'
 import { obterSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { nomeClienteParaPedido } from '@/lib/nome-cliente-local.mjs'
+import { calcularProximaDataEntrega } from '@/lib/agenda-entrega'
 
 type TipoEntrega = 'entrega' | 'retirada' | 'local'
 type TipoCatalogoItemCheckout = 'produto' | 'bebida' | 'combo'
@@ -48,7 +49,10 @@ export type CriarPedidoPixOnlinePayload = {
   nomeCliente: string
   telefone?: string
   tipoEntrega: TipoEntrega
+  cidadeId?: string
+  cidade?: string
   bairro?: string
+  endereco?: string
   pontoReferencia?: string
   mesaSelecionada?: number | null
   pontoLocalId?: string | null
@@ -87,11 +91,14 @@ type PedidoOnline = {
   total: number
   taxa_entrega: number
   mesa: number | null
+  endereco: string | null
   bairro: string | null
+  cidade: string | null
   referencia: string | null
   observacoes: string | null
   telefone: string | null
   status: string
+  data_prevista_entrega: string | null
 }
 
 export type ResultadoCriacaoPixOnline = {
@@ -108,6 +115,7 @@ export type ResultadoCriacaoPixOnline = {
   qrCodeBase64: string | null
   qrCodeTicketUrl: string | null
   expiraEm: string | null
+  dataPrevistaEntrega: string | null
 }
 
 export type ResultadoStatusPagamentoOnline = ResultadoCriacaoPixOnline & {
@@ -171,6 +179,7 @@ function montarResultadoStatus(
     qrCodeBase64: pagamento.qr_code_base64,
     qrCodeTicketUrl: pagamento.qr_code_ticket_url,
     expiraEm: pagamento.expira_em,
+    dataPrevistaEntrega: pedido.data_prevista_entrega,
     pagamentoAprovadoProcessado: pagamento.aprovado_processado,
   }
 }
@@ -218,7 +227,7 @@ async function buscarPedidoOnline(pedidoId: string): Promise<PedidoOnline> {
   const { data, error } = await supabase
     .from('pedidos')
     .select(
-      'id, numero_pedido, nome_cliente, tipo_entrega, total, taxa_entrega, mesa, bairro, referencia, observacoes, telefone, status'
+      'id, numero_pedido, nome_cliente, tipo_entrega, total, taxa_entrega, mesa, endereco, bairro, cidade, referencia, observacoes, telefone, status, data_prevista_entrega'
     )
     .eq('id', pedidoId)
     .single()
@@ -256,9 +265,11 @@ async function garantirEntrega(pedido: PedidoOnline) {
   const { error } = await supabase.from('entregas').upsert(
     {
       pedido_id: pedido.id,
-      endereco_entrega: pedido.referencia,
+      endereco_entrega: pedido.endereco,
       bairro: pedido.bairro,
+      cidade: pedido.cidade,
       taxa_entrega: numeroSeguro(pedido.taxa_entrega),
+      data_prevista_entrega: pedido.data_prevista_entrega,
       status: 'pendente',
       observacoes: pedido.observacoes,
     },
@@ -391,11 +402,14 @@ function validarPayloadCriacao(payload: CriarPedidoPixOnlinePayload) {
   if (!payload.tipoEntrega || !['entrega', 'retirada', 'local'].includes(payload.tipoEntrega)) {
     throw new Error('Tipo de entrega inválido.')
   }
+  if (payload.tipoEntrega === 'entrega' && !payload.cidadeId?.trim()) {
+    throw new Error('Cidade é obrigatória para entrega.')
+  }
   if (payload.tipoEntrega === 'entrega' && !payload.bairro?.trim()) {
     throw new Error('Bairro é obrigatório para entrega.')
   }
-  if (payload.tipoEntrega === 'entrega' && !payload.pontoReferencia?.trim()) {
-    throw new Error('Endereço ou referência é obrigatório para entrega.')
+  if (payload.tipoEntrega === 'entrega' && !payload.endereco?.trim()) {
+    throw new Error('Endereço é obrigatório para entrega.')
   }
 }
 
@@ -407,7 +421,30 @@ export async function criarPedidoPixOnline(
 
   const supabase = obterSupabaseAdmin()
   const subtotal = numeroSeguro(payload.subtotal)
-  const taxaEntrega = numeroSeguro(payload.taxaEntrega)
+  let taxaEntrega = numeroSeguro(payload.taxaEntrega)
+  let cidadeEntrega: string | null = null
+  let dataPrevistaEntrega: string | null = null
+
+  if (payload.tipoEntrega === 'entrega') {
+    const { data: cidade, error: erroCidade } = await supabase
+      .from('bairros')
+      .select('nome, taxa_entrega, valor_minimo_pedido, entrega_gratis, ativo, dias_entrega')
+      .eq('id', payload.cidadeId as string)
+      .eq('ativo', true)
+      .maybeSingle()
+
+    if (erroCidade) throw erroCidade
+    if (!cidade) throw new Error('Cidade de entrega indisponível.')
+
+    const valorMinimo = numeroSeguro(cidade.valor_minimo_pedido)
+    if (subtotal < valorMinimo) {
+      throw new Error(`A compra mínima para ${cidade.nome} é de R$ ${valorMinimo.toFixed(2)}.`)
+    }
+
+    cidadeEntrega = cidade.nome
+    taxaEntrega = cidade.entrega_gratis ? 0 : numeroSeguro(cidade.taxa_entrega)
+    dataPrevistaEntrega = calcularProximaDataEntrega(cidade.dias_entrega)
+  }
   const taxaPagamento = numeroSeguro(payload.taxaPagamento)
   const totalSemDesconto = subtotal + taxaEntrega
   const totalComDesconto = numeroSeguro(payload.cupom?.totalComDesconto ?? totalSemDesconto)
@@ -441,9 +478,10 @@ export async function criarPedidoPixOnline(
         numero_pedido: proximoNumeroPedido,
         nome_cliente: nomeClientePedido,
         telefone: payload.telefone || null,
-        endereco: null,
+        endereco: payload.tipoEntrega === 'entrega' ? payload.endereco?.trim() || null : null,
         bairro: payload.tipoEntrega === 'entrega' ? payload.bairro || null : null,
-        referencia: payload.tipoEntrega === 'entrega' ? payload.pontoReferencia || null : null,
+        cidade: payload.tipoEntrega === 'entrega' ? cidadeEntrega : null,
+        referencia: payload.tipoEntrega === 'entrega' ? payload.pontoReferencia?.trim() || null : null,
         tipo_entrega: payload.tipoEntrega,
         forma_pagamento: payload.formaPagamentoNome || 'PIX Online',
         subtotal,
@@ -463,9 +501,10 @@ export async function criarPedidoPixOnline(
         pagamento_online: true,
         pagamento_online_status: 'aguardando_pagamento',
         pagamento_online_gateway: 'mercado_pago',
+        data_prevista_entrega: dataPrevistaEntrega,
       })
       .select(
-        'id, numero_pedido, nome_cliente, tipo_entrega, total, mesa, bairro, referencia, observacoes, telefone, status'
+        'id, numero_pedido, nome_cliente, tipo_entrega, total, taxa_entrega, mesa, endereco, bairro, cidade, referencia, observacoes, telefone, status, data_prevista_entrega'
       )
       .single()
 
@@ -655,6 +694,7 @@ export async function criarPedidoPixOnline(
       qrCodeBase64: (pagamentoOnline as RegistroPagamentoOnline).qr_code_base64,
       qrCodeTicketUrl: (pagamentoOnline as RegistroPagamentoOnline).qr_code_ticket_url,
       expiraEm: (pagamentoOnline as RegistroPagamentoOnline).expira_em,
+      dataPrevistaEntrega: pedido.data_prevista_entrega,
     }
   } catch (erro) {
     if (pedidoCriadoId) {

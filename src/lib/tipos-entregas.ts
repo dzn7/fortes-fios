@@ -9,6 +9,7 @@ export type Entrega = {
   status: StatusEntrega
   endereco_entrega: string | null
   bairro: string | null
+  cidade: string | null
   taxa_entrega: number
   tempo_estimado: number | null
   tempo_real: number | null
@@ -16,6 +17,7 @@ export type Entrega = {
   observacoes: string | null
   data_saida: string | null
   data_entrega: string | null
+  data_prevista_entrega: string | null
   excluida_repasse: boolean
   created_at: string
   updated_at: string
@@ -30,6 +32,8 @@ export type Entrega = {
     status: string
     tipo_entrega: string
     endereco: string
+    bairro?: string | null
+    cidade?: string | null
   }
 }
 
@@ -38,10 +42,12 @@ export type NovaEntrega = {
   entregador_id?: string
   endereco_entrega?: string
   bairro?: string
+  cidade?: string
   taxa_entrega?: number
   tempo_estimado?: number
   distancia_km?: number
   observacoes?: string
+  data_prevista_entrega?: string | null
 }
 
 export type EstatisticasEntregas = {

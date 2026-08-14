@@ -25,6 +25,7 @@ import {
 import { useCarrinho } from '@/contexts/CarrinhoContext'
 import { cn } from '@/lib/utils'
 import IconeWhatsApp from '@/components/icons/IconeWhatsApp'
+import { FaixaRodape } from '@/components/FaixaRodape'
 
 type HeaderProps = {
   onAbrirAjuda?: () => void
@@ -66,12 +67,13 @@ export default function Header({
 
   return (
     <header
-      className={`fixed left-0 right-0 top-0 z-50 border-b transition-colors ${
+      className={`sticky top-0 z-50 border-b transition-colors ${
         scrolled
           ? 'border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80'
           : 'border-border/70 bg-background/95'
       }`}
     >
+      <FaixaRodape />
       <div className="mx-auto max-w-7xl px-3 py-2.5 sm:px-6 lg:px-8">
         <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 md:flex md:justify-between md:gap-3">
           <Sheet open={menuAberto} onOpenChange={setMenuAberto}>

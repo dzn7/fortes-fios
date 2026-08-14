@@ -13,6 +13,7 @@ import {
   EyeOff,
   ImageIcon,
   Loader2,
+  Megaphone,
   Monitor,
   PackageSearch,
   Pencil,
@@ -29,6 +30,7 @@ import AdminLayout from '@/components/admin/AdminLayout'
 import ModalRecorteImagem from '@/components/admin/ModalRecorteImagem'
 import EditorResultadosStudio from '@/components/admin/vitrine/EditorResultadosStudio'
 import EditorOfertas from '@/components/admin/vitrine/EditorOfertas'
+import EditorFaixaRodape from '@/components/admin/vitrine/EditorFaixaRodape'
 import { supabase } from '@/lib/supabase'
 import { uploadImagemB2 } from '@/lib/backblaze'
 import { arquivoParaUrl, validarArquivoImagem } from '@/lib/recorteImagem'
@@ -63,6 +65,13 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import {
+  POSICAO_TEXTO_BANNER_CLASSES,
+  POSICAO_TEXTO_BANNER_ROTULOS,
+  POSICOES_TEXTO_BANNER,
+  ehPosicaoTextoBanner,
+  type PosicaoTextoBanner,
+} from '@/lib/vitrineBannerTexto'
+import {
   CHAVE_MAIS_VENDIDOS_VITRINE,
   CONFIGURACAO_MAIS_VENDIDOS_PADRAO,
   ConfiguracaoMaisVendidos,
@@ -75,12 +84,15 @@ import {
   normalizarConfiguracaoOfertas,
 } from '@/lib/vitrineOfertas'
 
-type PosicaoTexto =
-  'inferior_esquerda' | 'inferior_centro' | 'centro_esquerda' | 'centro'
 type ContrasteTexto = 'claro' | 'escuro'
 type IntensidadeOverlay = 'sem_overlay' | 'suave' | 'forte'
 type DestinoImagem = 'desktop' | 'mobile'
-type AreaVitrine = 'banners' | 'mais_vendidos' | 'ofertas' | 'resultados'
+type AreaVitrine =
+  | 'banners'
+  | 'mais_vendidos'
+  | 'ofertas'
+  | 'resultados'
+  | 'faixa_rodape'
 
 type BannerVitrine = {
   id: string
@@ -90,7 +102,7 @@ type BannerVitrine = {
   proporcaoMobile: number
   titulo: string
   subtitulo: string
-  posicaoTexto: PosicaoTexto
+  posicaoTexto: PosicaoTextoBanner
   contrasteTexto: ContrasteTexto
   overlay: IntensidadeOverlay
   ativo: boolean
@@ -121,13 +133,6 @@ const FORMULARIO_VAZIO: FormularioBanner = {
   contrasteTexto: 'claro',
   overlay: 'suave',
   ativo: true,
-}
-
-const POSICAO_PREVIEW_CLASSES: Record<PosicaoTexto, string> = {
-  inferior_esquerda: 'items-end justify-start text-left',
-  inferior_centro: 'items-end justify-center text-center',
-  centro_esquerda: 'items-center justify-start text-left',
-  centro: 'items-center justify-center text-center',
 }
 
 const proporcaoValida = (valor: unknown, padrao: number) =>
@@ -173,13 +178,8 @@ const lerBanners = (valor: string | null | undefined): BannerVitrine[] => {
           titulo: typeof banner.titulo === 'string' ? banner.titulo.trim() : '',
           subtitulo:
             typeof banner.subtitulo === 'string' ? banner.subtitulo.trim() : '',
-          posicaoTexto: [
-            'inferior_esquerda',
-            'inferior_centro',
-            'centro_esquerda',
-            'centro',
-          ].includes(String(banner.posicaoTexto))
-            ? (banner.posicaoTexto as PosicaoTexto)
+          posicaoTexto: ehPosicaoTextoBanner(banner.posicaoTexto)
+            ? banner.posicaoTexto
             : 'inferior_esquerda',
           contrasteTexto:
             banner.contrasteTexto === 'escuro' ? 'escuro' : 'claro',
@@ -676,7 +676,7 @@ export default function VitrinePage() {
           </header>
 
           <nav
-            className="grid w-full grid-cols-2 rounded-lg border border-border bg-muted/30 p-1 sm:w-fit sm:grid-cols-4"
+            className="grid w-full grid-cols-2 rounded-lg border border-border bg-muted/30 p-1 sm:grid-cols-3 lg:w-fit lg:grid-cols-5"
             aria-label="Áreas da vitrine"
             role="tablist"
           >
@@ -690,6 +690,7 @@ export default function VitrinePage() {
                 },
                 { id: 'ofertas', nome: 'Ofertas', Icone: BadgePercent },
                 { id: 'resultados', nome: 'Studio', Icone: Sparkles },
+                { id: 'faixa_rodape', nome: 'Cabeçalho', Icone: Megaphone },
               ] as const
             ).map(({ id, nome, Icone }) => {
               const selecionada = areaAtiva === id
@@ -1215,6 +1216,16 @@ export default function VitrinePage() {
               />
             </div>
           ) : null}
+
+          {areaAtiva === 'faixa_rodape' ? (
+            <div
+              id="painel-vitrine-faixa_rodape"
+              role="tabpanel"
+              aria-labelledby="aba-vitrine-faixa_rodape"
+            >
+              <EditorFaixaRodape />
+            </div>
+          ) : null}
         </main>
 
         {modalAberto && (
@@ -1446,20 +1457,24 @@ export default function VitrinePage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="banner-titulo">Frase principal</Label>
-                      <Input
+                      <textarea
                         id="banner-titulo"
                         value={formulario.titulo}
                         onChange={(event) =>
                           setFormulario((estadoAtual) => ({
                             ...estadoAtual,
-                            titulo: event.target.value.slice(0, 80),
+                            titulo: event.target.value.slice(0, 240),
                           }))
                         }
-                        placeholder="Ex.: Seu cabelo merece cuidado todos os dias"
+                        maxLength={240}
+                        rows={4}
+                        placeholder={'Ex.: Entregas em Porto em até 24h\nNossa Senhora dos Remédios toda semana'}
+                        className="min-h-28 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Opcional · até 80 caracteres
-                      </p>
+                      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                        <span>Opcional · Enter cria uma nova linha</span>
+                        <span className="tabular-nums">{formulario.titulo.length}/240</span>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="banner-subtitulo">
@@ -1485,7 +1500,7 @@ export default function VitrinePage() {
                       <Label>Posição do texto</Label>
                       <Select
                         value={formulario.posicaoTexto}
-                        onValueChange={(valor: PosicaoTexto) =>
+                        onValueChange={(valor: PosicaoTextoBanner) =>
                           setFormulario((estadoAtual) => ({
                             ...estadoAtual,
                             posicaoTexto: valor,
@@ -1496,16 +1511,11 @@ export default function VitrinePage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="inferior_esquerda">
-                            Inferior esquerdo
-                          </SelectItem>
-                          <SelectItem value="inferior_centro">
-                            Inferior centralizado
-                          </SelectItem>
-                          <SelectItem value="centro_esquerda">
-                            Centro esquerdo
-                          </SelectItem>
-                          <SelectItem value="centro">Centro</SelectItem>
+                          {POSICOES_TEXTO_BANNER.map((posicao) => (
+                            <SelectItem key={posicao} value={posicao}>
+                              {POSICAO_TEXTO_BANNER_ROTULOS[posicao]}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1644,7 +1654,7 @@ export default function VitrinePage() {
                           <div
                             className={cn(
                               'fortes-text absolute inset-0 flex p-4',
-                              POSICAO_PREVIEW_CLASSES[formulario.posicaoTexto],
+                              POSICAO_TEXTO_BANNER_CLASSES[formulario.posicaoTexto],
                             )}
                           >
                             <div
@@ -1656,12 +1666,12 @@ export default function VitrinePage() {
                               )}
                             >
                               {formulario.titulo && (
-                                <p className="fortes-display text-2xl leading-none">
+                                <p className="fortes-display whitespace-pre-line text-2xl leading-none">
                                   {formulario.titulo}
                                 </p>
                               )}
                               {formulario.subtitulo && (
-                                <p className="mt-1 line-clamp-2 text-xs">
+                                <p className="mt-1 whitespace-pre-line text-xs leading-relaxed">
                                   {formulario.subtitulo}
                                 </p>
                               )}
@@ -1753,6 +1763,9 @@ export default function VitrinePage() {
             modoPreview="banner"
             previewTitulo={formulario.titulo}
             previewSubtitulo={formulario.subtitulo}
+            previewPosicaoTexto={formulario.posicaoTexto}
+            previewContrasteTexto={formulario.contrasteTexto}
+            previewOverlay={formulario.overlay}
             destinoBanner={destinoImagem}
           />
         )}

@@ -776,7 +776,11 @@ export default function EntregasPage() {
                       {(entrega.endereco_entrega || entrega.pedido?.endereco) && (
                         <div className="flex items-start gap-1.5 text-xs text-muted-foreground mb-2 ml-4">
                           <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" strokeWidth={1.6} />
-                          <span className="truncate">{entrega.endereco_entrega || entrega.pedido?.endereco}</span>
+                          <span className="truncate">
+                            {[entrega.cidade || entrega.pedido?.cidade, entrega.bairro || entrega.pedido?.bairro, entrega.endereco_entrega || entrega.pedido?.endereco]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
                         </div>
                       )}
 
@@ -1287,7 +1291,9 @@ function DiaRepasseRow({
                         </p>
                         {(entrega.endereco_entrega || entrega.pedido?.endereco) && (
                           <p className="truncate text-xs text-muted-foreground">
-                            {entrega.endereco_entrega || entrega.pedido?.endereco}
+                            {[entrega.cidade || entrega.pedido?.cidade, entrega.bairro || entrega.pedido?.bairro, entrega.endereco_entrega || entrega.pedido?.endereco]
+                              .filter(Boolean)
+                              .join(' · ')}
                           </p>
                         )}
                       </div>

@@ -41,6 +41,7 @@ type Pedido = {
   telefone?: string
   endereco?: string
   bairro?: string
+  cidade?: string
   tipo_entrega: string
   status: string
   subtotal: number
@@ -60,6 +61,7 @@ type Bairro = {
   nome: string
   taxa_entrega: number
   entrega_gratis: boolean
+  valor_minimo_pedido: number
 }
 
 type ItemPedido = {
@@ -128,6 +130,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
   const [nomeCliente, setNomeCliente] = useState('')
   const [endereco, setEndereco] = useState('')
   const [bairro, setBairro] = useState('')
+  const [cidade, setCidade] = useState('')
   const [bairros, setBairros] = useState<Bairro[]>([])
   // Buscados aqui, e não recebidos por prop: os 7 call sites deste modal montam o
   // objeto `pedido` com selects diferentes e nem todos trazem estas colunas.
@@ -160,6 +163,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
       setNomeCliente(pedido.nome_cliente || 'Cliente')
       setEndereco(pedido.endereco || '')
       setBairro(pedido.bairro || '')
+      setCidade(pedido.cidade || '')
       setTipoEntrega(pedido.tipo_entrega || 'retirada')
       setStatus(pedido.status || 'confirmado')
       setFormaPagamento(pedido.forma_pagamento || '')
@@ -181,6 +185,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
       }
 
       carregarItensPedido()
+      carregarLocalEntregaPedido()
       carregarBairros()
       carregarDescontosPedido()
       carregarProdutos()
@@ -191,11 +196,30 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedido])
 
+  const carregarLocalEntregaPedido = async () => {
+    if (!pedido) return
+
+    try {
+      const { data, error } = await supabase
+        .from('pedidos')
+        .select('cidade, bairro, endereco')
+        .eq('id', pedido.id)
+        .single()
+
+      if (error) throw error
+      setCidade(String(data?.cidade || ''))
+      setBairro(String(data?.bairro || ''))
+      setEndereco(String(data?.endereco || ''))
+    } catch (error) {
+      console.error('Erro ao carregar local de entrega do pedido:', error)
+    }
+  }
+
   const carregarBairros = async () => {
     try {
       const { data, error } = await supabase
         .from('bairros')
-        .select('id, nome, taxa_entrega, entrega_gratis')
+        .select('id, nome, taxa_entrega, entrega_gratis, valor_minimo_pedido')
         .eq('ativo', true)
         .order('ordem')
 
@@ -206,10 +230,11 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
           nome: String(b.nome),
           taxa_entrega: Number(b.taxa_entrega || 0),
           entrega_gratis: Boolean(b.entrega_gratis),
+          valor_minimo_pedido: Number(b.valor_minimo_pedido || 0),
         }))
       )
     } catch (e) {
-      console.error('Erro ao carregar bairros:', e)
+      console.error('Erro ao carregar cidades:', e)
       setBairros([])
     }
   }
@@ -440,10 +465,10 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
   }, [])
 
   const subtotalItens = useMemo(() => itens.reduce((acc, item) => acc + item.subtotal, 0), [itens])
-  // A taxa vem do bairro (2, 3 ou 5 conforme cadastro), como no PDV. Bairro histórico
-  // que saiu do cadastro ou pedido antigo sem bairro preserva a taxa já gravada —
+  // A taxa vem da cidade cadastrada. Cidade histórica que saiu do cadastro
+  // preserva a taxa já gravada —
   // nunca cai para um valor fixo, que rebaixava silenciosamente entregas de R$ 5.
-  const bairroSelecionado = bairros.find((item) => item.nome === bairro) || null
+  const bairroSelecionado = bairros.find((item) => item.nome === cidade) || null
   const taxaEntrega =
     tipoEntrega !== 'entrega'
       ? 0
@@ -506,6 +531,19 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
   const salvarAlteracoes = async () => {
     if (!pedido || !nomeCliente) return
 
+    if (tipoEntrega === 'entrega' && (!cidade.trim() || !bairro.trim() || !endereco.trim())) {
+      toast.warning('Informe cidade, bairro e endereço para a entrega')
+      return
+    }
+    if (
+      tipoEntrega === 'entrega' &&
+      bairroSelecionado &&
+      subtotalLiquido < bairroSelecionado.valor_minimo_pedido
+    ) {
+      toast.warning(`A compra mínima para ${bairroSelecionado.nome} é R$ ${bairroSelecionado.valor_minimo_pedido.toFixed(2).replace('.', ',')}`)
+      return
+    }
+
     if (pagamentoDividido && pagamentos.length === 0) {
       toast.warning('Adicione pelo menos um pagamento')
       return
@@ -562,6 +600,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
           nome_cliente: nomeCliente || 'Cliente',
           endereco: endereco || null,
           bairro: tipoEntrega === 'entrega' ? (bairro || null) : null,
+          cidade: tipoEntrega === 'entrega' ? (cidade || null) : null,
           tipo_entrega: tipoEntrega || 'retirada',
           status: status,
           subtotal: subtotalLiquido,
@@ -933,25 +972,37 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
                       <>
                         <div>
                           <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
-                            Bairro
+                            Cidade
                           </label>
                           <select
-                            value={bairro}
-                            onChange={(e) => setBairro(e.target.value)}
+                            value={cidade}
+                            onChange={(e) => setCidade(e.target.value)}
                             className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-bordo-500 cursor-pointer"
                           >
                             <option value="">Não informado (mantém a taxa atual)</option>
-                            {/* Bairro do pedido que saiu do cadastro continua selecionável,
+                            {/* Cidade do pedido que saiu do cadastro continua selecionável,
                                 senão salvar o pedido o apagaria sem o operador perceber. */}
-                            {bairro && !bairroSelecionado && (
-                              <option value={bairro}>{bairro} (fora do cadastro)</option>
+                            {cidade && !bairroSelecionado && (
+                              <option value={cidade}>{cidade} (fora do cadastro)</option>
                             )}
                             {bairros.map((b) => (
                               <option key={b.id} value={b.nome}>
-                                {b.nome} — {b.entrega_gratis ? 'grátis' : `R$ ${b.taxa_entrega.toFixed(2).replace('.', ',')}`}
+                                {b.nome} — {b.entrega_gratis ? 'grátis' : `R$ ${b.taxa_entrega.toFixed(2).replace('.', ',')}`} · mín. R$ {b.valor_minimo_pedido.toFixed(2).replace('.', ',')}
                               </option>
                             ))}
                           </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
+                            Bairro
+                          </label>
+                          <input
+                            value={bairro}
+                            onChange={(e) => setBairro(e.target.value)}
+                            placeholder="Ex.: Centro"
+                            className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-bordo-500"
+                          />
                         </div>
 
                         <div className="flex items-center gap-2 px-3 py-2 bg-bordo-50 dark:bg-bordo-950/20 border border-bordo-200 dark:border-bordo-800 rounded-lg">

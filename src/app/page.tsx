@@ -593,7 +593,7 @@ export default function Home() {
         }
       />
 
-      <main className="pb-28 pt-16 md:pb-10">
+      <main className="pb-28 md:pb-10">
         <HeroVitrine />
 
         <section

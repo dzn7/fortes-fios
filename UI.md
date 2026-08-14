@@ -60,6 +60,8 @@ Há tokens equivalentes para sidebar. Novos componentes devem preferir esses nom
 
 Animações disponíveis incluem `fade-in`, `slide-up`, `scaleIn`, `shimmer` e rotações/spinners. Framer Motion é usado em telas específicas. Movimento deve comunicar transição/estado, não decorar controles rotineiros.
 
+A faixa promocional acima da navegação usa repetição contínua e velocidade constante para comunicar a condição da loja sem ocupar uma seção inteira. Com `prefers-reduced-motion`, a animação deve parar e a mensagem permanecer legível. O conteúdo é informativo: uma mensagem de frete não altera cálculo, elegibilidade ou total do checkout.
+
 ## Primitivos compartilhados
 
 Todos ficam em `src/components/ui/` e devem ser reutilizados antes de criar qualquer base local.
@@ -87,6 +89,7 @@ Primitivos Kibo UI disponíveis:
 |---|---|---|
 | `Header` | `src/components/Header.tsx` | Cabeçalho público: marca e ações completas no desktop; no mobile, hambúrguer abre Sheet lateral com categorias reais, pedidos, ajuda e tema, enquanto o carrinho permanece direto na navbar |
 | `Footer` | `src/components/Footer.tsx` | Dock de navegação pública exclusiva do mobile: Início, Pedidos e Sacola; superfície flutuante compacta, estado atual inequívoco, badge de quantidade e safe-area integrada |
+| `FaixaRodape` | `src/components/FaixaRodape.tsx` | Faixa promocional fina acima da navegação pública: fundo oliva semântico, mensagem em Quiche Sans e movimento contínuo; respeita redução de movimento e nunca substitui regras reais de frete do checkout |
 | `HeroVitrine` | `src/components/HeroVitrine.tsx` | Carrossel público full-width com proporção fiel ao recorte salvo; usa art direction desktop/mobile, imagem integral, swipe, navegação acessível, pausa manual e redução de movimento |
 | `ResultadosStudio` | `src/components/ResultadosStudio.tsx` | Prova social após o catálogo: logo central e carrossel 4:5 com destaque central, laterais visíveis, swipe, setas, paginação e pausa de autoplay |
 | `EditorOfertas` | `src/components/admin/vitrine/EditorOfertas.tsx` | Curadoria manual das ofertas: publicação, quantidade, inclusão, remoção e ordem; cada produto selecionado possui editor rápido inline de percentual, com prévia de/por e remoção por 0% |
@@ -95,7 +98,7 @@ Primitivos Kibo UI disponíveis:
 | `CartaoBebida` | `src/components/CartaoBebida.tsx` | Item de bebida |
 | `CartaoCombo` | `src/components/CartaoCombo.tsx` | Item de combo |
 | `ModalComplementos` | `src/components/ModalComplementos.tsx` | Quantidade, adicionais e observações |
-| `ModalCarrinho` | `src/components/ModalCarrinho.tsx` | Checkout completo |
+| `ModalCarrinho` | `src/components/ModalCarrinho.tsx` | Checkout completo; em entrega mostra recorrência e próxima data da cidade selecionada e repete a previsão na confirmação |
 | `AjudaPedidoPublica` | `src/components/AjudaPedidoPublica.tsx` | Drawer de “Como pedir”, aberto somente pela navbar, com contato por WhatsApp |
 | `ModalSelecionarMesa` | `src/components/ModalSelecionarMesa.tsx` | Escolha do ponto local |
 | `ModalPedidosCliente` | `src/components/ModalPedidosCliente.tsx` | Consulta de pedidos por cliente |
@@ -107,7 +110,8 @@ Primitivos Kibo UI disponíveis:
 | Componente | Caminho | Responsabilidade |
 |---|---|---|
 | `AdminLayout` | `src/components/admin/AdminLayout.tsx` | Sidebar, header, comandos, atalhos, tema e personalização via `SidebarPersonalizarModal` + API; exibe logo e marca Fortes Fios sem alterar a paleta azul administrativa |
-| `/admin/vitrine` | `src/app/admin/vitrine/page.tsx` | Gestão dos banners: arte desktop obrigatoriamente horizontal (21:8 ou 16:9), arte mobile 16:9/4:5/9:16, prévia alternável Desktop/Celular fiel à proporção e tipografia públicas, posição/cor/contraste do texto, publicação, ordem e exclusão; persiste imediatamente no JSON existente. Editor e recorte são etapas sequenciais: nunca manter dois overlays ou dois focus traps montados ao mesmo tempo |
+| `/admin/vitrine` | `src/app/admin/vitrine/page.tsx` | Gestão dos banners: arte desktop obrigatoriamente horizontal (21:8 ou 16:9), arte mobile 16:9/4:5/9:16, prévia alternável Desktop/Celular fiel à proporção e tipografia públicas, título multilinear de até 240 caracteres, nove posições de texto (grade 3×3), cor/contraste, publicação, ordem e exclusão; persiste imediatamente no JSON existente. Editor e recorte são etapas sequenciais: nunca manter dois overlays ou dois focus traps montados ao mesmo tempo |
+| `EditorFaixaRodape` | `src/components/admin/vitrine/EditorFaixaRodape.tsx` | Aba Cabeçalho da Vitrine: ativa/oculta a faixa promocional, edita a mensagem em linguagem comercial e mostra uma prévia fiel sem exigir caminhos de arquivo ou conhecimento técnico |
 | `/admin/pedidos/novo` | `src/app/admin/pedidos/novo/page.tsx` | Venda manual da loja: catálogo permanente no desktop e `Drawer` Vaul no mobile; pedido, cliente, retirada/entrega, desconto e pagamento; não inclui mesas, comandas, cozinha ou impressão |
 | Dashboard | `src/app/admin/dashboard/page.tsx` | Faixa KPI (hoje/mês) + loja compacta + fila impressão + pedidos (tabela desktop / cards mobile); sem aviso de jogo |
 | `ControleStatusLoja` | `src/components/admin/ControleStatusLoja.tsx` | Status abrir/fechar + auto; edição de grade semanal em Dialog; AlertDialog de confirmação |
@@ -120,7 +124,7 @@ Primitivos Kibo UI disponíveis:
 | `CardPedido` | `src/components/admin/CardPedido.tsx` | Card operacional: canal (entrega/mesa/retirada), status, itens, total; em dívida crediária o CTA explicita “Concluir e quitar”; conta quitada nunca mantém selo nem barra de Crediário; ⋯ para detalhes/editar/WhatsApp/PDF |
 | `ModalDetalhesPedido` | `src/components/admin/ModalDetalhesPedido.tsx` | Visão completa e ações do pedido; aberto também via `?pedido=` em `/admin/pedidos` (deep-link do Crediário) |
 | `ModalFormaPagamentoItens` | `src/components/admin/pagamento/ModalFormaPagamentoItens.tsx` | Itens, quantidades disponíveis e formas permitidas | Reutilizar para pagamento parcial no Pedido e quitação de item do Crediário; o Crediário não habilita a própria forma Crediário |
-| `ModalEditarPedido` | `src/components/admin/ModalEditarPedido.tsx` | Edição de pedido existente; em `entrega` a seção Dados traz **seletor de bairro** e a taxa é derivada dele (nunca fixa). Bairro fora do cadastro continua selecionável e pedido sem bairro preserva a taxa já gravada |
+| `ModalEditarPedido` | `src/components/admin/ModalEditarPedido.tsx` | Edição de pedido existente; em `entrega` a seção Dados traz **seletor de cidade** e bairro livre. Taxa e compra mínima são derivadas da cidade; uma cidade legada permanece selecionável para evitar apagar o local ao salvar |
 | `ColunaKanban`/`CardPedidoKanban` | `src/components/admin/painel/` | Painel de produção Juridiq: board horizontal snap + cards densos + MenuAcoes; pills de coluna no mobile |
 | `PainelSalaoAtual` | `src/features/salao/components/PainelSalaoAtual.tsx` | Salão: pills de filtro + busca + grade de `CardMesaSalao`; dialogs de histórico/garçom |
 | `CardMesaSalao` | `src/features/salao/components/CardMesaSalao.tsx` | Card operacional da mesa (tempo crítico, total, timeline, ações primárias + `MenuAcoes`) |
@@ -191,6 +195,7 @@ Primitivos Kibo UI disponíveis:
 - O hero começa imediatamente após a navbar fixa; o `main` compensa apenas a altura do cabeçalho, sem margem visual adicional entre os dois.
 - Texto sobre a arte é opcional e configurável em posição, cor e intensidade da camada de contraste. Se a copy já estiver incorporada à imagem, os campos ficam vazios.
 - No celular o carrossel responde a swipe; paginação e pausa ficam em uma faixa de navegação abaixo da imagem, nunca sobre título/subtítulo. No desktop, permanecem sobre a área inferior do banner. Todos usam alvo mínimo de 44 px. Autoplay só ocorre com mais de um banner, oferece pausa manual persistente, suspende em hover/foco e respeita redução de movimento.
+- Título e subtítulo do banner preservam quebras manuais. Editor, recorte e hero compartilham a mesma grade de alinhamento 3×3 e precisam exibir posição, contraste e overlay fiéis; uma prévia com texto fixo no canto não é válida.
 - A vitrine sem banner conserva uma chamada editorial simples, sem inventar conteúdo nem bloquear o catálogo.
 - Produtos sem imagem usam o estado neutro “Foto em breve”, sem símbolo de restaurante ou de outro segmento.
 - O cabeçalho público usa `public/logo.webp`; favicons e ícones PWA usam os arquivos em `public/assets/`.
@@ -213,7 +218,8 @@ Primitivos Kibo UI disponíveis:
 - No mobile, adicionar item não interrompe a escolha; o carrinho é acessado pelo item `Carrinho` do menu inferior, sem CTA adicional sobre o catálogo.
 - A adição confirma por toast curto com ação opcional `Ver carrinho`; produtos com complementos seguem o mesmo feedback e nunca abrem o checkout automaticamente.
 - O checkout usa o `Drawer` real do projeto no mobile, com conteúdo rolável e rodapé de total/ação sempre visível.
-- Enquanto um fluxo modal estiver aberto, o menu inferior não é renderizado; superfícies Vaul usam overlay em `z-[1000]` e conteúdo em `z-[1001]`. O seletor de bairro é `DrawerNested` dentro do checkout; os overlays legados de alerta e PIX permanecem acima da superfície.
+- Enquanto um fluxo modal estiver aberto, o menu inferior não é renderizado; superfícies Vaul usam overlay em `z-[1000]` e conteúdo em `z-[1001]`. O seletor de cidade é `DrawerNested` dentro do checkout; os overlays legados de alerta e PIX permanecem acima da superfície.
+- Em entrega, cidade é seleção tarifada; bairro e endereço são entradas livres, e ponto de referência é opcional. A compra mínima usa o subtotal de produtos após descontos dos itens, antes de frete e cupom, e deve bloquear avanço e envio com mensagem que informa quanto falta. A mesma área resume os dias de entrega e a próxima data; a confirmação troca tempo em minutos pela previsão de calendário quando o pedido for entrega.
 - A navegação inferior pública no mobile é uma dock flutuante de três destinos, e não uma barra de sistema: **Início** representa a página atual, **Pedidos** abre o acompanhamento e **Sacola** abre o carrinho com badge de quantidade. A dock usa tokens semânticos, alvos mínimos de 56 px, foco visível e incorpora `safe-area-inset-bottom` ao próprio container, sem criar uma faixa vazia separada.
 - A primeira visita ao sistema inicia em modo claro. A escolha manual de tema continua disponível e persistida; o tema do sistema operacional não deve substituir o padrão da loja automaticamente.
 - O checkout usa `repositionInputs={false}` no `Drawer` e mede o teclado virtual por `useAjusteTecladoVirtual` (`src/hooks/`), aplicando `height`/`maxHeight`/`bottom` em px no `DrawerContent`. O reposicionamento nativo do Vaul não serve para painel alto com formulário: ele alterna um booleano a cada `visualViewport.resize` e Safari/Chromium emitem vários por animação de teclado, congelando o painel em uma altura curta.
@@ -372,7 +378,7 @@ O `AppToaster` posiciona notificações no **topo** (`top-center` no mobile, `to
 - Empilhar cards para cada pequeno dado em dashboards.
 - Excesso de radius, sombras, gradientes e animação em superfícies operacionais.
 - Copy longa explicando o que o controle já mostra.
-- Taxa de entrega vinda de constante (`TAXA_ENTREGA_FIXA`) em tela que edita ou cria pedido — os bairros cadastrados custam R$ 2, R$ 3 ou R$ 5 e alguns são `entrega_gratis`. A taxa se deriva do bairro, como em `/admin/pedidos/novo`.
+- Taxa, compra mínima ou agenda de entrega vinda de constante na UI. As três derivam da cidade ativa cadastrada na tabela legada `bairros`; bairro do endereço nunca é opção tarifada. A data prevista deve ser recalculada no servidor nos pagamentos online.
 - Mudar a aparência do cardápio público como efeito colateral de uma tarefa administrativa.
 - Usar Playwright para validação.
 - `grid-auto-rows: 1fr` (`auto-rows-fr`) sem container com altura definida — infla linhas e gera scroll vazio após a lista/paginação.

@@ -88,6 +88,7 @@ export function useEntregas(filtros: FiltrosConsultaEntregas) {
             status,
             endereco_entrega,
             bairro,
+            cidade,
             taxa_entrega,
             tempo_estimado,
             tempo_real,
@@ -95,11 +96,12 @@ export function useEntregas(filtros: FiltrosConsultaEntregas) {
             observacoes,
             data_saida,
             data_entrega,
+            data_prevista_entrega,
             excluida_repasse,
             created_at,
             updated_at,
             entregador:funcionarios(id, nome, cargo, ativo),
-            pedido:pedidos(id, nome_cliente, telefone, total, forma_pagamento, status, tipo_entrega, endereco)
+            pedido:pedidos(id, nome_cliente, telefone, total, forma_pagamento, status, tipo_entrega, endereco, bairro, cidade)
           `)
           .or(
             `and(created_at.gte.${filtros.inicioIso},created_at.lt.${filtros.fimExclusivoIso}),and(data_entrega.gte.${filtros.inicioIso},data_entrega.lt.${filtros.fimExclusivoIso})`,
@@ -146,7 +148,7 @@ export function useEntregas(filtros: FiltrosConsultaEntregas) {
       // Buscar pedidos de entrega que não têm registro na tabela entregas
       const { data: pedidosFaltantes } = await supabase
         .from('pedidos')
-        .select('id, endereco, bairro, taxa_entrega, status, created_at, updated_at')
+        .select('id, endereco, referencia, bairro, cidade, taxa_entrega, status, created_at, updated_at, data_prevista_entrega')
         .eq('tipo_entrega', 'entrega')
         .gte('created_at', inicioJanela.toISOString())
         .neq('status', 'cancelado')
@@ -172,11 +174,13 @@ export function useEntregas(filtros: FiltrosConsultaEntregas) {
         const registros = faltantes.map((pedido) => ({
             pedido_id: pedido.id,
             entregador_id: entregadorPadrao,
-            endereco_entrega: pedido.endereco || null,
+            endereco_entrega: pedido.endereco || pedido.referencia || null,
             bairro: pedido.bairro || null,
+            cidade: pedido.cidade || null,
             taxa_entrega: pedido.taxa_entrega || 0,
             status: pedido.status === 'entregue' ? 'entregue' : 'pendente',
             data_entrega: pedido.status === 'entregue' ? pedido.updated_at : null,
+            data_prevista_entrega: pedido.data_prevista_entrega,
           }))
 
         const { error } = await supabase.from('entregas').upsert(registros, {
@@ -221,6 +225,7 @@ export function useEntregas(filtros: FiltrosConsultaEntregas) {
         entregador_id: dados.entregador_id || null,
         endereco_entrega: dados.endereco_entrega || null,
         bairro: dados.bairro || null,
+        cidade: dados.cidade || null,
         taxa_entrega: dados.taxa_entrega || 0,
         tempo_estimado: dados.tempo_estimado || null,
         distancia_km: dados.distancia_km || null,
@@ -411,7 +416,15 @@ export function useEntregas(filtros: FiltrosConsultaEntregas) {
           console.log('[Entregas] Pedido Realtime:', payload.eventType, payload.new)
           // Quando um pedido for marcado como entrega, criar entrega automaticamente
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const pedido = payload.new as { id: string; tipo_entrega?: string; endereco?: string; taxa_entrega?: number }
+            const pedido = payload.new as {
+              id: string
+              tipo_entrega?: string
+              endereco?: string
+              referencia?: string
+              bairro?: string
+              cidade?: string
+              taxa_entrega?: number
+            }
             if (pedido.tipo_entrega === 'entrega') {
               // Verificar se já existe entrega
               const { data: existente } = await supabase
@@ -427,7 +440,9 @@ export function useEntregas(filtros: FiltrosConsultaEntregas) {
                 const { error } = await supabase.from('entregas').upsert({
                   pedido_id: pedido.id,
                   entregador_id: entregadorPadrao,
-                  endereco_entrega: pedido.endereco || null,
+                  endereco_entrega: pedido.endereco || pedido.referencia || null,
+                  bairro: pedido.bairro || null,
+                  cidade: pedido.cidade || null,
                   taxa_entrega: pedido.taxa_entrega || 0,
                   status: 'pendente'
                 }, {

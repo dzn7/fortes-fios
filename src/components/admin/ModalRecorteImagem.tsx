@@ -34,6 +34,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
+  POSICAO_TEXTO_BANNER_CLASSES,
+  type PosicaoTextoBanner,
+} from '@/lib/vitrineBannerTexto'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -69,6 +73,9 @@ type ModalRecorteImagemProps = {
   modoPreview?: 'produto' | 'banner' | 'resultado'
   previewTitulo?: string
   previewSubtitulo?: string
+  previewPosicaoTexto?: PosicaoTextoBanner
+  previewContrasteTexto?: 'claro' | 'escuro'
+  previewOverlay?: 'sem_overlay' | 'suave' | 'forte'
   destinoBanner?: 'desktop' | 'mobile'
   mostrarPreviewsProduto?: boolean
 }
@@ -103,6 +110,9 @@ export default function ModalRecorteImagem({
   modoPreview = 'produto',
   previewTitulo = '',
   previewSubtitulo = '',
+  previewPosicaoTexto = 'inferior_esquerda',
+  previewContrasteTexto = 'claro',
+  previewOverlay = 'suave',
   destinoBanner,
   mostrarPreviewsProduto = false,
 }: ModalRecorteImagemProps) {
@@ -424,19 +434,46 @@ export default function ModalRecorteImagem({
                 )}
                 {modoPreview === 'banner' ? (
                   <>
-                    <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent" />
+                    {previewOverlay !== 'sem_overlay' && (
+                      <div
+                        className={cn(
+                          'absolute inset-0',
+                          previewContrasteTexto === 'claro'
+                            ? previewOverlay === 'forte'
+                              ? 'bg-black/50'
+                              : 'bg-black/25'
+                            : previewOverlay === 'forte'
+                              ? 'bg-white/60'
+                              : 'bg-white/30',
+                        )}
+                      />
+                    )}
                     {(previewTitulo || previewSubtitulo) && (
-                      <div className="absolute inset-x-0 bottom-0 p-3 text-white">
-                        {previewTitulo && (
-                          <p className="fortes-display text-lg leading-none">
-                            {previewTitulo}
-                          </p>
+                      <div
+                        className={cn(
+                          'absolute inset-0 flex p-3',
+                          POSICAO_TEXTO_BANNER_CLASSES[previewPosicaoTexto],
                         )}
-                        {previewSubtitulo && (
-                          <p className="fortes-text mt-1 line-clamp-2 text-xs text-white/90">
-                            {previewSubtitulo}
-                          </p>
-                        )}
+                      >
+                        <div
+                          className={cn(
+                            'max-w-[92%]',
+                            previewContrasteTexto === 'claro'
+                              ? 'text-white'
+                              : 'text-foreground',
+                          )}
+                        >
+                          {previewTitulo && (
+                            <p className="fortes-display whitespace-pre-line text-lg leading-none drop-shadow-sm">
+                              {previewTitulo}
+                            </p>
+                          )}
+                          {previewSubtitulo && (
+                            <p className="fortes-text mt-1 whitespace-pre-line text-xs leading-relaxed drop-shadow-sm">
+                              {previewSubtitulo}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     )}
                   </>

@@ -213,6 +213,23 @@ body.fortes-fios-public :is(h1, h2, h3, h4, h5, h6, .fonte-titulo, .fortes-displ
   font-weight: 200;
 }
 
+@keyframes faixa-rodape-deslizar {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.faixa-rodape-track {
+  animation: faixa-rodape-deslizar 40s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faixa-rodape-track {
+    animation: none;
+    transform: none;
+  }
+}
+
 h1, h2, h3, h4, h5, h6, .fonte-titulo {
   font-family: inherit;
   letter-spacing: -0.015em;

@@ -54,7 +54,7 @@ export const GRUPOS_MENU_ADMIN: GrupoSidebarRota[] = [
       { id: '/admin/entregas', texto: 'Entregas', icone: Truck, path: '/admin/entregas', categoria: 'Loja' },
       { id: '/admin/funcionarios', texto: 'Equipe', icone: Contact, path: '/admin/funcionarios', categoria: 'Loja' },
       { id: '/admin/usuarios', texto: 'Clientes e acessos', icone: UserCog, path: '/admin/usuarios', categoria: 'Loja' },
-      { id: '/admin/bairros', texto: 'Áreas de entrega', icone: MapPin, path: '/admin/bairros', categoria: 'Loja' },
+      { id: '/admin/bairros', texto: 'Cidades de entrega', icone: MapPin, path: '/admin/bairros', categoria: 'Loja' },
     ],
   },
   {

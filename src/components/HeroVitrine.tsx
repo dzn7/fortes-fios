@@ -6,9 +6,12 @@ import useEmblaCarousel from 'embla-carousel-react'
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
+import {
+  POSICAO_TEXTO_BANNER_CLASSES,
+  ehPosicaoTextoBanner,
+  type PosicaoTextoBanner,
+} from '@/lib/vitrineBannerTexto'
 
-type PosicaoTexto =
-  'inferior_esquerda' | 'inferior_centro' | 'centro_esquerda' | 'centro'
 type ContrasteTexto = 'claro' | 'escuro'
 type IntensidadeOverlay = 'sem_overlay' | 'suave' | 'forte'
 
@@ -20,7 +23,7 @@ type BannerVitrine = {
   proporcaoMobile: number
   titulo: string
   subtitulo: string
-  posicaoTexto: PosicaoTexto
+  posicaoTexto: PosicaoTextoBanner
   contrasteTexto: ContrasteTexto
   overlay: IntensidadeOverlay
   ativo: boolean
@@ -55,13 +58,10 @@ const lerBanners = (valor: string | null | undefined): BannerVitrine[] => {
             : imagemLegada
         if (!imagemDesktopUrl) return []
 
-        const posicaoTexto: PosicaoTexto = [
-          'inferior_esquerda',
-          'inferior_centro',
-          'centro_esquerda',
-          'centro',
-        ].includes(String(banner.posicaoTexto))
-          ? (banner.posicaoTexto as PosicaoTexto)
+        const posicaoTexto: PosicaoTextoBanner = ehPosicaoTextoBanner(
+          banner.posicaoTexto,
+        )
+          ? banner.posicaoTexto
           : 'inferior_esquerda'
         const contrasteTexto: ContrasteTexto =
           banner.contrasteTexto === 'escuro' ? 'escuro' : 'claro'
@@ -104,13 +104,6 @@ const lerBanners = (valor: string | null | undefined): BannerVitrine[] => {
   } catch {
     return []
   }
-}
-
-const posicaoTextoClasses: Record<PosicaoTexto, string> = {
-  inferior_esquerda: 'items-end justify-start text-left',
-  inferior_centro: 'items-end justify-center text-center',
-  centro_esquerda: 'items-center justify-start text-left',
-  centro: 'items-center justify-center text-center',
 }
 
 function ImagemResponsivaBanner({
@@ -327,7 +320,7 @@ export default function HeroVitrine() {
                 <div
                   className={cn(
                     'absolute inset-0 flex p-6 sm:p-10 lg:p-14',
-                    posicaoTextoClasses[banner.posicaoTexto],
+                    POSICAO_TEXTO_BANNER_CLASSES[banner.posicaoTexto],
                   )}
                 >
                   <div
@@ -339,12 +332,12 @@ export default function HeroVitrine() {
                     )}
                   >
                     {banner.titulo && (
-                      <h2 className="fortes-display text-balance text-3xl leading-none drop-shadow-sm sm:text-5xl lg:text-6xl">
+                      <h2 className="fortes-display whitespace-pre-line text-3xl leading-none drop-shadow-sm sm:text-5xl lg:text-6xl">
                         {banner.titulo}
                       </h2>
                     )}
                     {banner.subtitulo && (
-                      <p className="mt-3 max-w-lg text-sm leading-relaxed drop-shadow-sm sm:text-lg">
+                      <p className="mt-3 max-w-lg whitespace-pre-line text-sm leading-relaxed drop-shadow-sm sm:text-lg">
                         {banner.subtitulo}
                       </p>
                     )}

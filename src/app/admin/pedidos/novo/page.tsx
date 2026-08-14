@@ -63,6 +63,7 @@ type Bairro = {
   nome: string
   taxa_entrega: number
   entrega_gratis: boolean
+  valor_minimo_pedido: number
 }
 
 type ClienteEncontrado = {
@@ -71,6 +72,7 @@ type ClienteEncontrado = {
   telefone: string
   endereco: string | null
   bairro: string | null
+  cidade: string | null
 }
 
 type TipoEntrega = 'retirada' | 'entrega'
@@ -128,6 +130,7 @@ function NovoPedidoLoja() {
   const [erroBuscaClientes, setErroBuscaClientes] = useState(false)
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('retirada')
   const [bairroId, setBairroId] = useState('')
+  const [bairroEndereco, setBairroEndereco] = useState('')
   const [endereco, setEndereco] = useState('')
   const [referencia, setReferencia] = useState('')
   const [formaPagamento, setFormaPagamento] = useState('')
@@ -147,7 +150,7 @@ function NovoPedidoLoja() {
           .order('nome'),
         supabase
           .from('bairros')
-          .select('id, nome, taxa_entrega, entrega_gratis')
+          .select('id, nome, taxa_entrega, entrega_gratis, valor_minimo_pedido')
           .eq('ativo', true)
           .order('nome'),
         supabase
@@ -165,7 +168,15 @@ function NovoPedidoLoja() {
 
       const pagamentos = (pagamentosResposta.data || []) as FormaPagamento[]
       setProdutos((produtosResposta.data || []) as Produto[])
-      setBairros((bairrosResposta.data || []) as Bairro[])
+      setBairros(
+        (bairrosResposta.data || []).map((cidade) => ({
+          id: String(cidade.id),
+          nome: String(cidade.nome),
+          taxa_entrega: Number(cidade.taxa_entrega || 0),
+          entrega_gratis: Boolean(cidade.entrega_gratis),
+          valor_minimo_pedido: Number(cidade.valor_minimo_pedido || 0),
+        })),
+      )
       setFormasPagamento(pagamentos)
       setFormaPagamento((atual) => atual || pagamentos[0]?.codigo || '')
       setCarregandoCatalogo(false)
@@ -208,7 +219,7 @@ function NovoPedidoLoja() {
       try {
         const { data, error } = await supabase
           .from('usuarios_cliente')
-          .select('id, nome, telefone, endereco, bairro')
+          .select('id, nome, telefone, endereco, bairro, cidade')
           .ilike('nome', `%${termo}%`)
           .order('updated_at', { ascending: false })
           .limit(5)
@@ -286,6 +297,8 @@ function NovoPedidoLoja() {
     [itens],
   )
   const taxaEntrega = tipoEntrega === 'entrega' ? Number(bairroSelecionado?.taxa_entrega || 0) : 0
+  const valorMinimoEntrega = Number(bairroSelecionado?.valor_minimo_pedido || 0)
+  const atingiuMinimoEntrega = subtotal >= valorMinimoEntrega
   const total = arredondarMoeda(subtotal + taxaEntrega)
 
   const adicionarProduto = (produto: Produto) => {
@@ -333,10 +346,11 @@ function NovoPedidoLoja() {
     setNomeCliente(cliente.nome || '')
     setTelefone(cliente.telefone || '')
     if (cliente.endereco) setEndereco(cliente.endereco)
+    if (cliente.bairro) setBairroEndereco(cliente.bairro)
 
-    if (cliente.bairro) {
-      const bairroCorrespondente = bairros.find((bairro) => normalizarTexto(bairro.nome) === normalizarTexto(cliente.bairro))
-      if (bairroCorrespondente) setBairroId(bairroCorrespondente.id)
+    if (cliente.cidade) {
+      const cidadeCorrespondente = bairros.find((cidade) => normalizarTexto(cidade.nome) === normalizarTexto(cliente.cidade))
+      if (cidadeCorrespondente) setBairroId(cidadeCorrespondente.id)
     }
 
     setClientesEncontrados([])
@@ -385,6 +399,7 @@ function NovoPedidoLoja() {
     setErroBuscaClientes(false)
     setTipoEntrega('retirada')
     setBairroId('')
+    setBairroEndereco('')
     setEndereco('')
     setReferencia('')
     setObservacoes('')
@@ -401,8 +416,12 @@ function NovoPedidoLoja() {
       toast.error('Informe nome e telefone do cliente.')
       return
     }
-    if (tipoEntrega === 'entrega' && (!bairroSelecionado || !endereco.trim())) {
-      toast.error('Informe a área e o endereço de entrega.')
+    if (tipoEntrega === 'entrega' && (!bairroSelecionado || !bairroEndereco.trim() || !endereco.trim())) {
+      toast.error('Informe a cidade, o bairro e o endereço de entrega.')
+      return
+    }
+    if (tipoEntrega === 'entrega' && !atingiuMinimoEntrega) {
+      toast.error(`A compra mínima para ${bairroSelecionado?.nome} é ${formatarMoeda(valorMinimoEntrega)}.`)
       return
     }
     if (!formaPagamento) {
@@ -418,7 +437,8 @@ function NovoPedidoLoja() {
         nome: nomeCliente,
         telefone,
         endereco: tipoEntrega === 'entrega' ? endereco : null,
-        bairro: tipoEntrega === 'entrega' ? bairroSelecionado?.nome || null : null,
+        bairro: tipoEntrega === 'entrega' ? bairroEndereco : null,
+        cidade: tipoEntrega === 'entrega' ? bairroSelecionado?.nome || null : null,
       })
       const pagamento = formasPagamento.find((forma) => forma.codigo === formaPagamento)
       const { data: pedido, error: pedidoError } = await supabase
@@ -429,7 +449,8 @@ function NovoPedidoLoja() {
           telefone: cliente.telefone,
           cliente_id: cliente.id,
           endereco: tipoEntrega === 'entrega' ? endereco.trim() : null,
-          bairro: tipoEntrega === 'entrega' ? bairroSelecionado?.nome || null : null,
+          bairro: tipoEntrega === 'entrega' ? bairroEndereco.trim() : null,
+          cidade: tipoEntrega === 'entrega' ? bairroSelecionado?.nome || null : null,
           referencia: tipoEntrega === 'entrega' ? referencia.trim() || null : null,
           tipo_entrega: tipoEntrega,
           forma_pagamento: pagamento?.nome || formaPagamento,
@@ -853,24 +874,33 @@ function NovoPedidoLoja() {
                 {tipoEntrega === 'entrega' ? (
                   <div className="mt-3 grid gap-3">
                     <label className="grid gap-1.5 text-sm font-medium text-foreground">
-                      Área de entrega
+                      Cidade
                       <select
                         value={bairroId}
                         onChange={(evento) => setBairroId(evento.target.value)}
                         className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/60"
                       >
-                        <option value="">Selecione a área</option>
+                        <option value="">Selecione a cidade</option>
                         {bairros.map((bairro) => (
                           <option key={bairro.id} value={bairro.id}>
-                            {bairro.nome}{bairro.entrega_gratis ? ' — Grátis' : ` — ${formatarMoeda(Number(bairro.taxa_entrega || 0))}`}
+                            {bairro.nome} — {bairro.entrega_gratis ? 'Grátis' : formatarMoeda(Number(bairro.taxa_entrega || 0))} · mín. {formatarMoeda(Number(bairro.valor_minimo_pedido || 0))}
                           </option>
                         ))}
                       </select>
                     </label>
                     <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                      Bairro
+                      <Input value={bairroEndereco} onChange={(evento) => setBairroEndereco(evento.target.value)} placeholder="Ex.: Centro" autoComplete="address-level3" />
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-medium text-foreground">
                       Endereço
                       <Input value={endereco} onChange={(evento) => setEndereco(evento.target.value)} placeholder="Rua, número e complemento" autoComplete="street-address" />
                     </label>
+                    {bairroSelecionado && !atingiuMinimoEntrega ? (
+                      <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                        Faltam {formatarMoeda(valorMinimoEntrega - subtotal)} em produtos para entrega nesta cidade.
+                      </p>
+                    ) : null}
                     <label className="grid gap-1.5 text-sm font-medium text-foreground">
                       Referência <span className="font-normal text-muted-foreground">(opcional)</span>
                       <Input value={referencia} onChange={(evento) => setReferencia(evento.target.value)} placeholder="Próximo a..." />

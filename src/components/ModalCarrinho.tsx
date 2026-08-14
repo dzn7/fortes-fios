@@ -18,6 +18,13 @@ import { Button } from '@/components/ui/button'
 import { Drawer, DrawerContent, DrawerDescription, DrawerNested, DrawerTitle } from '@/components/ui/drawer'
 import { Separator } from '@/components/ui/separator'
 import { useAjusteTecladoVirtual } from '@/hooks/useAjusteTecladoVirtual'
+import {
+  calcularProximaDataEntrega,
+  descreverAgendaEntrega,
+  formatarDataPrevistaEntrega,
+  normalizarDiasEntrega,
+  type DiaSemanaEntrega,
+} from '@/lib/agenda-entrega'
 import ModalAlerta from './ModalAlerta'
 
 type ModalCarrinhoProps = {
@@ -133,6 +140,7 @@ type PedidoEnviado = {
   total: number
   mesa?: number
   pagamentoOnlineAprovado?: boolean
+  dataPrevistaEntrega?: string | null
 }
 
 type PontoLocalSelecionado = {
@@ -148,6 +156,8 @@ type Bairro = {
   taxa_entrega: number
   ativo: boolean
   entrega_gratis: boolean
+  valor_minimo_pedido: number
+  dias_entrega: DiaSemanaEntrega[]
 }
 
 type CupomAplicadoCheckout = {
@@ -184,6 +194,7 @@ type PagamentoPixOnline = {
   qrCodeTicketUrl: string | null
   expiraEm: string | null
   pagamentoAprovadoProcessado?: boolean
+  dataPrevistaEntrega?: string | null
 }
 
 const CHAVE_PAGAMENTO_PIX_PENDENTE = 'fortes-fios:pagamento_pix_pendente'
@@ -204,6 +215,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const [nomeCliente, setNomeCliente] = useState('')
   const [telefone, setTelefone] = useState('')
   const [bairro, setBairro] = useState('')
+  const [enderecoEntrega, setEnderecoEntrega] = useState('')
   const [pontoReferencia, setPontoReferencia] = useState('')
   const [tipoEntrega, setTipoEntrega] = useState<'entrega' | 'retirada' | 'local'>('retirada')
   const [mesaSelecionada, setMesaSelecionada] = useState<number | null>(null)
@@ -246,6 +258,18 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const taxaEntrega = tipoEntrega === 'entrega' && bairroSelecionado
     ? (bairroSelecionado.entrega_gratis ? 0 : bairroSelecionado.taxa_entrega)
     : 0
+  const valorMinimoEntrega = bairroSelecionado?.valor_minimo_pedido || 0
+  const faltaParaMinimoEntrega = Math.max(0, valorMinimoEntrega - total)
+  const atingiuMinimoEntrega = faltaParaMinimoEntrega <= 0
+  const dataPrevistaEntrega = tipoEntrega === 'entrega' && bairroSelecionado
+    ? calcularProximaDataEntrega(bairroSelecionado.dias_entrega)
+    : null
+  const textoAgendaEntrega = bairroSelecionado
+    ? descreverAgendaEntrega(bairroSelecionado.dias_entrega)
+    : null
+  const textoDataPrevistaEntrega = dataPrevistaEntrega
+    ? formatarDataPrevistaEntrega(dataPrevistaEntrega)
+    : null
   const totalSemDesconto = total + taxaEntrega
   const descontoCupom = cupomAplicado ? cupomAplicado.valorDesconto + cupomAplicado.valorDescontoFrete : 0
   const totalFinal = cupomAplicado ? cupomAplicado.totalComDesconto : totalSemDesconto
@@ -285,7 +309,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const dadosClientePreenchidos = Boolean(nomeCliente.trim() && telefone.trim())
   const dadosEntregaPreenchidos =
     tipoEntrega === 'entrega'
-      ? Boolean(bairroSelecionado && pontoReferencia.trim())
+      ? Boolean(bairroSelecionado && bairro.trim() && enderecoEntrega.trim() && atingiuMinimoEntrega)
       : tipoEntrega === 'local'
         ? Boolean(mesaSelecionada)
         : true
@@ -298,8 +322,10 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
 
     if (etapaAtual === 2) {
       if (!dadosClientePreenchidos) return 'Informe nome e telefone'
-      if (tipoEntrega === 'entrega' && !bairroSelecionado) return 'Selecione o bairro'
-      if (tipoEntrega === 'entrega' && !pontoReferencia.trim()) return 'Informe o endereço'
+      if (tipoEntrega === 'entrega' && !bairroSelecionado) return 'Selecione a cidade'
+      if (tipoEntrega === 'entrega' && !atingiuMinimoEntrega) return `Faltam R$ ${faltaParaMinimoEntrega.toFixed(2)}`
+      if (tipoEntrega === 'entrega' && !bairro.trim()) return 'Informe o bairro'
+      if (tipoEntrega === 'entrega' && !enderecoEntrega.trim()) return 'Informe o endereço'
       if (tipoEntrega === 'local' && !mesaSelecionada) return 'Selecione a mesa'
       return 'Dados prontos'
     }
@@ -412,6 +438,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         setTipoEntrega((tipoAtual) => tipoAtual === 'entrega' ? 'retirada' : tipoAtual)
         setBairroSelecionado(null)
         setBairro('')
+        setEnderecoEntrega('')
         setPontoReferencia('')
         setMostrarSeletorBairro(false)
       }
@@ -628,7 +655,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
     }
   }, [codigoCupom, cupomAplicado?.id, itens, taxaEntrega, tipoEntrega, total, telefone])
 
-  // Realtime para bairros - atualiza taxa grátis em tempo real
+  // Realtime para cidades - atualiza taxa e compra mínima em tempo real
   useEffect(() => {
     const channel = supabase
       .channel('bairros-cliente')
@@ -637,7 +664,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         { event: '*', schema: 'public', table: 'bairros' },
         () => {
           carregarBairros()
-          // Atualiza bairro selecionado se houver mudança
+          // Atualiza cidade selecionada se houver mudança
           if (bairroSelecionado) {
             supabase
               .from('bairros')
@@ -645,7 +672,15 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
               .eq('id', bairroSelecionado.id)
               .single()
               .then(({ data }) => {
-                if (data) setBairroSelecionado(data)
+                if (data) {
+                  setBairroSelecionado({
+                    ...data,
+                    taxa_entrega: Number(data.taxa_entrega || 0),
+                    valor_minimo_pedido: Number(data.valor_minimo_pedido || 0),
+                    entrega_gratis: Boolean(data.entrega_gratis),
+                    dias_entrega: normalizarDiasEntrega(data.dias_entrega),
+                  })
+                }
               })
           }
         }
@@ -668,9 +703,17 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         .order('nome', { ascending: true })
 
       if (error) throw error
-      setBairros(data || [])
+      setBairros(
+        (data || []).map((cidade) => ({
+          ...cidade,
+          taxa_entrega: Number(cidade.taxa_entrega || 0),
+          valor_minimo_pedido: Number(cidade.valor_minimo_pedido || 0),
+          entrega_gratis: Boolean(cidade.entrega_gratis),
+          dias_entrega: normalizarDiasEntrega(cidade.dias_entrega),
+        })),
+      )
     } catch (error) {
-      console.error('Erro ao carregar bairros:', error)
+      console.error('Erro ao carregar cidades:', error)
     } finally {
       setCarregandoBairros(false)
     }
@@ -786,6 +829,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
     }
     setBairro('')
     setBairroSelecionado(null)
+    setEnderecoEntrega('')
     setPontoReferencia('')
     setTipoEntrega('retirada')
     setMesaSelecionada(null)
@@ -813,6 +857,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
           total: dadosAtualizados.total,
           mesa: dadosAtualizados.mesa || undefined,
           pagamentoOnlineAprovado: true,
+          dataPrevistaEntrega: dadosAtualizados.dataPrevistaEntrega,
         })
         limparFormularioCheckout()
       }
@@ -965,11 +1010,23 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
           return false
         }
         if (!bairroSelecionado) {
-          mostrarAlerta('aviso', 'Bairro obrigatório', 'Selecione o bairro para entrega')
+          mostrarAlerta('aviso', 'Cidade obrigatória', 'Selecione a cidade para entrega')
           return false
         }
-        if (!pontoReferencia.trim()) {
-          mostrarAlerta('aviso', 'Endereço obrigatório', 'Informe o endereço ou ponto de referência para a entrega')
+        if (!atingiuMinimoEntrega) {
+          mostrarAlerta(
+            'aviso',
+            'Compra mínima não atingida',
+            `Para entrega em ${bairroSelecionado.nome}, adicione mais R$ ${faltaParaMinimoEntrega.toFixed(2)} em produtos.`,
+          )
+          return false
+        }
+        if (!bairro.trim()) {
+          mostrarAlerta('aviso', 'Bairro obrigatório', 'Informe o bairro do endereço de entrega')
+          return false
+        }
+        if (!enderecoEntrega.trim()) {
+          mostrarAlerta('aviso', 'Endereço obrigatório', 'Informe o endereço da entrega')
           return false
         }
       }
@@ -1058,8 +1115,11 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       nomeCliente: nomeClientePedido,
       telefone,
       tipoEntrega,
-      bairro: tipoEntrega === 'entrega' && bairroSelecionado ? bairroSelecionado.nome : undefined,
-      pontoReferencia: tipoEntrega === 'entrega' ? pontoReferencia : undefined,
+      cidadeId: tipoEntrega === 'entrega' ? bairroSelecionado?.id : undefined,
+      cidade: tipoEntrega === 'entrega' ? bairroSelecionado?.nome : undefined,
+      bairro: tipoEntrega === 'entrega' ? bairro.trim() : undefined,
+      endereco: tipoEntrega === 'entrega' ? enderecoEntrega.trim() : undefined,
+      pontoReferencia: tipoEntrega === 'entrega' ? pontoReferencia.trim() || undefined : undefined,
       mesaSelecionada: tipoEntrega === 'local' ? mesaSelecionada : undefined,
       pontoLocalId: tipoEntrega === 'local' ? pontoLocalSelecionado?.id || null : null,
       observacoes,
@@ -1119,6 +1179,10 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
 
   const enviarPedido = async () => {
     if (!validarEtapa(3)) return
+    if (tipoEntrega === 'entrega' && !dadosEntregaPreenchidos) {
+      if (!validarEtapa(2)) setEtapaAtual(2)
+      return
+    }
     if (lojaFechada) {
       mostrarAlerta('aviso', 'Loja fechada', 'No momento não estamos aceitando pedidos online.')
       return
@@ -1170,7 +1234,11 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         await iniciarPagamentoPixOnline(cupomConfirmado, itensCatalogados)
       } catch (error) {
         console.error('[Pagamento PIX Online] Erro ao iniciar pagamento:', error)
-        mostrarAlerta('erro', 'Erro no pagamento', 'Não foi possível iniciar o PIX online. Tente novamente.')
+        mostrarAlerta(
+          'erro',
+          'Erro no pagamento',
+          error instanceof Error ? error.message : 'Não foi possível iniciar o PIX online. Tente novamente.',
+        )
       } finally {
         setEnviando(false)
       }
@@ -1191,6 +1259,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
           tipoEntrega,
           total: totalComTaxaPagamentoConfirmado,
           pagamentoOnlineAprovado: false,
+          dataPrevistaEntrega,
         })
         limparCarrinho()
         removerCupomAplicado({ silencioso: true })
@@ -1224,8 +1293,9 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       const cliente = await registrarClientePedido({
         nome: nomeClientePedido,
         telefone,
-        endereco: tipoEntrega === 'entrega' ? pontoReferencia : null,
-        bairro: tipoEntrega === 'entrega' && bairroSelecionado ? bairroSelecionado.nome : null,
+        endereco: tipoEntrega === 'entrega' ? enderecoEntrega.trim() : null,
+        bairro: tipoEntrega === 'entrega' ? bairro : null,
+        cidade: tipoEntrega === 'entrega' ? bairroSelecionado?.nome || null : null,
       })
 
       // 1. Criar pedido
@@ -1236,9 +1306,10 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
           nome_cliente: nomeClientePedido,
           telefone: cliente.telefone,
           cliente_id: cliente.id,
-          endereco: null,
-          bairro: tipoEntrega === 'entrega' && bairroSelecionado ? bairroSelecionado.nome : null,
-          referencia: tipoEntrega === 'entrega' ? pontoReferencia : null,
+          endereco: tipoEntrega === 'entrega' ? enderecoEntrega.trim() : null,
+          bairro: tipoEntrega === 'entrega' ? bairro.trim() : null,
+          cidade: tipoEntrega === 'entrega' ? bairroSelecionado?.nome || null : null,
+          referencia: tipoEntrega === 'entrega' ? pontoReferencia.trim() || null : null,
           tipo_entrega: tipoEntrega,
           forma_pagamento: formaPagamentoSelecionada?.nome || formaPagamento,
           subtotal: total,
@@ -1255,6 +1326,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
           tipo_desconto_cupom: cupomConfirmado ? cupomConfirmado.tipoDesconto : null,
           desconto_cupom: descontoCupomAplicado,
           desconto_frete: descontoFreteAplicado,
+          data_prevista_entrega: tipoEntrega === 'entrega' ? dataPrevistaEntrega : null,
         })
         .select()
         .single()
@@ -1359,9 +1431,11 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       if (tipoEntrega === 'entrega' && bairroSelecionado) {
         supabase.from('entregas').upsert({
           pedido_id: pedido.id,
-          endereco_entrega: pontoReferencia,
-          bairro: bairroSelecionado.nome,
+          endereco_entrega: enderecoEntrega.trim(),
+          bairro: bairro.trim(),
+          cidade: bairroSelecionado.nome,
           taxa_entrega: taxaEntrega,
+          data_prevista_entrega: dataPrevistaEntrega,
           status: 'pendente',
           observacoes: observacoes || null
         }, {
@@ -1383,6 +1457,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         total: totalComTaxaPagamentoConfirmado,
         mesa: mesaSelecionada || undefined,
         pagamentoOnlineAprovado: false,
+        dataPrevistaEntrega,
       })
 
       // Salvar nome e telefone no localStorage para próximos pedidos
@@ -1397,6 +1472,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       limparCarrinho()
       setBairro('')
       setBairroSelecionado(null)
+      setEnderecoEntrega('')
       setPontoReferencia('')
       setTipoEntrega('retirada')
       setMesaSelecionada(null)
@@ -1591,12 +1667,14 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                 <div>
                   <h3 className="font-semibold text-foreground text-sm sm:text-base">
                     {pedidoEnviado.tipoEntrega === 'entrega' 
-                      ? 'Entrega a caminho'
+                      ? 'Entrega programada'
                       : 'Retirada na loja'}
                   </h3>
                   <p className="text-muted-foreground text-sm">
                     {pedidoEnviado.tipoEntrega === 'entrega'
-                      ? 'Seu pedido será entregue no endereço informado.'
+                      ? pedidoEnviado.dataPrevistaEntrega
+                        ? `Seu pedido tem entrega prevista para ${formatarDataPrevistaEntrega(pedidoEnviado.dataPrevistaEntrega)}.`
+                        : 'Seu pedido será entregue no endereço informado.'
                       : 'Retire seu pedido quando estiver pronto.'}
                   </p>
                 </div>
@@ -1606,8 +1684,16 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
             {/* Tempo estimado e Total */}
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-muted rounded-xl p-3 text-center">
-                <p className="text-xs text-muted-foreground mb-1">⏱️ Tempo estimado</p>
-                <p className="text-lg font-bold text-foreground">{tempoEntregaEstimado} min</p>
+                <p className="text-xs text-muted-foreground mb-1">
+                  {pedidoEnviado.tipoEntrega === 'entrega' && pedidoEnviado.dataPrevistaEntrega
+                    ? 'Previsão de entrega'
+                    : '⏱️ Tempo estimado'}
+                </p>
+                <p className="text-sm font-bold leading-snug text-foreground sm:text-base">
+                  {pedidoEnviado.tipoEntrega === 'entrega' && pedidoEnviado.dataPrevistaEntrega
+                    ? formatarDataPrevistaEntrega(pedidoEnviado.dataPrevistaEntrega)
+                    : `${tempoEntregaEstimado} min`}
+                </p>
               </div>
               <div className="bg-primary/10 rounded-xl p-3 text-center">
                 <p className="text-xs text-primary mb-1">Total</p>
@@ -1936,7 +2022,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                     )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Bairro *
+                        Cidade *
                       </label>
                       <Button
                         type="button"
@@ -1954,40 +2040,82 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                               </span>
                             </span>
                           ) : (
-                            'Selecione seu bairro'
+                            'Selecione sua cidade'
                           )}
                         </span>
                         <ChevronDown className="w-5 h-5 text-gray-400" />
                       </Button>
                       {!carregandoBairros && bairros.length === 0 && (
                         <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-300">
-                          Nenhum bairro disponível agora. Use retirada para continuar.
+                          Nenhuma cidade disponível agora. Use retirada para continuar.
                         </div>
                       )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Endereço / Ponto de Referência *
+                      <label htmlFor="checkout-bairro" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Bairro *
                       </label>
-                      <textarea
-                        value={pontoReferencia}
-                        onChange={(e) => setPontoReferencia(e.target.value)}
-                        placeholder="Ex: Rua das Flores, 123 - Próximo ao mercado X"
-                        rows={2}
-                        className="input-campo resize-none"
+                      <input
+                        id="checkout-bairro"
+                        value={bairro}
+                        onChange={(e) => setBairro(e.target.value)}
+                        placeholder="Ex.: Centro"
+                        className="input-campo"
+                        autoComplete="address-level3"
                         required
                       />
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Endereço *
+                      </label>
+                      <input
+                        value={enderecoEntrega}
+                        onChange={(e) => setEnderecoEntrega(e.target.value)}
+                        placeholder="Rua, número e complemento"
+                        className="input-campo"
+                        autoComplete="street-address"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Ponto de referência <span className="font-normal text-gray-500">(opcional)</span>
+                      </label>
+                      <input
+                        value={pontoReferencia}
+                        onChange={(e) => setPontoReferencia(e.target.value)}
+                        placeholder="Ex.: Próximo ao mercado"
+                        className="input-campo"
+                      />
+                    </div>
                     {bairroSelecionado && (
-                      <div className={`flex items-center justify-between p-3 rounded-lg border ${
+                      <div className={`space-y-2 rounded-lg border p-3 ${
                         bairroSelecionado.entrega_gratis
                           ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
                           : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
                       }`}>
-                        <span className={`text-sm ${bairroSelecionado.entrega_gratis ? 'text-emerald-700 dark:text-emerald-400' : 'text-green-700 dark:text-green-400'}`}>Taxa de entrega:</span>
-                        <span className={`font-bold ${bairroSelecionado.entrega_gratis ? 'text-emerald-700 dark:text-emerald-400' : 'text-green-700 dark:text-green-400'}`}>
-                          {bairroSelecionado.entrega_gratis ? 'GRÁTIS!' : `R$ ${bairroSelecionado.taxa_entrega.toFixed(2)}`}
-                        </span>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className={`text-sm ${bairroSelecionado.entrega_gratis ? 'text-emerald-700 dark:text-emerald-400' : 'text-green-700 dark:text-green-400'}`}>Taxa de entrega</span>
+                          <span className={`font-bold ${bairroSelecionado.entrega_gratis ? 'text-emerald-700 dark:text-emerald-400' : 'text-green-700 dark:text-green-400'}`}>
+                            {bairroSelecionado.entrega_gratis ? 'GRÁTIS!' : `R$ ${bairroSelecionado.taxa_entrega.toFixed(2)}`}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 border-t border-current/10 pt-2 text-sm text-foreground">
+                          <span>Compra mínima</span>
+                          <span className="font-semibold">R$ {valorMinimoEntrega.toFixed(2)}</span>
+                        </div>
+                        <div className="border-t border-current/10 pt-2 text-sm text-foreground">
+                          <p className="font-medium">{textoAgendaEntrega}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Próxima entrega: {textoDataPrevistaEntrega}
+                          </p>
+                        </div>
+                        {!atingiuMinimoEntrega && (
+                          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                            Adicione mais R$ {faltaParaMinimoEntrega.toFixed(2)} em produtos para receber nesta cidade.
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2343,7 +2471,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
             </div>
           </div>
           </div>
-          {/* Seletor de bairros — precisa viver dentro da árvore do Drawer:
+          {/* Seletor de cidades — precisa viver dentro da árvore do Drawer:
               como irmão, o focus trap do Vaul/Radix mata clique e scroll dele. */}
           <DrawerNested
             open={mostrarSeletorBairro}
@@ -2355,32 +2483,32 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
               <div className="flex shrink-0 items-center justify-between border-b border-border p-4">
                 <DrawerTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
                   <MapPin className="h-5 w-5 text-bordo-600" />
-                  Selecione seu bairro
+                  Selecione sua cidade
                 </DrawerTitle>
                 <button
                   type="button"
                   onClick={() => setMostrarSeletorBairro(false)}
                   className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                  aria-label="Fechar seleção de bairro"
+                  aria-label="Fechar seleção de cidade"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
               <DrawerDescription className="sr-only">
-                Escolha o bairro de entrega para calcular a taxa.
+                Escolha a cidade para consultar a taxa e a compra mínima.
               </DrawerDescription>
 
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {carregandoBairros ? (
                 <div className="p-8 text-center text-gray-500">
                   <div className="w-8 h-8 border-2 border-bordo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                  Carregando bairros...
+                  Carregando cidades...
                 </div>
               ) : bairros.length === 0 ? (
                 <div className="space-y-4 p-8 text-center text-muted-foreground">
                   <MapPin className="mx-auto h-12 w-12 text-muted-foreground/50" />
                   <div>
-                    <p className="font-medium text-foreground">Nenhum bairro disponível</p>
+                    <p className="font-medium text-foreground">Nenhuma cidade disponível</p>
                     <p className="mt-1 text-sm">Escolha retirada para continuar o pedido.</p>
                   </div>
                   <div className="grid grid-cols-1 gap-2">
@@ -2407,7 +2535,6 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                       key={b.id}
                       onClick={() => {
                         setBairroSelecionado(b)
-                        setBairro(b.nome)
                         setMostrarSeletorBairro(false)
                       }}
                       className={`w-full p-4 flex items-center justify-between text-left transition-colors
@@ -2425,20 +2552,24 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                         >
                           <MapPin className="w-5 h-5" />
                         </div>
-                        <span className={`font-medium ${bairroSelecionado?.id === b.id
+                        <span className={`min-w-0 font-medium ${bairroSelecionado?.id === b.id
                             ? 'text-bordo-700 dark:text-bordo-400'
                             : 'text-gray-900 dark:text-white'
                           }`}>
-                          {b.nome}
+                          <span className="block">{b.nome}</span>
+                          <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                            {descreverAgendaEntrega(b.dias_entrega)}
+                          </span>
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                           b.entrega_gratis
                             ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
                             : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                         }`}>
-                          {b.entrega_gratis ? 'Grátis!' : `R$ ${b.taxa_entrega.toFixed(2)}`}
+                          <span className="block">{b.entrega_gratis ? 'Grátis!' : `R$ ${b.taxa_entrega.toFixed(2)}`}</span>
+                          <span className="block text-[11px] opacity-80">mín. R$ {b.valor_minimo_pedido.toFixed(2)}</span>
                         </span>
                         {bairroSelecionado?.id === b.id && (
                           <Check className="w-5 h-5 text-bordo-600" />

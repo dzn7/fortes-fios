@@ -1,5 +1,80 @@
 # Progress
 
+## [2026-08-14] Agenda semanal e previsão de entrega por cidade
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** permitir que a loja configure os dias de entrega por cidade e comunicar ao cliente a próxima data real no checkout e na confirmação.
+**Arquivos alterados:** `src/lib/agenda-entrega.ts`, `src/app/admin/bairros/page.tsx`, `src/components/ModalCarrinho.tsx`, `src/lib/server/pagamento-online.ts`, `src/lib/useEntregas.ts`, `src/lib/tipos-entregas.ts`, `supabase/migrations/202608140002_agenda_entrega_cidades.sql`, `PRD.md`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- Cada cidade ganhou uma seleção semanal simples no admin, com resumo da recorrência na própria lista.
+- Porto foi configurada para todos os dias, Nossa Senhora dos Remédios para segunda-feira e Campo Largo para terça-feira.
+- O checkout informa recorrência e próxima data; a confirmação substitui o tempo genérico pela previsão quando for entrega.
+- Pedido e entrega preservam `data_prevista_entrega`; no PIX online a data é recalculada no servidor a partir da cidade ativa.
+**Decisões tomadas:** se o pedido for feito em um dia habilitado, a previsão é o próprio dia; não foi introduzido horário de corte porque não foi definido pela operação.
+**Verificação:** Management API ✓ · cenário de domingo validado ✓ · `npx tsc --noEmit` ✓ · build de produção ✓ (48 páginas) · `git diff --check` ✓ · revisão bug-hunter e verification-before-completion ✓ · `npm run lint` indisponível pelo script legado `next lint` incompatível com Next 16.
+**Pendências / próximos passos:** definir horário de corte em tarefa própria caso pedidos feitos tarde devam passar para a semana seguinte.
+**Armadilhas descobertas:** `entregas.data_entrega` registra a conclusão efetiva e não pode ser reutilizado como previsão; por isso a previsão possui coluna própria.
+
+## [2026-08-14] Texto multilinear e posicionamento completo dos banners
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** permitir chamadas maiores com quebras de linha e ampliar o posicionamento do texto, mantendo as prévias fiéis ao hero publicado.
+**Arquivos alterados:** `src/lib/vitrineBannerTexto.ts`, `src/app/admin/vitrine/page.tsx`, `src/components/HeroVitrine.tsx`, `src/components/admin/ModalRecorteImagem.tsx`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- A frase principal virou textarea redimensionável, aceita Enter, mostra contador e comporta até 240 caracteres.
+- O posicionamento passou de quatro opções para uma grade completa de nove combinações: esquerda, centro e direita nos eixos superior, central e inferior.
+- Hero, prévia do editor e prévia do recorte preservam quebras de linha e compartilham as mesmas classes de alinhamento.
+- A prévia do recorte passou a reproduzir também cor do texto e intensidade do overlay selecionadas.
+**Decisões tomadas:** a configuração de posições foi centralizada porque já possui três consumidores reais; 240 caracteres permitem avisos comerciais maiores sem transformar o banner em conteúdo longo.
+**Verificação:** typecheck intermediário ✓; verificação final registrada na resposta da task.
+**Pendências / próximos passos:** nenhuma conhecida dentro do texto dos banners.
+**Armadilhas descobertas:** a prévia de recorte antiga mostrava texto, mas sempre no canto inferior esquerdo e com gradiente escuro fixo, divergindo do banner publicado.
+
+## [2026-08-14] Entrega por cidade com compra mínima
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** substituir a escolha tarifada de bairro por cidades atendidas, preservando bairro/endereço livres e impondo compra mínima de R$ 70 para entrega.
+**Arquivos alterados:** `src/components/ModalCarrinho.tsx`, `src/lib/server/pagamento-online.ts`, `src/lib/registrar-cliente-pedido.ts`, `src/app/admin/pedidos/novo/page.tsx`, `src/components/admin/ModalEditarPedido.tsx`, `src/app/admin/bairros/page.tsx`, `src/app/admin/entregas/page.tsx`, `src/lib/tipos-entregas.ts`, `src/lib/useEntregas.ts`, `src/lib/useEntregador.ts`, `src/lib/admin-sidebar-routes.ts`, `supabase/migrations/202608140001_cidades_entrega.sql`, `PRD.md`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- O checkout público agora seleciona cidade e coleta bairro, endereço e referência em campos próprios; a referência é opcional.
+- Porto - PI, Nossa Senhora dos Remédios - PI e Campo Largo - PI foram cadastradas com taxas de R$ 5, R$ 10 e R$ 10 e compra mínima de R$ 70.
+- O bloqueio por compra mínima foi aplicado ao checkout comum, ao PIX online e aos fluxos administrativos de criação/edição.
+- Pedido, cliente e entrega preservam `cidade` separada de `bairro`; as listas de entrega passaram a exibir ambos.
+- `/admin/bairros` permanece como rota e tabela física por compatibilidade, mas a interface agora administra cidades, taxas e mínimos.
+**Decisões tomadas:** a compra mínima considera produtos após descontos de item e antes de frete/cupom; a tabela física `bairros` foi mantida para não quebrar integrações existentes.
+**Verificação:** pendente ao início desta entrada; resultados finais registrados na resposta da task.
+**Pendências / próximos passos:** renomear fisicamente a tabela é uma migração coordenada futura e não é necessária para o comportamento atual.
+**Armadilhas descobertas:** o modal de edição recebe pedidos de sete telas com selects diferentes; por isso ele precisa recarregar cidade, bairro e endereço pelo ID antes de salvar.
+
+## [2026-08-14] Faixa promocional editável no cabeçalho público
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** incluir acima da navegação pública uma faixa oliva fina e rolante, com mensagem e visibilidade controladas pela Vitrine do administrador.
+**Arquivos alterados:** `src/lib/vitrineFaixaRodape.ts`, `src/app/api/vitrine/faixa-rodape/route.ts`, `src/components/FaixaRodape.tsx`, `src/components/admin/vitrine/EditorFaixaRodape.tsx`, `src/components/Header.tsx`, `src/app/globals.css`, `src/app/page.tsx`, `src/app/admin/vitrine/page.tsx`, `UI.md`, `Progress.md`; `tsconfig.tsbuildinfo` pode ser regenerado pelo typecheck.
+**O que foi feito:**
+- A loja pública ganhou uma faixa promocional no topo em oliva, com Quiche Sans, repetição contínua e mensagem padrão “Frete grátis em compras a partir de R$ 150”.
+- A nova aba Cabeçalho em `/admin/vitrine` permite ativar, ocultar e editar a mensagem com contador e prévia fiel.
+- A configuração reutiliza `configuracoes_loja`; a leitura pública passa por route handler server-side e não expõe credenciais administrativas ao navegador.
+- A animação é ignorada quando o visitante prefere movimento reduzido, mantendo uma mensagem estática e acessível.
+**Decisões tomadas:** a faixa é estritamente informativa e não altera o cálculo de frete ou o checkout; na ausência de configuração salva, a oferta padrão permanece ativa para que a entrega solicitada seja visível imediatamente.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · `ui-review` ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓ · `git diff --check` ✓ · busca de resíduos ✓ · `npm run lint` indisponível pelo script legado `next lint` incompatível com Next 16.
+**Pendências / próximos passos:** nenhuma funcionalidade de frete real faz parte desta task.
+**Armadilhas descobertas:** mensagem promocional e regra comercial não podem compartilhar implicitamente a mesma fonte; a faixa não deve prometer execução automática no checkout.
+
+## [2026-08-14] Seleção mobile-first da arte do hero
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** impedir que o banner desktop apareça no catálogo mobile quando existe uma versão própria para celular.
+**Arquivos alterados:** `src/components/HeroVitrine.tsx`, `UI.md`, `Progress.md`; `tsconfig.tsbuildinfo` pode ser regenerado pelo typecheck.
+**O que foi feito:**
+- A investigação confirmou que o `<img>` base era sempre desktop e a arte mobile dependia de uma fonte condicional que falhou no ambiente reproduzido.
+- O `picture` passou a ser mobile-first: a arte mobile é o fallback base e a desktop assume somente a partir de 640 px.
+- Banners sem imagem mobile continuam usando a imagem desktop em qualquer largura.
+**Decisões tomadas:** manter um único recurso responsivo por slide, em vez de dois elementos ocultados por CSS, evita download duplicado e torna o fallback correto no mobile.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · `ui-review` ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓ · `git diff --check` ✓ · `npm run lint` indisponível pelo script legado `next lint` incompatível com Next 16.
+**Pendências / próximos passos:** nenhuma conhecida dentro da seleção responsiva do banner.
+**Armadilhas descobertas:** em art direction, o fallback do `<picture>` precisa representar a menor viewport; usar desktop como base faz qualquer falha de seleção degradar justamente o mobile.
+
 ## [2026-08-14] Fidelidade dos banners entre recorte, prévia e site
 
 **Agente/Modelo:** Codex GPT-5
@@ -12,7 +87,7 @@
 - A prévia identifica quando o celular usa a imagem desktop como fallback e reproduz Quiche Sans no título e Raleway ExtraLight no texto complementar.
 - A miniatura do modal de recorte também passou a usar as fontes públicas.
 **Decisões tomadas:** fidelidade da composição aprovada prevalece sobre preencher o contêiner a qualquer custo; `object-contain` impede recortes secundários caso imagem e metadado divirjam.
-**Verificação:** `npx tsc --noEmit` ✓ (0 erros); demais verificações registradas no fechamento desta task.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · `ui-review` ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓ · `git diff --check` ✓ · buscas de resíduos ✓ · `npm run lint` indisponível pelo script legado `next lint` incompatível com Next 16.
 **Pendências / próximos passos:** nenhuma conhecida dentro da fidelidade e alternância das prévias.
 **Armadilhas descobertas:** salvar a proporção não basta se o componente publicado impõe uma altura concorrente; `object-cover` então transforma essa diferença em zoom aparente.
 

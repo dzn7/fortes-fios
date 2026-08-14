@@ -169,6 +169,7 @@ export type EntregaParaEntregador = {
   status: 'pendente' | 'em_rota' | 'entregue' | 'cancelada'
   endereco_entrega: string | null
   bairro: string | null
+  cidade: string | null
   taxa_entrega: number
   tempo_estimado: number | null
   tempo_real: number | null
@@ -182,6 +183,7 @@ export type EntregaParaEntregador = {
     telefone: string | null
     endereco: string | null
     bairro: string | null
+    cidade: string | null
     taxa_entrega: number
     total: number
     forma_pagamento: string
@@ -355,7 +357,7 @@ export function useEntregador(entregadorId: string | null, dataFiltro?: string |
         .from('entregas')
         .select(`
           *,
-          pedido:pedidos(id, nome_cliente, telefone, endereco, bairro, taxa_entrega, total, forma_pagamento, observacoes)
+          pedido:pedidos(id, nome_cliente, telefone, endereco, bairro, cidade, taxa_entrega, total, forma_pagamento, observacoes)
         `)
         .gte('created_at', inicio.toISOString())
         .lt('created_at', fim.toISOString())
@@ -446,7 +448,7 @@ export function useEntregador(entregadorId: string | null, dataFiltro?: string |
       // Buscar pedidos de entrega que não têm registro na tabela entregas
       const { data: pedidosFaltantes } = await supabase
         .from('pedidos')
-        .select('id, endereco, bairro, taxa_entrega, status, created_at, updated_at')
+        .select('id, endereco, referencia, bairro, cidade, taxa_entrega, status, created_at, updated_at')
         .eq('tipo_entrega', 'entrega')
         .gte('created_at', inicio.toISOString())
         .lt('created_at', fim.toISOString())
@@ -473,8 +475,9 @@ export function useEntregador(entregadorId: string | null, dataFiltro?: string |
           // Usar upsert para evitar duplicatas (constraint unique em pedido_id)
           const { error } = await supabase.from('entregas').upsert({
             pedido_id: pedido.id,
-            endereco_entrega: pedido.endereco || null,
+            endereco_entrega: pedido.endereco || pedido.referencia || null,
             bairro: pedido.bairro || null,
+            cidade: pedido.cidade || null,
             taxa_entrega: pedido.taxa_entrega || 0,
             status: pedido.status === 'entregue' ? 'entregue' : 'pendente',
             data_entrega: pedido.status === 'entregue' ? pedido.updated_at : null
@@ -529,7 +532,7 @@ export function useEntregador(entregadorId: string | null, dataFiltro?: string |
             .from('entregas')
             .select(`
               *,
-              pedido:pedidos(id, nome_cliente, telefone, endereco, bairro, taxa_entrega, total, forma_pagamento, observacoes)
+              pedido:pedidos(id, nome_cliente, telefone, endereco, bairro, cidade, taxa_entrega, total, forma_pagamento, observacoes)
             `)
             .eq('id', payload.new.id)
             .single()
