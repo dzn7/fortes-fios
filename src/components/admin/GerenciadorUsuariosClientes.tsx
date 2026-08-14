@@ -624,7 +624,7 @@ export default function GerenciadorUsuariosClientes() {
       >
         <DialogContent
           showCloseButton={false}
-          className="flex h-[92dvh] w-[calc(100vw-0.75rem)] max-w-none flex-col gap-0 overflow-hidden rounded-xl border-border/70 p-0 shadow-[0_8px_32px_-12px_rgba(15,23,42,0.12)] sm:h-[96dvh] sm:w-[min(1680px,98.5vw)] sm:max-w-none"
+          className="flex h-[92dvh] w-[calc(100%-0.75rem)] max-w-none flex-col gap-0 overflow-hidden rounded-xl border-border/70 p-0 shadow-[0_8px_32px_-12px_rgba(15,23,42,0.12)] sm:h-[96dvh] sm:w-[min(1680px,98.5%)] sm:max-w-none"
         >
           <header className="flex min-w-0 shrink-0 items-center gap-2 border-b border-border/70 bg-background px-5 py-3 sm:px-6">
             <DialogTitle className="sr-only">

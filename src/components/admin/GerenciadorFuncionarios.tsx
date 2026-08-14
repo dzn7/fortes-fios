@@ -837,7 +837,7 @@ export default function GerenciadorFuncionarios() {
             ) : null}
           </div>
 
-          <DialogFooter className="shrink-0 gap-2 border-t border-border/60 px-5 py-4 sm:gap-2">
+          <DialogFooter className="shrink-0 gap-2 border-t border-border/60 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-2 sm:pb-4">
             <Button
               type="button"
               variant="outline"

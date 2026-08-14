@@ -576,34 +576,36 @@ export default function GerenciadorCupons() {
         </ul>
       </div>
 
-      {modalFormularioAberto && (
-        <div className="fixed inset-0 z-[1000]">
-          <button
-            aria-label="Fechar modal de cupom"
-            onClick={fecharModalFormulario}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-          />
+      <Dialog
+        open={modalFormularioAberto}
+        onOpenChange={(aberto) => {
+          if (!aberto) fecharModalFormulario()
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+        >
+          <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-zinc-200 px-4 py-3 text-left dark:border-zinc-800 sm:px-6 sm:py-4">
+            <div className="min-w-0">
+              <DialogTitle className="text-base font-semibold text-zinc-900 dark:text-white sm:text-lg">
+                {idCupomEditando ? 'Editar cupom' : 'Criar cupom'}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-zinc-500 dark:text-zinc-400 sm:text-sm">
+                Configure regras de desconto com validações, limite e validade.
+              </DialogDescription>
+            </div>
+            <button
+              type="button"
+              onClick={fecharModalFormulario}
+              aria-label="Fechar"
+              className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </DialogHeader>
 
-          <div className="relative flex min-h-full items-end justify-center p-3 sm:items-center sm:p-4">
-            <div className="relative z-[1001] flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-border/70 bg-card text-card-foreground shadow-[0_8px_32px_-12px_rgba(15,23,42,0.12)]">
-              <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 sm:px-6 sm:py-4">
-                <div>
-                  <h2 className="text-base font-semibold text-zinc-900 dark:text-white sm:text-lg">
-                    {idCupomEditando ? 'Editar cupom' : 'Criar cupom'}
-                  </h2>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 sm:text-sm">
-                    Configure regras de desconto com validações, limite e validade.
-                  </p>
-                </div>
-                <button
-                  onClick={fecharModalFormulario}
-                  className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 min-h-[44px] min-w-[44px] flex items-center justify-center"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 [-webkit-overflow-scrolling:touch] sm:p-6">
                 <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                   <section className="space-y-4">
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -850,9 +852,9 @@ export default function GerenciadorCupons() {
                     </div>
                   </aside>
                 </div>
-              </div>
+          </div>
 
-              <div className="flex flex-col-reverse gap-2 border-t border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:justify-end sm:gap-3 sm:p-5">
+          <DialogFooter className="flex shrink-0 flex-col-reverse gap-2 border-t border-zinc-200 bg-zinc-50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:justify-end sm:gap-3 sm:p-5 sm:pb-5">
                 <Button
                   variant="outline"
                   onClick={fecharModalFormulario}
@@ -883,11 +885,9 @@ export default function GerenciadorCupons() {
                     </>
                   )}
                 </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!cupomParaExcluir} onOpenChange={(open) => !open && setCupomParaExcluir(null)}>
         <DialogContent className="sm:max-w-sm">

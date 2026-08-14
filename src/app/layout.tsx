@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import ThemeProvider from '@/providers/ThemeProvider'
 import { CarrinhoProvider } from '@/contexts/CarrinhoContext'
@@ -42,11 +42,19 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-  },
+}
+
+/**
+ * `viewport` e `themeColor` precisam de export próprio: dentro de `metadata` o
+ * Next 16 descarta os dois, então nada disso chegava ao HTML.
+ *
+ * O `maximumScale: 1` anterior não é reintroduzido de propósito — bloquear o
+ * pinch-zoom é anti-padrão de acessibilidade e não é o que evita o zoom ao
+ * focar um campo no iOS; quem evita é a fonte computada de 16 px (globals.css).
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#636B2F' },
     { media: '(prefers-color-scheme: dark)', color: '#3D4127' },

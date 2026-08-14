@@ -227,8 +227,8 @@ export function PainelDiarias({ funcionarios, onAlterou, embutido = false }: Pai
       />
 
       <Dialog open={Boolean(detalhe)} onOpenChange={(aberto) => !aberto && setDetalhe(null)}>
-        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
-          <DialogHeader className="space-y-1 border-b border-border/70 px-5 pb-4 pt-5 text-left">
+        <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="shrink-0 space-y-1 border-b border-border/70 px-5 pb-4 pt-5 text-left">
             <DialogTitle className="text-base font-semibold tracking-tight">
               {detalhe?.nome_pessoa}
             </DialogTitle>
@@ -236,7 +236,7 @@ export function PainelDiarias({ funcionarios, onAlterou, embutido = false }: Pai
               {detalhe ? formatarDataLocal(detalhe.data_referencia) : ''}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 px-5 py-4">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-4">
             <div className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5">
               <span className="text-sm text-muted-foreground">Valor pago</span>
               <span className="font-mono text-base font-semibold tabular-nums text-destructive">

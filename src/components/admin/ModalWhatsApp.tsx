@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { X, Send } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import IconeWhatsApp from '@/components/icons/IconeWhatsApp'
+import { ModalSheet } from '@/components/ui/modal-sheet'
 
 type Pedido = {
   id: string
@@ -90,133 +90,112 @@ export default function ModalWhatsApp({ pedido, aberto, onFechar }: ModalWhatsAp
     : mensagensPredefinidas[mensagemSelecionada].template(pedido)
 
   return (
-    <AnimatePresence>
-      {aberto && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+    <ModalSheet
+      open={aberto}
+      onOpenChange={(proximo) => {
+        if (!proximo) onFechar()
+      }}
+      title="Enviar WhatsApp"
+      description={`Escolha ou escreva a mensagem para ${pedido.nome_cliente}.`}
+      showCloseButton={false}
+      className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+    >
+      {/* Header */}
+      <div className="flex-shrink-0 bg-gradient-to-r from-green-500 to-green-600 p-4 text-white md:p-6">
+        <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="rounded-lg bg-white/20 p-1.5 backdrop-blur-sm md:p-2">
+              <IconeWhatsApp className="h-5 w-5 text-white md:h-6 md:w-6" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold md:text-xl">Enviar WhatsApp</h3>
+              <p className="text-xs text-green-50 md:text-sm">
+                {pedido.nome_cliente} • {pedido.telefone}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
             onClick={onFechar}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9998]"
-          />
-
-          {/* Modal */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="fixed inset-4 md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 
-                     md:inset-auto z-[9999] w-auto md:w-full md:max-w-2xl 
-                     bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl 
-                     border border-zinc-200 dark:border-zinc-800 overflow-hidden
-                     max-h-[90vh] md:max-h-[85vh] flex flex-col"
+            aria-label="Fechar"
+            className="inline-flex size-11 items-center justify-center rounded-lg transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60"
           >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-green-500 to-green-600 p-4 md:p-6 text-white flex-shrink-0">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2 md:gap-3">
-                  <div className="p-1.5 md:p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                    <IconeWhatsApp className="w-5 h-5 md:w-6 md:h-6 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg md:text-xl font-bold">Enviar WhatsApp</h3>
-                    <p className="text-xs md:text-sm text-green-50">
-                      {pedido.nome_cliente} • {pedido.telefone}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={onFechar}
-                  className="p-1 hover:bg-white/20 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
 
-            {/* Content */}
-            <div className="p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto flex-1">
-              {/* Mensagens Predefinidas */}
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">
-                  Escolha uma mensagem:
-                </label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {mensagensPredefinidas.map((msg, index) => (
-                    <button
-                      key={index}
-                      onClick={() => {
-                        setMensagemSelecionada(index)
-                        if (index === mensagensPredefinidas.length - 1) {
-                          setMensagemCustom('')
-                        }
-                      }}
-                      className={`p-3 rounded-lg text-xs md:text-sm font-medium transition-all ${
-                        mensagemSelecionada === index
-                          ? 'bg-green-500 text-white shadow-lg scale-105'
-                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-                      }`}
-                    >
-                      {msg.titulo}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Preview/Editor da Mensagem */}
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                  {mensagemSelecionada === mensagensPredefinidas.length - 1 ? 'Escreva sua mensagem:' : 'Preview da mensagem:'}
-                </label>
-                {mensagemSelecionada === mensagensPredefinidas.length - 1 ? (
-                  <textarea
-                    value={mensagemCustom}
-                    onChange={(e) => setMensagemCustom(e.target.value)}
-                    placeholder="Digite sua mensagem personalizada..."
-                    className="w-full h-40 md:h-48 p-4 rounded-lg border border-zinc-300 dark:border-zinc-700 
-                             bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white
-                             focus:ring-2 focus:ring-green-500 focus:border-transparent
-                             resize-none text-sm"
-                  />
-                ) : (
-                  <div className="w-full min-h-[10rem] md:min-h-[12rem] p-4 rounded-lg 
-                                bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700
-                                text-zinc-900 dark:text-white whitespace-pre-wrap text-sm">
-                    {mensagemAtual}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 md:p-6 border-t border-zinc-200 dark:border-zinc-800 flex gap-3 flex-shrink-0">
+      {/* Content */}
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 [-webkit-overflow-scrolling:touch] md:space-y-6 md:p-6">
+        {/* Mensagens Predefinidas */}
+        <div>
+          <label className="mb-3 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Escolha uma mensagem:
+          </label>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+            {mensagensPredefinidas.map((msg, index) => (
               <button
-                onClick={onFechar}
-                className="flex-1 px-4 py-2.5 md:py-3 text-sm md:text-base font-medium text-zinc-700 dark:text-zinc-300
-                         bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700
-                         rounded-xl transition-colors"
+                key={index}
+                type="button"
+                onClick={() => {
+                  setMensagemSelecionada(index)
+                  if (index === mensagensPredefinidas.length - 1) {
+                    setMensagemCustom('')
+                  }
+                }}
+                className={`min-h-11 rounded-lg p-3 text-xs font-medium transition-all md:text-sm ${
+                  mensagemSelecionada === index
+                    ? 'scale-105 bg-green-500 text-white shadow-lg'
+                    : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
+                }`}
               >
-                Cancelar
+                {msg.titulo}
               </button>
-              <button
-                onClick={handleEnviarWhatsApp}
-                disabled={!mensagemAtual.trim()}
-                className="flex-1 px-4 py-2.5 md:py-3 text-sm md:text-base font-medium text-white
-                         bg-gradient-to-r from-green-500 to-green-600 
-                         hover:from-green-600 hover:to-green-700
-                         rounded-xl transition-all shadow-lg hover:shadow-xl
-                         disabled:opacity-50 disabled:cursor-not-allowed
-                         flex items-center justify-center gap-2"
-              >
-                <Send className="w-4 h-4 md:w-5 md:h-5" />
-                Enviar WhatsApp
-              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Preview/Editor da Mensagem */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            {mensagemSelecionada === mensagensPredefinidas.length - 1
+              ? 'Escreva sua mensagem:'
+              : 'Preview da mensagem:'}
+          </label>
+          {mensagemSelecionada === mensagensPredefinidas.length - 1 ? (
+            <textarea
+              value={mensagemCustom}
+              onChange={(e) => setMensagemCustom(e.target.value)}
+              placeholder="Digite sua mensagem personalizada..."
+              className="h-40 w-full resize-none rounded-lg border border-zinc-300 bg-white p-4 text-sm text-zinc-900 focus:border-transparent focus:ring-2 focus:ring-green-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white md:h-48"
+            />
+          ) : (
+            <div className="min-h-[10rem] w-full whitespace-pre-wrap rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white md:min-h-[12rem]">
+              {mensagemAtual}
             </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex flex-shrink-0 gap-3 border-t border-zinc-200 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-zinc-800 md:p-6 md:pb-6">
+        <button
+          type="button"
+          onClick={onFechar}
+          className="min-h-11 flex-1 rounded-xl bg-zinc-100 px-4 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 md:py-3 md:text-base"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={handleEnviarWhatsApp}
+          disabled={!mensagemAtual.trim()}
+          className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-green-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg transition-all hover:from-green-600 hover:to-green-700 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 md:py-3 md:text-base"
+        >
+          <Send className="h-4 w-4 md:h-5 md:w-5" />
+          Enviar WhatsApp
+        </button>
+      </div>
+    </ModalSheet>
   )
 }

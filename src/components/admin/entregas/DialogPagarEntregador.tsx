@@ -79,8 +79,8 @@ export default function DialogPagarEntregador({
 
   return (
     <Dialog open={aberto} onOpenChange={(open) => !open && !salvando && onFechar()}>
-      <DialogContent className="sm:max-w-md bg-card border-border">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden border-border bg-card p-0 sm:max-w-md">
+        <DialogHeader className="shrink-0 space-y-1.5 border-b border-border/70 px-5 py-4">
           <DialogTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
             <Wallet className="w-4 h-4 text-muted-foreground" strokeWidth={1.6} />
             Pagar entregador
@@ -90,7 +90,7 @@ export default function DialogPagarEntregador({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 [-webkit-overflow-scrolling:touch]">
           {/* Resumo */}
           <div className="rounded-lg border border-border/70 bg-muted/30 p-3 space-y-1.5">
             <div className="flex items-center justify-between text-xs">
@@ -213,7 +213,7 @@ export default function DialogPagarEntregador({
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-2">
+        <DialogFooter className="shrink-0 gap-2 border-t border-border/70 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-2 sm:pb-4">
           <button
             type="button"
             onClick={onFechar}

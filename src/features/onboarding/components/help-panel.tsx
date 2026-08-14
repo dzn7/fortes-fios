@@ -38,9 +38,15 @@ export const HelpPanel = () => {
     <Sheet open={isHelpPanelOpen} onOpenChange={(open) => !open && closeHelpPanel()}>
       <SheetContent
         side={isMobile ? 'bottom' : 'right'}
+        // A ajuda fica acima de qualquer superfície da aplicação; a camada vai
+        // por `style` porque o primitivo define o z-index inline a partir da
+        // profundidade de aninhamento.
+        style={{ zIndex: 9998 }}
         className={cn(
-          'z-[9998] flex flex-col gap-0 border-0 p-0 shadow-2xl',
-          isMobile ? 'h-[85vh] rounded-t-xl' : 'w-full sm:max-w-md',
+          'flex flex-col gap-0 border-0 p-0 shadow-2xl',
+          // `dvh` em vez de `vh`: no iOS o `vh` ignora a barra do Safari e o
+          // painel passava da tela.
+          isMobile ? 'h-[85dvh] rounded-t-xl' : 'w-full sm:max-w-md',
         )}
       >
         <SheetHeader className="border-b border-border/70 p-4 text-left">

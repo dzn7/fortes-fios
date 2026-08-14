@@ -212,6 +212,18 @@ body:has(.fortes-fios-site) :is(input, textarea, select) {
   font-size: 1rem;
 }
 
+/* Mesma proteção no admin, mas só no mobile: o desktop mantém o `text-sm` dos
+   controles. O seletor parte do `body` para alcançar os campos dentro de
+   drawers, dialogs e popovers, que são portalizados para fora do shell. A
+   especificidade (0,2,2) supera utilitários como `.text-xs` e `.text-[11px]`;
+   o `:not()` preserva campos deliberadamente maiores. */
+@media (max-width: 767px) {
+  body:has([data-admin-shell])
+    :is(input, textarea, select):not(.text-lg, .text-xl, .text-2xl) {
+    font-size: 1rem;
+  }
+}
+
 /* Mantém as prévias do admin fiéis à tipografia publicada no catálogo. */
 .fortes-display {
   font-family: var(--font-quiche-sans), "Quiche Sans", Didot, Georgia, serif;

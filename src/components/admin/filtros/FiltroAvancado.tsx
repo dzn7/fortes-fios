@@ -53,7 +53,7 @@ export const FiltroAvancado = ({
   const abaInicial = defaultAba || abas[0]?.id || 'geral'
 
   const painel = (
-    <Tabs defaultValue={abaInicial} className="flex h-full w-full items-start gap-4">
+    <Tabs defaultValue={abaInicial} className="flex h-full min-h-0 w-full gap-4">
       <div className="flex h-full min-w-[120px] flex-col justify-between">
         <TabsList className="flex h-auto w-full flex-col items-stretch gap-0.5 rounded-none bg-transparent p-0">
           {abas.map((aba) => (
@@ -90,12 +90,15 @@ export const FiltroAvancado = ({
 
       <div className="hidden w-px self-stretch bg-border/70 sm:block" />
 
-      <div className="min-h-0 min-w-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {abas.map((aba) => (
           <TabsContent
             key={aba.id}
             value={aba.id}
-            className="mt-0 h-full max-h-[340px] space-y-4 overflow-y-auto focus-visible:ring-0"
+            // Sem altura fixa: no Sheet mobile a aba herda a cadeia flex do
+            // painel; no dropdown do desktop o `h-[420px]` do container é quem
+            // limita. Um `max-h` em px cortava o conteúdo em telas baixas.
+            className="mt-0 h-full min-h-0 space-y-4 overflow-y-auto overscroll-contain focus-visible:ring-0 [-webkit-overflow-scrolling:touch]"
           >
             {aba.conteudo}
           </TabsContent>
@@ -132,13 +135,13 @@ export const FiltroAvancado = ({
             side="right"
             className="flex w-full flex-col gap-0 bg-card p-0 sm:max-w-md"
           >
-            <SheetHeader className="border-b border-border/60 px-5 py-4 text-left">
+            <SheetHeader className="shrink-0 border-b border-border/60 px-5 py-4 text-left">
               <SheetTitle className="text-[15px] font-semibold">Filtros</SheetTitle>
             </SheetHeader>
             <div className={cn('min-h-0 flex-1 overflow-hidden p-4', contentClassName)}>
               {painel}
             </div>
-            <SheetFooter className="mt-auto flex flex-col gap-2 border-t border-border/60 p-4 sm:flex-col sm:space-x-0">
+            <SheetFooter className="mt-auto flex flex-col gap-2 border-t border-border/60 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-col sm:space-x-0">
               <Button
                 type="button"
                 variant="outline"

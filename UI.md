@@ -361,6 +361,29 @@ O `AppToaster` posiciona notificações no **topo** (`top-center` no mobile, `to
 - Desktop: `Dialog` centrado; sidebar fixa.
 - Listas admin (pedidos, entregas, finanças, clientes): loading com `Skeleton` (não spinner de página inteira); vazio com `Empty`/`ListaVazia`; filtros rápidos em `ToggleGroup` pill (`CHIP_FILTRO_*`); resumo com `FiltrosAtivosChips` + Limpar tudo.
 
+### Camadas dos overlays
+
+`src/components/ui/overlay-layer.tsx` é a fonte única do empilhamento. Nenhum primitivo de overlay carrega `z-index` literal.
+
+- A camada sai da **ordem de abertura**, não de um número fixo: `overlay = 1000 + p × 10`, `conteúdo = overlay + 1`, `popper = overlay + 5`, onde `p` é quantas superfícies já estavam abertas quando esta montou.
+- `useCamadaSuperficie()` é para superfícies modais (`Drawer`, `Dialog`, `AlertDialog`, `Sheet`) e registra na pilha; `useCamadaOverlay()` é leitura, para `Select`, `Popover`, `DropdownMenu`, `Tooltip` e `Command`.
+- A pilha é de módulo, e não só contexto de React, porque quase todo modal aninhado do admin é renderizado como **irmão** do que o abriu (`ModalDetalhesPedido`, `ModalEditarPedido`, os recortes de imagem, os avatares) — não há relação de pai/filho para herdar.
+- Faixas acima da escala, reservadas: onboarding `9990–9999` e banner do PWA `10001`.
+- Consumidor que precisa de uma camada própria passa `style={{ zIndex }}`, **não** classe `z-[…]`: o primitivo define o z-index inline e o inline do consumidor é o único que vence.
+
+### Teclado virtual (iOS)
+
+- `Drawer` desliga o `repositionInputs` do vaul por padrão. A implementação do vaul 1.1.2 *alterna* um booleano a cada `visualViewport.resize`, dessincroniza no Safari e congela o painel em uma altura curta via `style` inline.
+- Quem mede é o `useAjusteTecladoVirtual` (`src/hooks/`), aplicado pelo próprio `DrawerContent`. Ele aplica **`maxHeight` + `bottom`, nunca `height`** — drawers de altura por conteúdo seriam esticados. O `style` do consumidor vence, então quem já faz o próprio ajuste (o checkout público) continua no comando.
+- `dvh` não encolhe com o teclado: serve para a barra do browser, não para o teclado. Painel que precisa caber acima do teclado tem que ler o `visualViewport`.
+
+### Campos e zoom do Safari
+
+- Abaixo de 768 px, `input`, `textarea` e `select` do admin têm fonte computada mínima de 16 px (`globals.css`, seletor `body:has([data-admin-shell])`). Abaixo disso o Safari/iOS amplia a página ao focar o campo.
+- A regra parte do `body` porque todo overlay é portalizado para lá; o marcador `data-admin-shell` é renderizado no SSR por `src/app/admin/layout.tsx`. O desktop mantém `text-sm`.
+- O `:not(.text-lg, .text-xl, .text-2xl)` faz a regra **elevar** para 16 px em vez de fixar em 16 px: campo deliberadamente maior continua maior.
+- `viewport` e `themeColor` vivem em `export const viewport` no layout raiz — dentro de `metadata` o Next 16 descarta os dois. Não usar `maximumScale`: bloqueia o pinch-zoom e não é o que evita o zoom ao focar.
+
 ## Acessibilidade mínima
 
 - Manter foco visível com `focus-visible:ring-*`.
@@ -388,6 +411,9 @@ O `AppToaster` posiciona notificações no **topo** (`top-center` no mobile, `to
 - Overlay mobile custom (`fixed inset-0` + `items-end`) — preferir `ModalSheet` / `Dialog` responsivo.
 - Adicionar item e abrir o carrinho automaticamente; isso interrompe a montagem do pedido e remove o controle do usuário.
 - Colocar um `DrawerContent` abaixo do próprio overlay ou reduzir localmente o z-index das primitivas compartilhadas.
+- `z-index` literal em primitivo de overlay. Empilhar dois overlays com o mesmo par fixo (overlay 1000 / conteúdo 1001) faz o backdrop do filho ficar **abaixo** do conteúdo do pai — o painel de trás continua aceso por cima do escurecimento. A camada vem de `overlay-layer.tsx`.
+- Overlay manual (`fixed inset-0` + backdrop próprio) em tela viva: fica sem focus trap, sem Escape, sem bloqueio de scroll e fora da escala de camadas. Use `ModalSheet` / `Dialog`.
+- Bloquear scroll escrevendo em `document.body.style` e limpar com `= ''`. O vaul e o `react-remove-scroll` do Radix já bloqueiam, e o `= ''` apaga o bloqueio de um overlay alheio que ainda esteja aberto.
 - Montar um modal customizado como irmão de um Drawer modal; o pai conserva o focus trap e bloqueia os eventos do irmão. Use `DrawerNested` dentro da árvore do Drawer. Subir o `z-index` **não** resolve: o Radix põe `pointer-events:none` no `body` e o `react-remove-scroll` bloqueia `touchmove`/`wheel` fora do content — o overlay aparece, mas não recebe clique nem scroll.
 - Combinar altura fixa (`h-*dvh`) com o `repositionInputs` do Vaul em drawer com formulário; os dois escrevem a mesma propriedade e o inline do Vaul vence para sempre.
 - `max-h-[60vh]` / `80vh` dentro de bottom sheet mobile — `vh` ignora a barra do browser no iOS; use a cadeia flex (`min-h-0 flex-1 overflow-y-auto`) com `dvh` no container.

@@ -1,5 +1,35 @@
 # Progress
 
+## [2026-08-14] Auditoria mobile do admin — camadas, teclado iOS e zoom nos campos
+
+**Agente/Modelo:** Claude Opus 5
+**Objetivo:** tornar a experiência mobile do admin robusta no Safari/iOS, corrigindo na camada compartilhada as causas estruturais dos drawers que se reorganizam com o teclado e do zoom automático ao focar campos.
+**Arquivos alterados:** `src/components/ui/overlay-layer.tsx` (novo), `src/components/ui/{drawer,dialog,alert-dialog,sheet,popover,select,tooltip,dropdown-menu,command}.tsx`, `src/hooks/useIsMobile.ts`, `src/app/layout.tsx`, `src/app/admin/layout.tsx`, `src/app/globals.css`, `src/components/admin/AdminLayout.tsx`, `ModalWhatsApp.tsx`, `ControleStatusLoja.tsx`, `GerenciadorFuncionarios.tsx`, `GerenciadorUsuariosClientes.tsx`, `ModalDetalhesPedido.tsx`, `cupons/GerenciadorCupons.tsx`, `entregas/DialogPagarEntregador.tsx`, `filtros/FiltroAvancado.tsx`, `pagamento/ModalFormaPagamentoItens.tsx`, `src/features/financas/components/PainelDiarias.tsx`, `src/features/onboarding/components/{help-panel,step-content}.tsx`, `UI.md`, `Progress.md`.
+
+**Escopo — o que ficou de fora e por quê:** `AdminLayout.tsx:81-95` mantém `ROTAS_ADMIN_OCULTAS`, que bloqueia 13 rotas herdadas do sistema de restaurante (`pdv`, `mesas`, `salao`, `impressora`, `garcons`, `produtividade`, `painel`, `caixa`, `crediario`, `combos`, `adicionais`, `whatsapp`, `anos-anteriores`): elas renderizam `null` e redirecionam para o dashboard. Também não foram tocados componentes sem nenhum importador — `PainelAnotacoes`, `BotaoImprimirPedido`, `BotaoPreviewMobile`/`ModalPreviewMobile`, `ui/input-aceternity`, `kibo-ui/mini-calendar` — nem o bloco `open={false}` em `ModalDetalhesPedido.tsx`. As correções de base alcançam essas telas sem custo de diff.
+
+**O que foi feito:**
+- **Camadas:** nova escala derivada da ordem de abertura (`overlay-layer.tsx`), substituindo os `z-index` literais dos nove primitivos. `Sheet` saiu do `z-50` e `DropdownMenu` do `z-[10001]`.
+- **Teclado:** `Drawer` passou a desligar o `repositionInputs` do vaul por padrão, e o `DrawerContent` aplica o `useAjusteTecladoVirtual` — que existia desde julho e tinha um único consumidor, o checkout público. O `Dialog` centrado recebeu o mesmo tratamento para iPhone deitado.
+- **Zoom:** marcador SSR `data-admin-shell` + regra de 16 px escopada ao admin no mobile, alcançando os ~144 usos de `<Input>`, os ~50 campos crus e os campos dentro de portais com uma regra só.
+- **Viewport:** `viewport`/`themeColor` movidos para `export const viewport`; dentro de `metadata` o Next 16 descartava os dois, então nem a meta nem o `theme-color` chegavam ao HTML. O `maximumScale: 1` foi deliberadamente descartado.
+- **AdminLayout:** removido o bloqueio manual de scroll no `body`; menu do usuário virou `DropdownMenu`; o `Drawer` da sidebar deixou de montar no desktop.
+- **Overlays manuais:** `ModalWhatsApp` virou `ModalSheet` e o formulário de cupom virou `Dialog` — ganharam focus trap, Escape e bloqueio de scroll.
+- **Consumidores vivos:** `vh` → `dvh`, `100vw` → `100%`, safe-area nos rodapés, cadeia de scroll em `DialogPagarEntregador`, `PainelDiarias` e `FiltroAvancado`.
+
+**Decisões tomadas:** a camada vem de uma pilha de módulo, e não só de contexto React, porque no admin quase todo modal aninhado é **irmão** do que o abriu — com contexto puro os empates continuariam. O contador de overlays que eu havia planejado para travar o `<main>` foi descartado depois de verificar que o `react-remove-scroll` do Radix já bloqueia o scroll por evento, inclusive fora do `body`; mantê-lo seria código morto e ainda causaria salto de scrollbar no desktop. O `viewportFit: 'cover'` não foi ativado: sem ele o Safari já posiciona a página dentro da safe area, e ativar exigiria reauditar a loja pública.
+
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · `npm run build` ✓ (compilado sem warnings; o warning de `metadata viewport` desapareceu) · HTML estático de `/admin/dashboard` contém `data-admin-shell`, `<meta name="viewport" content="width=device-width, initial-scale=1">` e os dois `theme-color` ✓ · CSS compilado contém a regra de 16 px dentro de `@media (max-width:767px)`, depois das utilitárias e com especificidade maior ✓ · varredura confirmou zero `vh`/`100vw` restantes na superfície viva do admin ✓ · `npm run lint` **indisponível**: o script legado `next lint` foi removido no Next 16.
+
+**Pendências / próximos passos:** a validação em iPhone/Safari real continua necessária (AGENTS §3.4 proíbe teste de browser aqui) — o roteiro por drawer está na resposta da task. `tailwindcss-animate` **não está instalado** (`tailwind.config.js` → `plugins: []`), então `animate-in`, `fade-in-0`, `zoom-in-95` e `slide-in-from-*` dos overlays são CSS morto hoje; instalar é dependência nova (§3.2) e precisa de autorização. O `package.json` traz o pacote monolítico `radix-ui` junto com 16 `@radix-ui/react-*` individuais — risco de duas cópias de contexto do `react-dialog`. O repositório usa **pnpm** (`pnpm-lock.yaml`), não npm como diz o `SKILLS.md`.
+
+**Armadilhas descobertas:**
+- Empatar `z-index` entre overlays é pior que errar o valor: com overlay 1000 e conteúdo 1001 fixos, o backdrop do modal filho fica **abaixo** do conteúdo do pai, que continua aceso por cima do escurecimento. É o sintoma de "drawer atrás do modal".
+- O Radix copia o `z-index` **computado** do Content para o wrapper do popper (`react-popper@1.3.7`, `getComputedStyle(content).zIndex`). Por isso definir a camada inline no Content funciona para empilhamento entre portais — e por isso classe `z-[…]` de consumidor passa a perder para o inline do primitivo.
+- No admin quem rola é o `<main data-admin-scroll-container>`, não o `body` — mas o `react-remove-scroll` do Radix bloqueia por evento (`wheel`/`touchmove`) e não só por `overflow` no `body`, então o scroll de fundo já estava contido.
+- `metadata.viewport` no Next 16 é descartado silenciosamente: só o warning de build denuncia. Todo `env(safe-area-inset-*)` do projeto resolve 0 sem `viewport-fit=cover` — sem ele o navegador já insere a página na safe area, e o `max(1rem, env(…))` continua garantindo o respiro.
+- Um `font-size: 1rem` sem guarda não é "mínimo de 16 px": ele também **reduz** campo deliberadamente maior. O `:not(.text-lg, …)` transforma a regra em elevação.
+
 ## [2026-08-14] Safari sem zoom, confirmação em drawer e identidade sem flash
 
 **Agente/Modelo:** Codex GPT-5
@@ -11,7 +41,7 @@
 - A confirmação de pedido deixou o overlay manual e passou a usar o Drawer Vaul compartilhado, com rolagem interna e ação protegida pela safe area.
 - O gatilho e o drawer aninhado de cidades receberam hierarquia oliva, mudança clara de contexto, foco visível e seleção identificada por cor, texto e ícone.
 **Decisões tomadas:** a proteção contra zoom foi aplicada por CSS escopado ao site público porque existem campos em vários componentes e portals; alterar cada campo separadamente deixaria lacunas. O marcador SSR já existente foi reutilizado em vez de inserir script bloqueante no cabeçalho.
-**Verificação:** registrada ao final da task.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · HTML estático contém `.fortes-fios-site` antes da hidratação ✓ · `git diff --check` ✓ · `ui-review`, `bug-hunter` e `verification-before-completion` ✓ · `npm run lint` indisponível pelo script legado `next lint` incompatível com Next 16.
 **Pendências / próximos passos:** nenhuma conhecida dentro do comportamento solicitado.
 **Armadilhas descobertas:** aplicar tokens da marca apenas em `useEffect` sempre permite uma pintura com o tema global do admin; drawers em portal continuam cobertos porque o seletor usa o marcador público como descendente do `body`.
 

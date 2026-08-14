@@ -91,7 +91,10 @@ export const StepContent = ({ step, waitingRouteLabel }: StepContentProps) => {
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="z-[9999]">
+            {/* O tour precisa ficar acima de qualquer superfície da aplicação;
+                a camada vai por `style` porque o primitivo define o z-index
+                inline a partir da profundidade de aninhamento. */}
+            <DropdownMenuContent align="end" style={{ zIndex: 9999 }}>
               <DropdownMenuItem onClick={restartTour}>
                 <RotateCcw className="mr-2 h-4 w-4" />
                 Reiniciar tour

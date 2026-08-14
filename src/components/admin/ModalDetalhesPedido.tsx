@@ -1976,7 +1976,7 @@ export default function ModalDetalhesPedido({
                         </button>
                       </div>
 
-                      <div className="mb-4 max-h-[42vh] space-y-2 overflow-y-auto pr-1">
+                      <div className="mb-4 max-h-[42dvh] space-y-2 overflow-y-auto overscroll-contain pr-1">
                         {itensQuantidadeModal.map(({ item, maxQtd, qtdEscolhida, valor }) => (
                           <div
                             key={`pagamento-qtd-${item.id}`}

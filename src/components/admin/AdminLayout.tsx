@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
 import {
@@ -61,6 +62,12 @@ import {
   DrawerDescription,
   DrawerTitle,
 } from '@/components/ui/drawer'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { AvatarUsuario } from '@/components/admin/AvatarUsuario'
 import { SidebarPersonalizarModal } from '@/components/admin/SidebarPersonalizarModal'
 import {
@@ -123,6 +130,7 @@ const atalhosHeader = [
 ]
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
+  const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarColapsada, setSidebarColapsada] = useState(true)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -390,19 +398,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return () => window.removeEventListener('keydown', aoPressionarTecla)
   }, [atalhosVisiveis, mounted, navegarPara])
 
-  useEffect(() => {
-    if (sidebarOpen) {
-      document.body.style.overflow = 'hidden'
-      document.body.style.touchAction = 'none'
-    } else {
-      document.body.style.overflow = ''
-      document.body.style.touchAction = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.body.style.touchAction = ''
-    }
-  }, [sidebarOpen])
+  // O bloqueio de scroll do menu mobile era escrito à mão em `document.body`.
+  // Isso duplicava o que o vaul e o `react-remove-scroll` do Radix já fazem e,
+  // pior, o cleanup limpava com `= ''` em vez de restaurar o valor anterior:
+  // fechar a sidebar com um dialog ainda aberto apagava o bloqueio dele.
 
   const nomeUsuario = usuarioAtual?.nome || 'Administrador'
   const avatarUrl = usuarioAtual?.avatar_url
@@ -655,7 +654,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   side={colapsada ? 'right' : 'top'}
                   align="start"
                   sideOffset={8}
-                  className="z-[1100] w-56 p-1"
+                  className="w-56 p-1"
                 >
                   <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
                     {itensOcultos.map((item) => {
@@ -830,17 +829,23 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         })}
       </aside>
 
-      <Drawer open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <DrawerContent className="h-[96dvh] max-h-[96dvh] border-sidebar-border bg-sidebar p-0 text-sidebar-foreground md:hidden">
-          <DrawerTitle className="sr-only">Menu administrativo</DrawerTitle>
-          <DrawerDescription className="sr-only">
-            Navegue pelas áreas do painel operacional.
-          </DrawerDescription>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {renderSidebarContent({ colapsada: false, mobile: true })}
-          </div>
-        </DrawerContent>
-      </Drawer>
+      {/*
+        O `md:hidden` ficava no conteúdo, então no desktop o drawer ainda
+        montava e rodava a lógica do vaul — invisível, mas ativo.
+      */}
+      {isMobile ? (
+        <Drawer open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <DrawerContent className="h-[96dvh] max-h-[96dvh] border-sidebar-border bg-sidebar p-0 text-sidebar-foreground">
+            <DrawerTitle className="sr-only">Menu administrativo</DrawerTitle>
+            <DrawerDescription className="sr-only">
+              Navegue pelas áreas do painel operacional.
+            </DrawerDescription>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(0px,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]">
+              {renderSidebarContent({ colapsada: false, mobile: true })}
+            </div>
+          </DrawerContent>
+        </Drawer>
+      ) : null}
 
       {/* Conteúdo */}
       <div
@@ -922,47 +927,47 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               )}
             </button>
 
-            <div className="relative">
-              <button
-                onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex h-9 items-center gap-2 rounded-md px-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                aria-label="Menu do usuário"
-                aria-expanded={userMenuOpen}
-              >
-                <AvatarUsuario
-                  nome={nomeUsuario}
-                  src={avatarUrl}
-                  cor={corAvatar}
-                  size="xs"
-                  className="size-7"
-                />
-                <span className="hidden max-w-[120px] truncate lg:block">{nomeUsuario}</span>
-              </button>
-
-              {userMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
-                  <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-lg border border-border/70 bg-popover py-1 shadow-md">
-                    <div className="border-b border-border/70 px-3 py-2.5">
-                      <p className="truncate text-sm font-medium text-foreground">{nomeUsuario}</p>
-                      <p className="truncate text-xs capitalize text-muted-foreground">
-                        {papelUsuario}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setUserMenuOpen(false)
-                        logout()
-                      }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    >
-                      <LogOut strokeWidth={1.6} className="size-4" />
-                      Sair
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            {/*
+              Menu portalizado em vez do par backdrop `fixed z-40` + painel
+              `absolute z-50`: o header é `sticky` com `backdrop-blur`, que cria
+              stacking context próprio, então aquele `z-50` era local e o menu
+              inteiro ficava preso no nível do header.
+            */}
+            <DropdownMenu open={userMenuOpen} onOpenChange={setUserMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-9 items-center gap-2 rounded-md px-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  aria-label="Menu do usuário"
+                >
+                  <AvatarUsuario
+                    nome={nomeUsuario}
+                    src={avatarUrl}
+                    cor={corAvatar}
+                    size="xs"
+                    className="size-7"
+                  />
+                  <span className="hidden max-w-[120px] truncate lg:block">{nomeUsuario}</span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52 p-0">
+                <div className="border-b border-border/70 px-3 py-2.5">
+                  <p className="truncate text-sm font-medium text-foreground">{nomeUsuario}</p>
+                  <p className="truncate text-xs capitalize text-muted-foreground">
+                    {papelUsuario}
+                  </p>
+                </div>
+                <div className="p-1">
+                  <DropdownMenuItem
+                    onSelect={() => logout()}
+                    className="gap-2.5 px-2 py-2 text-sm text-muted-foreground focus:text-foreground"
+                  >
+                    <LogOut strokeWidth={1.6} className="size-4" />
+                    Sair
+                  </DropdownMenuItem>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 

@@ -2568,6 +2568,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                     <button
                       type="button"
                       key={b.id}
+                      aria-pressed={bairroSelecionado?.id === b.id}
                       onClick={() => {
                         setBairroSelecionado(b)
                         setMostrarSeletorBairro(false)
@@ -2606,7 +2607,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                           <span className="block text-[11px] opacity-80">mín. R$ {b.valor_minimo_pedido.toFixed(2)}</span>
                         </span>
                         {bairroSelecionado?.id === b.id && (
-                          <Check className="size-5 text-primary" aria-label="Cidade selecionada" />
+                          <Check className="size-5 text-primary" aria-hidden />
                         )}
                       </div>
                     </button>

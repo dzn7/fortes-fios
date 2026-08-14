@@ -562,7 +562,7 @@ export default function ControleStatusLoja() {
               })}
           </div>
 
-          <DialogFooter className="shrink-0 gap-2 border-t border-border px-4 py-3 sm:px-5">
+          <DialogFooter className="shrink-0 gap-2 border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:pb-3">
             <Button
               type="button"
               variant="ghost"

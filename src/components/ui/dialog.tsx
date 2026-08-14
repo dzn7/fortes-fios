@@ -4,7 +4,13 @@ import * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 
+import { useAjusteTecladoVirtual } from '@/hooks/useAjusteTecladoVirtual'
 import { useIsMobile } from '@/hooks/useIsMobile'
+import {
+  CamadaSuperficieProvider,
+  useCamadaOverlay,
+  useCamadaSuperficie,
+} from '@/components/ui/overlay-layer'
 import { cn } from '@/lib/utils'
 import {
   Drawer,
@@ -19,12 +25,12 @@ type DialogSurface = 'dialog' | 'drawer'
 
 type DialogSurfaceContextValue = {
   surface: DialogSurface
-  requestClose: () => void
+  requestClose: (() => void) | null
 }
 
 const DialogSurfaceContext = React.createContext<DialogSurfaceContextValue>({
   surface: 'dialog',
-  requestClose: () => undefined,
+  requestClose: null,
 })
 
 const useDialogSurface = () => React.useContext(DialogSurfaceContext)
@@ -38,7 +44,13 @@ type DialogProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.Root> &
 const Dialog = ({ variant = 'responsive', dismissible, ...props }: DialogProps) => {
   const isMobile = useIsMobile()
   const surface: DialogSurface = variant === 'dialog' || !isMobile ? 'dialog' : 'drawer'
-  const requestClose = React.useCallback(() => props.onOpenChange?.(false), [props.onOpenChange])
+  const { onOpenChange } = props
+  // Dialog não controlado não tem para onde encaminhar o fechamento: nesse caso
+  // o próprio primitivo (Radix ou vaul) fecha, como faria sem o wrapper.
+  const requestClose = React.useMemo(
+    () => (onOpenChange ? () => onOpenChange(false) : null),
+    [onOpenChange],
+  )
   const contextValue = React.useMemo(
     () => ({ surface, requestClose }),
     [requestClose, surface],
@@ -89,7 +101,7 @@ const DialogClose = React.forwardRef<
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     onClick?.(event)
-    if (!event.defaultPrevented) requestClose()
+    if (!event.defaultPrevented) requestClose?.()
   }
 
   if (surface === 'drawer') {
@@ -102,16 +114,17 @@ DialogClose.displayName = DialogPrimitive.Close.displayName
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
-  <DialogPrimitive.Overlay
-    className={cn(
-      'fixed inset-0 z-[1000] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-      className,
-    )}
-    {...props}
-    ref={ref}
-  />
-))
+>(({ className, style, ...props }, ref) => {
+  const camada = useCamadaOverlay()
+  return (
+    <DialogPrimitive.Overlay
+      className={cn('fixed inset-0 bg-black/80', className)}
+      style={{ zIndex: camada.overlay, ...style }}
+      {...props}
+      ref={ref}
+    />
+  )
+})
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
@@ -121,7 +134,7 @@ type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, children, showCloseButton = true, ...props }, ref) => {
+>(({ className, children, showCloseButton = true, style, ...props }, ref) => {
   const { surface } = useDialogSurface()
 
   if (surface === 'drawer') {
@@ -129,10 +142,14 @@ const DialogContent = React.forwardRef<
       <DrawerContent
         ref={ref as React.Ref<HTMLDivElement>}
         className={cn(
-          'gap-0 overflow-y-auto p-6',
+          'gap-0 overflow-y-auto overscroll-contain p-6 [-webkit-overflow-scrolling:touch]',
           className,
-          'left-0 right-0 top-auto w-full max-w-none translate-x-0 translate-y-0 rounded-t-[10px]',
+          // `sm:max-w-none` acompanha o `max-w-none`: a superfície só troca em
+          // 768px, então um `sm:max-w-*` do consumidor voltaria a valer entre
+          // 640 e 767px — dentro de um drawer de largura total.
+          'left-0 right-0 top-auto w-full max-w-none translate-x-0 translate-y-0 rounded-t-[10px] sm:max-w-none',
         )}
+        style={style}
         {...props}
       >
         {showCloseButton ? (
@@ -150,17 +167,55 @@ const DialogContent = React.forwardRef<
   }
 
   return (
+    <DialogContentCentrado
+      ref={ref}
+      className={className}
+      showCloseButton={showCloseButton}
+      style={style}
+      {...props}
+    >
+      {children}
+    </DialogContentCentrado>
+  )
+})
+DialogContent.displayName = DialogPrimitive.Content.displayName
+
+const DialogContentCentrado = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  DialogContentProps
+>(({ className, children, showCloseButton = true, style, ...props }, ref) => {
+  const camada = useCamadaSuperficie()
+
+  // Em iPhone deitado a largura passa de 768px e o dialog volta a ser centrado,
+  // mas `dvh` não encolhe com o teclado. Reposiciona pelo centro da área
+  // realmente visível — no admin o `body` nunca rola, então o topo da área
+  // visível coincide com o topo do viewport de layout.
+  const ajusteTeclado = useAjusteTecladoVirtual(true)
+
+  return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay style={{ zIndex: camada.overlay }} />
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          'fixed left-1/2 top-1/2 z-[1001] grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl border border-border/70 bg-card p-6 text-card-foreground shadow-[0_8px_32px_-12px_rgba(15,23,42,0.12)] outline-none duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:w-full',
+          'fixed left-1/2 top-1/2 grid max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto overscroll-contain rounded-xl border border-border/70 bg-card p-6 text-card-foreground shadow-[0_8px_32px_-12px_rgba(15,23,42,0.12)] outline-none duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:w-full',
           className,
         )}
+        style={{
+          zIndex: camada.conteudo,
+          ...(ajusteTeclado
+            ? {
+                top: `${Math.round(ajusteTeclado.altura / 2)}px`,
+                maxHeight: `${Math.max(0, ajusteTeclado.altura - 16)}px`,
+              }
+            : null),
+          ...style,
+        }}
         {...props}
       >
-        {children}
+        <CamadaSuperficieProvider profundidade={camada.profundidade}>
+          {children}
+        </CamadaSuperficieProvider>
         {showCloseButton ? (
           <DialogClose
             aria-label="Fechar"
@@ -174,7 +229,7 @@ const DialogContent = React.forwardRef<
     </DialogPortal>
   )
 })
-DialogContent.displayName = DialogPrimitive.Content.displayName
+DialogContentCentrado.displayName = 'DialogContentCentrado'
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn('flex flex-col space-y-1.5 text-center sm:text-left', className)} {...props} />

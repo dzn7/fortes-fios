@@ -5,6 +5,11 @@ import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
+import {
+  CamadaSuperficieProvider,
+  useCamadaOverlay,
+  useCamadaSuperficie,
+} from "@/components/ui/overlay-layer"
 
 const AlertDialog = AlertDialogPrimitive.Root
 
@@ -15,39 +20,50 @@ const AlertDialogPortal = AlertDialogPrimitive.Portal
 const AlertDialogOverlay = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Overlay
-    className={cn(
-      "fixed inset-0 z-[1000] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-      className
-    )}
-    {...props}
-    ref={ref}
-  />
-))
+>(({ className, style, ...props }, ref) => {
+  const camada = useCamadaOverlay()
+  return (
+    <AlertDialogPrimitive.Overlay
+      className={cn(
+        "fixed inset-0 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+        className
+      )}
+      style={{ zIndex: camada.overlay, ...style }}
+      {...props}
+      ref={ref}
+    />
+  )
+})
 AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName
 
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <AlertDialogPortal>
-    <AlertDialogOverlay />
-    <AlertDialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed z-[1001] grid gap-4 border border-border/70 bg-card p-6 text-card-foreground shadow-[0_8px_32px_-12px_rgba(15,23,42,0.12)] outline-none duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-        "inset-x-0 bottom-0 max-h-[96dvh] w-full translate-x-0 translate-y-0 overflow-y-auto rounded-t-[10px] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
-        "sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[calc(100dvh-1rem)] sm:w-[calc(100vw-1rem)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=open]:slide-in-from-bottom-0",
-        className
-      )}
-      {...props}
-    >
-      <div className="mx-auto mb-2 h-1.5 w-[100px] shrink-0 rounded-full bg-muted sm:hidden" aria-hidden />
-      {children}
-    </AlertDialogPrimitive.Content>
-  </AlertDialogPortal>
-))
+>(({ className, children, style, ...props }, ref) => {
+  const camada = useCamadaSuperficie()
+
+  return (
+    <AlertDialogPortal>
+      <AlertDialogOverlay style={{ zIndex: camada.overlay }} />
+      <AlertDialogPrimitive.Content
+        ref={ref}
+        className={cn(
+          "fixed grid gap-4 border border-border/70 bg-card p-6 text-card-foreground shadow-[0_8px_32px_-12px_rgba(15,23,42,0.12)] outline-none duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+          "inset-x-0 bottom-0 max-h-[96dvh] w-full translate-x-0 translate-y-0 overflow-y-auto overscroll-contain rounded-t-[10px] pb-[max(1.5rem,env(safe-area-inset-bottom))] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+          "sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[calc(100dvh-1rem)] sm:w-[calc(100%-1rem)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:pb-6 sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=open]:slide-in-from-bottom-0",
+          className
+        )}
+        style={{ zIndex: camada.conteudo, ...style }}
+        {...props}
+      >
+        <div className="mx-auto mb-2 h-1.5 w-[100px] shrink-0 rounded-full bg-muted sm:hidden" aria-hidden />
+        <CamadaSuperficieProvider profundidade={camada.profundidade}>
+          {children}
+        </CamadaSuperficieProvider>
+      </AlertDialogPrimitive.Content>
+    </AlertDialogPortal>
+  )
+})
 AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName
 
 const AlertDialogHeader = ({
