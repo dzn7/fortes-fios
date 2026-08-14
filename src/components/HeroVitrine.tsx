@@ -149,7 +149,7 @@ function ImagemResponsivaBanner({
       <img
         {...desktop}
         alt={banner.titulo || 'Destaque Fortes Fios'}
-        className="object-cover"
+        className="object-contain"
       />
     </picture>
   )
@@ -248,6 +248,7 @@ export default function HeroVitrine() {
 
   const temMaisDeUmBanner = banners.length > 1
   const bannerAtual = banners[indiceAtual] ?? banners[0]
+  const proporcaoDesktopAtual = bannerAtual.proporcaoDesktop
   const proporcaoMobileAtual = bannerAtual.imagemMobileUrl
     ? bannerAtual.proporcaoMobile
     : bannerAtual.proporcaoDesktop
@@ -284,10 +285,11 @@ export default function HeroVitrine() {
       )}
       <div
         ref={emblaRef}
-        className="aspect-[var(--proporcao-hero-mobile)] h-auto max-h-[min(72dvh,44rem)] min-h-0 overflow-hidden transition-[aspect-ratio] duration-200 sm:aspect-auto sm:h-[clamp(26rem,38vw,42rem)] sm:max-h-none"
+        className="aspect-[var(--proporcao-hero-mobile)] h-auto min-h-0 overflow-hidden transition-[aspect-ratio] duration-200 sm:aspect-[var(--proporcao-hero-desktop)]"
         style={
           {
             '--proporcao-hero-mobile': String(proporcaoMobileAtual),
+            '--proporcao-hero-desktop': String(proporcaoDesktopAtual),
           } as CSSProperties
         }
         aria-live={pausado ? 'polite' : 'off'}

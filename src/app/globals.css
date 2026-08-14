@@ -201,6 +201,18 @@ body.fortes-fios-public :is(h1, h2, h3, h4, h5, h6, .fonte-titulo, .fortes-displ
   letter-spacing: -0.035em;
 }
 
+/* Mantém as prévias do admin fiéis à tipografia publicada no catálogo. */
+.fortes-display {
+  font-family: var(--font-quiche-sans), "Quiche Sans", Didot, Georgia, serif;
+  font-weight: 300;
+  letter-spacing: -0.035em;
+}
+
+.fortes-text {
+  font-family: var(--font-raleway), Raleway, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 200;
+}
+
 h1, h2, h3, h4, h5, h6, .fonte-titulo {
   font-family: inherit;
   letter-spacing: -0.015em;

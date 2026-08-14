@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   BadgePercent,
   Camera,
@@ -217,6 +218,8 @@ export default function VitrinePage() {
   const [imagemParaRecorte, setImagemParaRecorte] = useState('')
   const [enviandoImagem, setEnviandoImagem] = useState(false)
   const [destinoImagem, setDestinoImagem] = useState<DestinoImagem>('desktop')
+  const [previewTelaBanner, setPreviewTelaBanner] =
+    useState<DestinoImagem>('desktop')
   const [configuracaoMaisVendidos, setConfiguracaoMaisVendidos] =
     useState<ConfiguracaoMaisVendidos>(CONFIGURACAO_MAIS_VENDIDOS_PADRAO)
   const [produtosCatalogo, setProdutosCatalogo] = useState<
@@ -331,11 +334,13 @@ export default function VitrinePage() {
   const abrirNovoBanner = () => {
     setBannerEmEdicaoId(null)
     setFormulario(FORMULARIO_VAZIO)
+    setPreviewTelaBanner('desktop')
     setModalAberto(true)
   }
 
   const abrirEdicaoBanner = (banner: BannerVitrine) => {
     setBannerEmEdicaoId(banner.id)
+    setPreviewTelaBanner('desktop')
     setFormulario({
       imagemDesktopUrl: banner.imagemDesktopUrl,
       imagemMobileUrl: banner.imagemMobileUrl,
@@ -1264,7 +1269,10 @@ export default function VitrinePage() {
                         type="button"
                         onClick={() => abrirSeletorImagem('desktop')}
                         disabled={enviandoImagem}
-                        className="group relative aspect-[21/8] w-full overflow-hidden rounded-md border border-dashed border-border bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-70"
+                        className="group relative w-full overflow-hidden rounded-md border border-dashed border-border bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-70"
+                        style={{
+                          aspectRatio: String(formulario.proporcaoDesktop),
+                        }}
                         aria-label={
                           formulario.imagemDesktopUrl
                             ? 'Trocar imagem para desktop'
@@ -1277,7 +1285,7 @@ export default function VitrinePage() {
                             alt=""
                             fill
                             sizes="720px"
-                            className="object-cover"
+                            className="object-contain"
                           />
                         ) : (
                           <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm">
@@ -1356,7 +1364,7 @@ export default function VitrinePage() {
                               alt=""
                               fill
                               sizes="320px"
-                              className="object-cover"
+                              className="object-contain"
                             />
                               {!formulario.imagemMobileUrl ? (
                                 <span className="absolute bottom-2 left-2 rounded-md bg-background/90 px-2 py-1 text-[11px] font-medium text-foreground backdrop-blur">
@@ -1549,15 +1557,57 @@ export default function VitrinePage() {
 
                     {formulario.imagemDesktopUrl && (
                       <div className="space-y-2">
-                        <Label>Prévia do texto</Label>
+                        <div className="flex min-h-11 items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            {previewTelaBanner === 'desktop' ? (
+                              <Monitor className="size-4 text-muted-foreground" />
+                            ) : (
+                              <Smartphone className="size-4 text-muted-foreground" />
+                            )}
+                            <div>
+                              <Label>Prévia no site</Label>
+                              <p
+                                className="text-xs text-muted-foreground"
+                                aria-live="polite"
+                              >
+                                {previewTelaBanner === 'desktop'
+                                  ? 'Desktop'
+                                  : formulario.imagemMobileUrl
+                                    ? 'Celular'
+                                    : 'Celular · usando imagem desktop'}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-11 shrink-0"
+                            onClick={() =>
+                              setPreviewTelaBanner((telaAtual) =>
+                                telaAtual === 'desktop' ? 'mobile' : 'desktop',
+                              )
+                            }
+                            aria-label={
+                              previewTelaBanner === 'desktop'
+                                ? 'Ver prévia para celular'
+                                : 'Ver prévia para desktop'
+                            }
+                          >
+                            <ArrowRight className="size-4" />
+                          </Button>
+                        </div>
                         <div
                           className={cn(
                             'relative mx-auto max-h-[30rem] w-full overflow-hidden rounded-md bg-muted',
-                            formulario.imagemMobileUrl ? 'max-w-xs' : 'max-w-full',
+                            previewTelaBanner === 'mobile'
+                              ? 'max-w-xs'
+                              : 'max-w-full',
                           )}
                           style={{
                             aspectRatio: String(
-                              formulario.imagemMobileUrl
+                              previewTelaBanner === 'mobile' &&
+                                formulario.imagemMobileUrl
                                 ? formulario.proporcaoMobile
                                 : formulario.proporcaoDesktop,
                             ),
@@ -1565,13 +1615,17 @@ export default function VitrinePage() {
                         >
                           <Image
                             src={
-                              formulario.imagemMobileUrl ||
-                              formulario.imagemDesktopUrl
+                              previewTelaBanner === 'mobile' &&
+                              formulario.imagemMobileUrl
+                                ? formulario.imagemMobileUrl
+                                : formulario.imagemDesktopUrl
                             }
                             alt=""
                             fill
-                            sizes="320px"
-                            className="object-cover"
+                            sizes={
+                              previewTelaBanner === 'mobile' ? '320px' : '720px'
+                            }
+                            className="object-contain"
                           />
                           {formulario.overlay !== 'sem_overlay' && (
                             <div
@@ -1589,7 +1643,7 @@ export default function VitrinePage() {
                           )}
                           <div
                             className={cn(
-                              'absolute inset-0 flex p-4',
+                              'fortes-text absolute inset-0 flex p-4',
                               POSICAO_PREVIEW_CLASSES[formulario.posicaoTexto],
                             )}
                           >

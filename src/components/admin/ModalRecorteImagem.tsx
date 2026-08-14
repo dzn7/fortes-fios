@@ -428,12 +428,12 @@ export default function ModalRecorteImagem({
                     {(previewTitulo || previewSubtitulo) && (
                       <div className="absolute inset-x-0 bottom-0 p-3 text-white">
                         {previewTitulo && (
-                          <p className="font-serif text-lg leading-none">
+                          <p className="fortes-display text-lg leading-none">
                             {previewTitulo}
                           </p>
                         )}
                         {previewSubtitulo && (
-                          <p className="mt-1 line-clamp-2 text-xs text-white/90">
+                          <p className="fortes-text mt-1 line-clamp-2 text-xs text-white/90">
                             {previewSubtitulo}
                           </p>
                         )}
