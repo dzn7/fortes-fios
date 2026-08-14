@@ -1,0 +1,25 @@
+{
+  "name": "Edienai Lanches - Garçom",
+  "short_name": "TL Garçom",
+  "description": "Painel de pedidos para garçom - Edienai Lanches",
+  "start_url": "/garcom",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#16a34a",
+  "orientation": "portrait",
+  "scope": "/garcom/",
+  "icons": [
+    {
+      "src": "/assets/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+# Segredos e configurações locais
+.env
+.env.local
+.env.*.local
+
+# Artefatos locais do Next.js e dependências
+.next/
+node_modules/
