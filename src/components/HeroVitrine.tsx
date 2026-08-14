@@ -7,8 +7,14 @@ import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import {
+  FONTE_TEXTO_BANNER_CLASSES,
+  PESO_TITULO_BANNER_CLASSES,
   POSICAO_TEXTO_BANNER_CLASSES,
+  ehFonteTextoBanner,
+  ehPesoTituloBanner,
   ehPosicaoTextoBanner,
+  type FonteTextoBanner,
+  type PesoTituloBanner,
   type PosicaoTextoBanner,
 } from '@/lib/vitrineBannerTexto'
 
@@ -23,6 +29,8 @@ type BannerVitrine = {
   proporcaoMobile: number
   titulo: string
   subtitulo: string
+  fonteTexto: FonteTextoBanner
+  pesoTitulo: PesoTituloBanner
   posicaoTexto: PosicaoTextoBanner
   contrasteTexto: ContrasteTexto
   overlay: IntensidadeOverlay
@@ -93,6 +101,12 @@ const lerBanners = (valor: string | null | undefined): BannerVitrine[] => {
               typeof banner.subtitulo === 'string'
                 ? banner.subtitulo.trim()
                 : '',
+            fonteTexto: ehFonteTextoBanner(banner.fonteTexto)
+              ? banner.fonteTexto
+              : 'quiche',
+            pesoTitulo: ehPesoTituloBanner(banner.pesoTitulo)
+              ? banner.pesoTitulo
+              : 'leve',
             posicaoTexto,
             contrasteTexto,
             overlay,
@@ -326,18 +340,24 @@ export default function HeroVitrine() {
                   <div
                     className={cn(
                       'max-w-[88%] sm:max-w-xl',
+                      FONTE_TEXTO_BANNER_CLASSES[banner.fonteTexto],
                       banner.contrasteTexto === 'claro'
                         ? 'text-white'
                         : 'text-foreground',
                     )}
                   >
                     {banner.titulo && (
-                      <h2 className="fortes-display whitespace-pre-line text-3xl leading-none drop-shadow-sm sm:text-5xl lg:text-6xl">
+                      <h2
+                        className={cn(
+                          'whitespace-pre-line text-3xl leading-none drop-shadow-sm sm:text-5xl lg:text-6xl',
+                          PESO_TITULO_BANNER_CLASSES[banner.pesoTitulo],
+                        )}
+                      >
                         {banner.titulo}
                       </h2>
                     )}
                     {banner.subtitulo && (
-                      <p className="mt-3 max-w-lg whitespace-pre-line text-sm leading-relaxed drop-shadow-sm sm:text-lg">
+                      <p className="mt-3 max-w-lg whitespace-pre-line text-sm font-normal leading-relaxed drop-shadow-sm sm:text-lg">
                         {banner.subtitulo}
                       </p>
                     )}

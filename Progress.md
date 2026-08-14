@@ -1,5 +1,21 @@
 # Progress
 
+## [2026-08-14] Tipografia configurável por banner da Vitrine
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** dar presença e nitidez às chamadas do hero permitindo escolher fonte e peso individualmente em cada banner.
+**Arquivos alterados:** `src/lib/fonts.ts`, `src/app/layout.tsx`, `src/app/globals.css`, `src/lib/vitrineBannerTexto.ts`, `src/app/admin/vitrine/page.tsx`, `src/components/HeroVitrine.tsx`, `src/components/admin/ModalRecorteImagem.tsx`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- Confirmado que o Meu Burguer declara Satoshi sem carregá-la e, portanto, exibe Bricolage Grotesque como fonte real do hero, em pesos fortes.
+- Cada banner agora persiste família tipográfica e peso da frase principal no JSON existente, sem migration.
+- O editor oferece Quiche Sans, Bricolage Grotesque, Raleway e Geist, com amostra imediata e pesos Leve, Médio, Seminegrito e Negrito.
+- Formulário, prévia desktop/mobile, prévia do recorte e hero público compartilham as mesmas classes tipográficas.
+- Banners antigos continuam válidos e usam Quiche Sans leve quando os novos campos não existem.
+**Decisões tomadas:** Bricolage foi incorporada como opção de impacto, não como substituição global da identidade Fortes Fios. Foram carregados pesos reais das quatro famílias para evitar negrito sintético e perda de nitidez.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · CSS compilado contém as quatro famílias e pesos reais ✓ · `git diff --check` ✓ · `ui-review` Pass ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓ · `npm run lint` indisponível: o script legado `next lint` é incompatível com Next 16.
+**Pendências / próximos passos:** nenhuma conhecida dentro da tipografia dos banners.
+**Armadilhas descobertas:** declarar uma fonte antes do fallback no CSS não significa que ela está carregada; no Meu Burguer, “Satoshi” não possui arquivo/import e o navegador usa Bricolage Grotesque.
+
 ## [2026-08-14] Auditoria mobile do admin — camadas, teclado iOS e zoom nos campos
 
 **Agente/Modelo:** Claude Opus 5

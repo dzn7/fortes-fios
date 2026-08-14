@@ -34,7 +34,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
+  FONTE_TEXTO_BANNER_CLASSES,
+  PESO_TITULO_BANNER_CLASSES,
   POSICAO_TEXTO_BANNER_CLASSES,
+  type FonteTextoBanner,
+  type PesoTituloBanner,
   type PosicaoTextoBanner,
 } from '@/lib/vitrineBannerTexto'
 import {
@@ -73,6 +77,8 @@ type ModalRecorteImagemProps = {
   modoPreview?: 'produto' | 'banner' | 'resultado'
   previewTitulo?: string
   previewSubtitulo?: string
+  previewFonteTexto?: FonteTextoBanner
+  previewPesoTitulo?: PesoTituloBanner
   previewPosicaoTexto?: PosicaoTextoBanner
   previewContrasteTexto?: 'claro' | 'escuro'
   previewOverlay?: 'sem_overlay' | 'suave' | 'forte'
@@ -110,6 +116,8 @@ export default function ModalRecorteImagem({
   modoPreview = 'produto',
   previewTitulo = '',
   previewSubtitulo = '',
+  previewFonteTexto = 'quiche',
+  previewPesoTitulo = 'leve',
   previewPosicaoTexto = 'inferior_esquerda',
   previewContrasteTexto = 'claro',
   previewOverlay = 'suave',
@@ -458,18 +466,24 @@ export default function ModalRecorteImagem({
                         <div
                           className={cn(
                             'max-w-[92%]',
+                            FONTE_TEXTO_BANNER_CLASSES[previewFonteTexto],
                             previewContrasteTexto === 'claro'
                               ? 'text-white'
                               : 'text-foreground',
                           )}
                         >
                           {previewTitulo && (
-                            <p className="fortes-display whitespace-pre-line text-lg leading-none drop-shadow-sm">
+                            <p
+                              className={cn(
+                                'whitespace-pre-line text-lg leading-none drop-shadow-sm',
+                                PESO_TITULO_BANNER_CLASSES[previewPesoTitulo],
+                              )}
+                            >
                               {previewTitulo}
                             </p>
                           )}
                           {previewSubtitulo && (
-                            <p className="fortes-text mt-1 whitespace-pre-line text-xs leading-relaxed drop-shadow-sm">
+                            <p className="mt-1 whitespace-pre-line text-xs font-normal leading-relaxed drop-shadow-sm">
                               {previewSubtitulo}
                             </p>
                           )}

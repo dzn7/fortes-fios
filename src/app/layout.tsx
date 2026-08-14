@@ -5,7 +5,12 @@ import { CarrinhoProvider } from '@/contexts/CarrinhoContext'
 import PWAManager from '@/components/PWAManager'
 import ManifestManager from '@/components/ManifestManager'
 import { AppToaster } from '@/components/AppToaster'
-import { geist, quicheSans, ralewayExtraLight } from '@/lib/fonts'
+import {
+  bricolageGrotesque,
+  geist,
+  quicheSans,
+  ralewayExtraLight,
+} from '@/lib/fonts'
 
 export const metadata: Metadata = {
   title: 'Fortes Fios | Tudo para o seu cabelo',
@@ -75,7 +80,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body
-        className={`${geist.variable} ${quicheSans.variable} ${ralewayExtraLight.variable} ${geist.className} antialiased`}
+        className={`${geist.variable} ${quicheSans.variable} ${ralewayExtraLight.variable} ${bricolageGrotesque.variable} ${geist.className} antialiased`}
       >
         <ThemeProvider>
           <CarrinhoProvider>

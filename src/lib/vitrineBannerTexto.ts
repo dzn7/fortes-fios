@@ -46,3 +46,57 @@ export const ehPosicaoTextoBanner = (
   valor: unknown,
 ): valor is PosicaoTextoBanner =>
   POSICOES_TEXTO_BANNER.includes(valor as PosicaoTextoBanner)
+
+export const FONTES_TEXTO_BANNER = [
+  'quiche',
+  'bricolage',
+  'raleway',
+  'geist',
+] as const
+
+export type FonteTextoBanner = (typeof FONTES_TEXTO_BANNER)[number]
+
+export const FONTE_TEXTO_BANNER_ROTULOS: Record<FonteTextoBanner, string> = {
+  quiche: 'Quiche Sans · Editorial',
+  bricolage: 'Bricolage Grotesque · Impacto',
+  raleway: 'Raleway · Minimalista',
+  geist: 'Geist · Moderna',
+}
+
+export const FONTE_TEXTO_BANNER_CLASSES: Record<FonteTextoBanner, string> = {
+  quiche: 'fonte-banner-quiche',
+  bricolage: 'fonte-banner-bricolage',
+  raleway: 'fonte-banner-raleway',
+  geist: 'fonte-banner-geist',
+}
+
+export const PESOS_TITULO_BANNER = [
+  'leve',
+  'medio',
+  'seminegrito',
+  'negrito',
+] as const
+
+export type PesoTituloBanner = (typeof PESOS_TITULO_BANNER)[number]
+
+export const PESO_TITULO_BANNER_ROTULOS: Record<PesoTituloBanner, string> = {
+  leve: 'Leve',
+  medio: 'Médio',
+  seminegrito: 'Seminegrito',
+  negrito: 'Negrito',
+}
+
+export const PESO_TITULO_BANNER_CLASSES: Record<PesoTituloBanner, string> = {
+  leve: 'font-light',
+  medio: 'font-medium',
+  seminegrito: 'font-semibold',
+  negrito: 'font-[700]',
+}
+
+export const ehFonteTextoBanner = (valor: unknown): valor is FonteTextoBanner =>
+  FONTES_TEXTO_BANNER.includes(valor as FonteTextoBanner)
+
+export const ehPesoTituloBanner = (
+  valor: unknown,
+): valor is PesoTituloBanner =>
+  PESOS_TITULO_BANNER.includes(valor as PesoTituloBanner)

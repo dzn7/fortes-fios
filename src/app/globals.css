@@ -236,6 +236,25 @@ body:has(.fortes-fios-site) :is(input, textarea, select) {
   font-weight: 200;
 }
 
+/* Famílias selecionáveis do texto do hero. Classes explícitas mantêm o mesmo
+   resultado na vitrine pública e nas prévias do admin, sem depender da geração
+   de utilitários arbitrários pelo Tailwind. */
+.fonte-banner-quiche {
+  font-family: var(--font-quiche-sans), "Quiche Sans", Didot, Georgia, serif;
+}
+
+.fonte-banner-bricolage {
+  font-family: var(--font-bricolage), "Bricolage Grotesque", Arial, sans-serif;
+}
+
+.fonte-banner-raleway {
+  font-family: var(--font-raleway), Raleway, "Helvetica Neue", Arial, sans-serif;
+}
+
+.fonte-banner-geist {
+  font-family: var(--font-geist), Geist, Arial, sans-serif;
+}
+
 @keyframes faixa-rodape-deslizar {
   to {
     transform: translateX(-50%);

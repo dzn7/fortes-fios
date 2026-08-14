@@ -1,5 +1,5 @@
 import localFont from 'next/font/local'
-import { Raleway } from 'next/font/google'
+import { Bricolage_Grotesque, Raleway } from 'next/font/google'
 
 export const geist = localFont({
   src: [
@@ -65,6 +65,21 @@ export const quicheSans = localFont({
       weight: '300',
       style: 'normal',
     },
+    {
+      path: '../../public/fonts/QuicheSans-Medium.otf',
+      weight: '500',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/QuicheSans-Bold.otf',
+      weight: '600',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/QuicheSans-ExtraBold.otf',
+      weight: '700',
+      style: 'normal',
+    },
   ],
   variable: '--font-quiche-sans',
   display: 'swap',
@@ -72,8 +87,16 @@ export const quicheSans = localFont({
 
 export const ralewayExtraLight = Raleway({
   subsets: ['latin'],
-  weight: '200',
+  weight: ['200', '300', '400', '500', '600', '700'],
   style: 'normal',
   variable: '--font-raleway',
+  display: 'swap',
+})
+
+export const bricolageGrotesque = Bricolage_Grotesque({
+  subsets: ['latin'],
+  weight: ['300', '500', '600', '700'],
+  style: 'normal',
+  variable: '--font-bricolage',
   display: 'swap',
 })

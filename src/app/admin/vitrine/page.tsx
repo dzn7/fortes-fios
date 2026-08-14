@@ -65,10 +65,20 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import {
+  FONTES_TEXTO_BANNER,
+  FONTE_TEXTO_BANNER_CLASSES,
+  FONTE_TEXTO_BANNER_ROTULOS,
+  PESOS_TITULO_BANNER,
+  PESO_TITULO_BANNER_CLASSES,
+  PESO_TITULO_BANNER_ROTULOS,
   POSICAO_TEXTO_BANNER_CLASSES,
   POSICAO_TEXTO_BANNER_ROTULOS,
   POSICOES_TEXTO_BANNER,
+  ehFonteTextoBanner,
+  ehPesoTituloBanner,
   ehPosicaoTextoBanner,
+  type FonteTextoBanner,
+  type PesoTituloBanner,
   type PosicaoTextoBanner,
 } from '@/lib/vitrineBannerTexto'
 import {
@@ -102,6 +112,8 @@ type BannerVitrine = {
   proporcaoMobile: number
   titulo: string
   subtitulo: string
+  fonteTexto: FonteTextoBanner
+  pesoTitulo: PesoTituloBanner
   posicaoTexto: PosicaoTextoBanner
   contrasteTexto: ContrasteTexto
   overlay: IntensidadeOverlay
@@ -129,6 +141,8 @@ const FORMULARIO_VAZIO: FormularioBanner = {
   proporcaoMobile: 4 / 5,
   titulo: '',
   subtitulo: '',
+  fonteTexto: 'quiche',
+  pesoTitulo: 'leve',
   posicaoTexto: 'inferior_esquerda',
   contrasteTexto: 'claro',
   overlay: 'suave',
@@ -178,6 +192,12 @@ const lerBanners = (valor: string | null | undefined): BannerVitrine[] => {
           titulo: typeof banner.titulo === 'string' ? banner.titulo.trim() : '',
           subtitulo:
             typeof banner.subtitulo === 'string' ? banner.subtitulo.trim() : '',
+          fonteTexto: ehFonteTextoBanner(banner.fonteTexto)
+            ? banner.fonteTexto
+            : 'quiche',
+          pesoTitulo: ehPesoTituloBanner(banner.pesoTitulo)
+            ? banner.pesoTitulo
+            : 'leve',
           posicaoTexto: ehPosicaoTextoBanner(banner.posicaoTexto)
             ? banner.posicaoTexto
             : 'inferior_esquerda',
@@ -348,6 +368,8 @@ export default function VitrinePage() {
       proporcaoMobile: banner.proporcaoMobile,
       titulo: banner.titulo,
       subtitulo: banner.subtitulo,
+      fonteTexto: banner.fonteTexto,
+      pesoTitulo: banner.pesoTitulo,
       posicaoTexto: banner.posicaoTexto,
       contrasteTexto: banner.contrasteTexto,
       overlay: banner.overlay,
@@ -525,6 +547,8 @@ export default function VitrinePage() {
       proporcaoMobile: formulario.proporcaoMobile,
       titulo: formulario.titulo.trim(),
       subtitulo: formulario.subtitulo.trim(),
+      fonteTexto: formulario.fonteTexto,
+      pesoTitulo: formulario.pesoTitulo,
       posicaoTexto: formulario.posicaoTexto,
       contrasteTexto: formulario.contrasteTexto,
       overlay: formulario.overlay,
@@ -1496,6 +1520,80 @@ export default function VitrinePage() {
                         Opcional · até 140 caracteres
                       </p>
                     </div>
+                    <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3">
+                      <div>
+                        <Label>Tipografia da chamada</Label>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                          Escolha uma fonte legível para a foto. Impacto usa a
+                          mesma família percebida no hero do Meu Burguer.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="banner-fonte">Fonte</Label>
+                          <Select
+                            value={formulario.fonteTexto}
+                            onValueChange={(valor: FonteTextoBanner) =>
+                              setFormulario((estadoAtual) => ({
+                                ...estadoAtual,
+                                fonteTexto: valor,
+                              }))
+                            }
+                          >
+                            <SelectTrigger
+                              id="banner-fonte"
+                              className="min-h-11 shadow-none"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {FONTES_TEXTO_BANNER.map((fonte) => (
+                                <SelectItem key={fonte} value={fonte}>
+                                  {FONTE_TEXTO_BANNER_ROTULOS[fonte]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="banner-peso">Peso da frase</Label>
+                          <Select
+                            value={formulario.pesoTitulo}
+                            onValueChange={(valor: PesoTituloBanner) =>
+                              setFormulario((estadoAtual) => ({
+                                ...estadoAtual,
+                                pesoTitulo: valor,
+                              }))
+                            }
+                          >
+                            <SelectTrigger
+                              id="banner-peso"
+                              className="min-h-11 shadow-none"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PESOS_TITULO_BANNER.map((peso) => (
+                                <SelectItem key={peso} value={peso}>
+                                  {PESO_TITULO_BANNER_ROTULOS[peso]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div
+                        className={cn(
+                          'rounded-md border border-border/70 bg-background px-3 py-3 text-xl leading-none text-foreground',
+                          FONTE_TEXTO_BANNER_CLASSES[formulario.fonteTexto],
+                          PESO_TITULO_BANNER_CLASSES[formulario.pesoTitulo],
+                        )}
+                        aria-label="Amostra da tipografia selecionada"
+                      >
+                        {formulario.titulo.split('\n')[0] ||
+                          'Seu cabelo, suas regras'}
+                      </div>
+                    </div>
                     <div className="space-y-2">
                       <Label>Posição do texto</Label>
                       <Select
@@ -1653,25 +1751,31 @@ export default function VitrinePage() {
                           )}
                           <div
                             className={cn(
-                              'fortes-text absolute inset-0 flex p-4',
+                              'absolute inset-0 flex p-4',
                               POSICAO_TEXTO_BANNER_CLASSES[formulario.posicaoTexto],
                             )}
                           >
                             <div
                               className={cn(
                                 'max-w-[90%]',
+                                FONTE_TEXTO_BANNER_CLASSES[formulario.fonteTexto],
                                 formulario.contrasteTexto === 'claro'
                                   ? 'text-white'
                                   : 'text-foreground',
                               )}
                             >
                               {formulario.titulo && (
-                                <p className="fortes-display whitespace-pre-line text-2xl leading-none">
+                                <p
+                                  className={cn(
+                                    'whitespace-pre-line text-2xl leading-none drop-shadow-sm',
+                                    PESO_TITULO_BANNER_CLASSES[formulario.pesoTitulo],
+                                  )}
+                                >
                                   {formulario.titulo}
                                 </p>
                               )}
                               {formulario.subtitulo && (
-                                <p className="mt-1 whitespace-pre-line text-xs leading-relaxed">
+                                <p className="mt-1 whitespace-pre-line text-xs font-normal leading-relaxed drop-shadow-sm">
                                   {formulario.subtitulo}
                                 </p>
                               )}
@@ -1763,6 +1867,8 @@ export default function VitrinePage() {
             modoPreview="banner"
             previewTitulo={formulario.titulo}
             previewSubtitulo={formulario.subtitulo}
+            previewFonteTexto={formulario.fonteTexto}
+            previewPesoTitulo={formulario.pesoTitulo}
             previewPosicaoTexto={formulario.posicaoTexto}
             previewContrasteTexto={formulario.contrasteTexto}
             previewOverlay={formulario.overlay}
