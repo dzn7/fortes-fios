@@ -28,7 +28,7 @@ Oferecer um catálogo digital de produtos capilares, com navegação por categor
 ## Escopo (o que o produto é)
 
 - Catálogo público responsivo com produtos capilares, categorias reais ordenadas em `categorias_cardapio`, busca, carrinho persistido, status da loja, vitrine configurável com artes independentes por tela, seção de mais vendidos em modo automático ou curadoria manual, ofertas selecionadas pelo administrador e prova social do studio parceiro com logo e resultados configuráveis.
-- Checkout para entrega ou retirada na loja, com bairros, taxas, cupons, troco, pagamentos múltiplos e PIX online.
+- Checkout para entrega ou retirada na loja, com cidades atendidas, compra mínima por cidade, taxa de entrega, bairro/endereço livres, cupons, troco, pagamentos múltiplos e PIX online.
 - Painel administrativo com dashboard, Kanban de produção, PDV, histórico/listagem de pedidos e edição detalhada.
 - Gestão de salão: mesas, comandas, locais externos, ocupação, tempo limite e liberação.
 - Gestão de entregas, entregadores e repasses.
@@ -128,7 +128,7 @@ Há ainda páginas de detalhes/edição de pedido, relatórios e saldos de caixa
 4. Depois da grade do catálogo, a seção de resultados do studio lê a configuração JSON `vitrine_resultados_studio`, exibe somente fotos publicadas e permanece ausente até o administrador ativar ao menos um resultado.
 5. As alterações do catálogo são acompanhadas por canais Realtime.
 6. `CarrinhoContext` mantém o carrinho no `localStorage`.
-7. `ModalCarrinho` revalida cupom, classifica itens e calcula frete/taxa de pagamento.
+7. `ModalCarrinho` revalida cupom, classifica itens e calcula frete/taxa de pagamento. Em entrega, o cliente seleciona uma cidade ativa, informa bairro e endereço em campos livres e pode acrescentar uma referência; a compra mínima é validada sobre o subtotal de produtos após descontos de item, antes de frete e cupom. Cada cidade possui dias semanais configuráveis: Porto opera diariamente, enquanto Nossa Senhora dos Remédios e Campo Largo iniciam, respectivamente, com segunda e terça-feira. Checkout e confirmação informam a próxima data habilitada, que é persistida no pedido e na entrega.
 8. Para pagamento comum, cria `pedidos`, ocupa a mesa quando aplicável, grava `itens_pedido` e `item_adicionais`, registra cupom e dispara entrega/impressão.
 9. Se uma etapa crítica falhar, o frontend tenta compensar: libera mesa, remove uso do cupom e exclui o pedido criado.
 10. Para PIX online, a criação passa pelas rotas server-side do Mercado Pago; o pedido é confirmado após conciliação/aprovação.
