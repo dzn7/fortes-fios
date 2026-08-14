@@ -1,6 +1,6 @@
 'use client'
 
-import { LayoutGrid, Receipt, ShoppingCart } from 'lucide-react'
+import { Home, PackageSearch, ShoppingBag } from 'lucide-react'
 import { useCarrinho } from '@/contexts/CarrinhoContext'
 
 type FooterProps = {
@@ -20,65 +20,60 @@ export default function Footer({
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 md:hidden"
-      aria-label="Navegação do catálogo"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+      aria-label="Navegação principal da loja"
       data-public-bottom-nav
     >
-      <div className="border-t border-border/80 bg-background/95 backdrop-blur-xl">
-        <div className="container mx-auto px-3">
-          <div className="mx-auto flex max-w-md items-stretch justify-around py-1.5">
-            {/* Início */}
-            <button
-              onClick={scrollParaInicio}
-              className="group flex min-h-12 min-w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-1 text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-accent-foreground"
-              aria-label="Ir para o início"
-            >
-              <LayoutGrid className="h-[22px] w-[22px] transition-transform duration-200 group-active:scale-90" />
-              <span className="text-[11px] font-medium">Catálogo</span>
-            </button>
+      <div className="pointer-events-auto mx-auto grid max-w-sm grid-cols-3 gap-1 rounded-2xl border border-border/80 bg-background/95 p-1.5 shadow-lg backdrop-blur-xl supports-[backdrop-filter]:bg-background/85">
+        <button
+          type="button"
+          onClick={scrollParaInicio}
+          className="group flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-primary transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-accent"
+          aria-label="Ir para o início da loja"
+          aria-current="page"
+        >
+          <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-transform group-active:scale-95">
+            <Home className="size-4" strokeWidth={1.8} aria-hidden />
+          </span>
+          <span className="text-xs font-medium leading-none">Início</span>
+        </button>
 
-            {/* Pedidos */}
-            <button
-              onClick={onAbrirPedidos}
-              className="group flex min-h-12 min-w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-1 text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-accent-foreground"
-              aria-label="Ver meus pedidos"
-            >
-              <Receipt className="h-[22px] w-[22px] transition-transform duration-200 group-active:scale-90" />
-              <span className="text-[11px] font-medium">Pedidos</span>
-            </button>
+        <button
+          type="button"
+          onClick={onAbrirPedidos}
+          className="group flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-accent"
+          aria-label="Acompanhar meus pedidos"
+        >
+          <span className="flex size-7 items-center justify-center transition-transform group-active:scale-95">
+            <PackageSearch className="size-5" strokeWidth={1.7} aria-hidden />
+          </span>
+          <span className="text-xs font-medium leading-none">Pedidos</span>
+        </button>
 
-            {/* Carrinho */}
-            <button
-              onClick={onAbrirCarrinho}
-              className="group relative flex min-h-12 min-w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-1 text-primary transition-colors duration-200 hover:bg-primary/10"
-              aria-label={
-                quantidadeTotal > 0
-                  ? `Abrir carrinho com ${quantidadeTotal} itens`
-                  : 'Abrir carrinho vazio'
-              }
-            >
-              <div className="relative">
-                <ShoppingCart className="h-[22px] w-[22px] transition-transform duration-200 group-active:scale-90" />
-                {quantidadeTotal > 0 && (
-                  <span
-                    className="absolute -right-2.5 -top-2 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground shadow-sm"
-                    aria-live="polite"
-                  >
-                    {quantidadeTotal > 99 ? '99+' : quantidadeTotal}
-                  </span>
-                )}
-              </div>
-              <span className="text-[11px] font-semibold">Carrinho</span>
-            </button>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={onAbrirCarrinho}
+          className="group flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-accent"
+          aria-label={
+            quantidadeTotal > 0
+              ? `Abrir sacola com ${quantidadeTotal} ${quantidadeTotal === 1 ? 'item' : 'itens'}`
+              : 'Abrir sacola vazia'
+          }
+        >
+          <span className="relative flex size-7 items-center justify-center transition-transform group-active:scale-95">
+            <ShoppingBag className="size-5" strokeWidth={1.7} aria-hidden />
+            {quantidadeTotal > 0 ? (
+              <span
+                className="absolute -right-2 -top-1.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground ring-2 ring-background"
+                aria-live="polite"
+              >
+                {quantidadeTotal > 99 ? '99+' : quantidadeTotal}
+              </span>
+            ) : null}
+          </span>
+          <span className="text-xs font-medium leading-none">Sacola</span>
+        </button>
       </div>
-
-      {/* Safe area para dispositivos com barra inferior */}
-      <div
-        className="bg-background/95 backdrop-blur-xl"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-      />
     </nav>
   )
 }

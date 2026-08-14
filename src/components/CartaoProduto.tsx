@@ -83,12 +83,13 @@ export default function CartaoProduto({
                 alt={produto.nome}
                 fill
                 className={cn(
-                  'transition-[opacity,transform] duration-300 group-hover:scale-[1.02]',
+                  'transition-[opacity,transform] duration-300 motion-reduce:transition-none motion-reduce:group-hover:scale-100',
                   ehDestaque ? 'object-cover' : 'object-contain p-3',
                   imagemCarregada ? 'opacity-100' : 'opacity-0',
                 )}
                 onLoad={() => setImagemCarregada(true)}
                 onError={() => setErroImagem(true)}
+                draggable={false}
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               />
             </>

@@ -88,7 +88,7 @@ export default function Header({
             </SheetTrigger>
             <SheetContent
               side="bottom"
-              className="inset-x-3 bottom-3 top-1/4 flex h-auto w-auto flex-col gap-0 overflow-visible rounded-2xl border border-border/70 p-0 shadow-xl md:hidden [&>button]:left-1/2 [&>button]:right-auto [&>button]:top-0 [&>button]:z-10 [&>button]:flex [&>button]:size-14 [&>button]:-translate-x-1/2 [&>button]:-translate-y-1/2 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-full [&>button]:border [&>button]:border-border [&>button]:bg-background [&>button]:opacity-100 [&>button]:shadow-md"
+              className="group inset-x-3 bottom-3 top-1/4 flex h-auto w-auto flex-col gap-0 overflow-visible rounded-2xl border border-border/70 p-0 shadow-xl data-[state=closed]:duration-200 data-[state=open]:duration-300 motion-reduce:animate-none motion-reduce:transition-none md:hidden [&>button]:left-1/2 [&>button]:right-auto [&>button]:top-0 [&>button]:z-10 [&>button]:flex [&>button]:size-14 [&>button]:-translate-x-1/2 [&>button]:-translate-y-1/2 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-full [&>button]:border [&>button]:border-border [&>button]:bg-background [&>button]:opacity-100 [&>button]:shadow-md"
             >
               <SheetTitle className="sr-only">Menu Fortes Fios</SheetTitle>
               <SheetDescription className="sr-only">
@@ -96,7 +96,7 @@ export default function Header({
               </SheetDescription>
 
               <nav
-                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-6 pt-10 [-webkit-overflow-scrolling:touch]"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-6 pt-10 [-webkit-overflow-scrolling:touch] motion-safe:group-data-[state=open]:animate-in motion-safe:group-data-[state=open]:fade-in-0 motion-safe:group-data-[state=open]:slide-in-from-bottom-2 motion-safe:group-data-[state=open]:duration-300"
                 aria-label="Categorias do catálogo"
               >
                 <p className="pb-3 text-xs font-semibold uppercase tracking-wide text-primary">
@@ -154,7 +154,7 @@ export default function Header({
                 </div>
               </nav>
 
-              <div className="shrink-0 border-t border-border/70 px-6 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+              <div className="shrink-0 border-t border-border/70 px-6 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] motion-safe:group-data-[state=open]:animate-in motion-safe:group-data-[state=open]:fade-in-0 motion-safe:group-data-[state=open]:slide-in-from-bottom-1 motion-safe:group-data-[state=open]:delay-75 motion-safe:group-data-[state=open]:duration-300">
                 <div className="flex items-center gap-5" aria-label="Redes sociais">
                   <a
                     href="https://instagram.com/fortesfioss"

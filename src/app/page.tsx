@@ -593,7 +593,7 @@ export default function Home() {
         }
       />
 
-      <main className="pb-24 pt-16 md:pb-10">
+      <main className="pb-28 pt-16 md:pb-10">
         <HeroVitrine />
 
         <section
@@ -660,7 +660,7 @@ export default function Home() {
               </h3>
               <div
                 ref={trilhaCategoriasRef}
-                className="-mx-4 touch-pan-x overflow-x-auto overscroll-x-contain px-4 pb-1 scrollbar-hide sm:mx-0 sm:px-0"
+                className="-mx-4 touch-auto overflow-x-auto overscroll-x-contain px-4 pb-1 scrollbar-hide [-webkit-overflow-scrolling:touch] sm:mx-0 sm:px-0"
                 onScroll={agendarAtualizacaoIndicadores}
               >
                 <div className="inline-flex min-w-max gap-3 sm:flex sm:min-w-0 sm:flex-wrap sm:gap-4">
@@ -763,7 +763,7 @@ export default function Home() {
               ) : (
                 <div
                   ref={trilhaMaisVendidosRef}
-                  className="-mx-4 touch-pan-x overflow-x-auto overscroll-x-contain px-4 pb-2 scrollbar-hide sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4"
+                  className="-mx-4 touch-auto overflow-x-auto overscroll-x-contain px-4 pb-2 scrollbar-hide [-webkit-overflow-scrolling:touch] sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4"
                   onScroll={agendarAtualizacaoIndicadores}
                 >
                   <div className="flex min-w-max snap-x snap-mandatory gap-4 sm:contents">
@@ -850,7 +850,7 @@ export default function Home() {
               ) : (
                 <div
                   ref={trilhaOfertasRef}
-                  className="-mx-4 touch-pan-x overflow-x-auto overscroll-x-contain px-4 pb-2 scrollbar-hide sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4"
+                  className="-mx-4 touch-auto overflow-x-auto overscroll-x-contain px-4 pb-2 scrollbar-hide [-webkit-overflow-scrolling:touch] sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4"
                   onScroll={agendarAtualizacaoIndicadores}
                 >
                   <div className="flex min-w-max snap-x snap-mandatory gap-4 sm:contents">

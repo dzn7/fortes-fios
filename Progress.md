@@ -1,5 +1,38 @@
 # Progress
 
+## [2026-08-14] Gestos livres nos cards e transição do menu público
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** permitir rolagem vertical iniciada sobre imagens e cards do catálogo e tornar a abertura do menu hambúrguer mais refinada sem pesar a interface.
+**Arquivos alterados:** `src/app/page.tsx`, `src/components/CartaoProduto.tsx`, `src/components/Header.tsx`, `UI.md`, `Progress.md`; `tsconfig.tsbuildinfo` pode ser regenerado pelo typecheck.
+**O que foi feito:**
+- A investigação isolou `touch-pan-x` como causa do bloqueio: a regra proibia o navegador de assumir o eixo vertical quando o toque começava nos trilhos.
+- Categorias, Mais vendidos e Ofertas agora deixam o navegador arbitrar os eixos, preservando overflow horizontal, snap e inércia do Safari.
+- Imagens de produto não iniciam mais arraste nativo e a ampliação em hover deixa de animar quando o visitante prefere movimento reduzido.
+- O menu público mantém o `Sheet` existente, mas abre e fecha em tempos mais curtos; conteúdo e rodapé recebem entrada sutil em duas camadas.
+- A animação do menu é desativada por `prefers-reduced-motion`.
+**Decisões tomadas:** não adicionar handlers manuais de touch; o scroll é nativo e mais confiável entre Safari e Chromium. A animação ocorre por blocos, não item a item, para evitar aparência artificial e custo desnecessário.
+**Verificação:** pendente até a execução final de typecheck, build, lint, `ui-review`, `bug-hunter` e `verification-before-completion`.
+**Pendências / próximos passos:** nenhuma conhecida dentro dos gestos do catálogo e da abertura do menu.
+**Armadilhas descobertas:** `touch-pan-x` em um trilho nativo não significa apenas “permitir swipe horizontal”; ele também nega explicitamente o pan vertical iniciado naquela região.
+
+## [2026-08-14] Navegação móvel de ecommerce e tema claro inicial
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** substituir a barra inferior genérica do catálogo por uma navegação móvel mais clara e sofisticada, adotando modo claro como padrão inicial.
+**Arquivos alterados:** `src/components/Footer.tsx`, `src/providers/ThemeProvider.tsx`, `src/app/page.tsx`, `UI.md`, `Progress.md`; `tsconfig.tsbuildinfo` regenerado pelo typecheck.
+**O que foi feito:**
+- A barra inferior de largura total virou uma dock flutuante compacta, com superfície elevada, respiro lateral e safe-area incorporada.
+- Os destinos foram refinados para Início, Pedidos e Sacola, usando ícones coerentes com ecommerce e rótulos legíveis.
+- Somente Início aparece como destino atual; Sacola comunica estado pelo badge de quantidade, sem parecer selecionada permanentemente.
+- Alvos de toque passaram a 56 px, com foco visível, feedback de pressão e descrição acessível da quantidade na sacola.
+- O conteúdo público ganhou compensação inferior para que a dock não cubra produtos ou ações.
+- A primeira visita agora inicia em modo claro; uma escolha manual posterior continua persistida pelo provedor de tema.
+**Decisões tomadas:** manter três destinos evita sobrecarregar o fluxo curto da loja; “Sacola” comunica melhor o padrão de ecommerce do que “Carrinho”, e a preferência manual de tema continua soberana sobre o novo padrão inicial.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · `ui-review` ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓ · lint indisponível: o script legado `next lint` é incompatível com Next 16 e o repositório não possui arquivo de configuração para execução direta do ESLint.
+**Pendências / próximos passos:** nenhuma conhecida dentro da navegação inferior; a validação final está registrada no fechamento da task.
+**Armadilhas descobertas:** a safe-area não deve ser desenhada como uma segunda faixa sob a navegação, pois cria uma emenda visual; ela precisa fazer parte do espaçamento da própria dock.
+
 ## [2026-08-14] Barra de rolagem fluida nos trilhos públicos
 
 **Agente/Modelo:** Codex GPT-5
