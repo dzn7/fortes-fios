@@ -1,19 +1,34 @@
 # Progress
 
+## [2026-08-14] Barra de rolagem fluida nos trilhos públicos
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** corrigir o atraso e a sensação de travamento das barras de Categorias, Mais vendidos e Ofertas no mobile.
+**Arquivos alterados:** `src/app/page.tsx`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- A auditoria `ui-review` identificou que cada evento de scroll atualizava estado React e renderizava novamente a página inteira com os cards.
+- A animação de 150 ms aplicada à largura acumulava atraso durante o gesto e a inércia do Safari, fazendo a barra perseguir a posição real.
+- Os três indicadores agora são atualizados uma vez por frame com `requestAnimationFrame`, diretamente no elemento visual e sem rerender do catálogo.
+- O preenchimento usa `transform: scaleX()` com origem à esquerda, evitando recálculo de layout; os trilhos receberam `touch-pan-x` e contenção horizontal consistente.
+**Decisões tomadas:** a barra não possui easing durante a rolagem, pois feedback posicional precisa acompanhar o dedo imediatamente; redução de movimento remove também a dica de otimização persistente.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · `ui-review` ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓ · busca confirmou remoção dos estados, transições concorrentes, resíduos e cores diretas ✓ · `npm run lint` indisponível pelo script legado `next lint` incompatível com Next 16.
+**Pendências / próximos passos:** nenhuma dentro do comportamento das barras; o lint do repositório continua exigindo uma tarefa própria de infraestrutura.
+**Armadilhas descobertas:** animar `width` com transição em um handler de scroll combina reflow, rerender e atraso visual; indicadores contínuos devem usar transform compositorizado sem transição concorrente.
+
 ## [2026-08-14] Progresso contínuo dos trilhos e parcelas configuráveis
 
 **Agente/Modelo:** Codex GPT-5
 **Objetivo:** tornar inequívoco o avanço dos carrosséis públicos e permitir que cada produto informe sua própria quantidade de parcelas sem afetar o checkout.
-**Arquivos alterados:** `src/app/page.tsx`, `src/lib/condicoesComerciaisProduto.ts`, `src/lib/supabase.ts`, `src/components/admin/produtos/ModalFormularioProduto.tsx`, `src/app/admin/produtos/page.tsx`, `src/components/CartaoProduto.tsx`, `src/components/ModalIngredientes.tsx`, `PRD.md`, `UI.md`, `Progress.md`; schema remoto `public.produtos`.
+**Arquivos alterados:** `src/app/page.tsx`, `src/lib/condicoesComerciaisProduto.ts`, `src/lib/supabase.ts`, `src/components/admin/produtos/ModalFormularioProduto.tsx`, `src/app/admin/produtos/page.tsx`, `src/components/CartaoProduto.tsx`, `src/components/ModalIngredientes.tsx`, `src/contexts/CarrinhoContext.tsx`, `PRD.md`, `UI.md`, `Progress.md`; schema remoto `public.produtos`.
 **O que foi feito:**
 - Os indicadores móveis de categorias, Mais vendidos e Ofertas passaram de marcador deslizante para barra acumulada, iniciando pela fração visível e preenchendo até 100% conforme o visitante avança.
 - O formulário de criar/editar produto permite ativar o aviso de parcelamento e escolher entre 2 e 12 parcelas, com prévia imediata do valor por parcela.
 - Cards e detalhes públicos usam a quantidade salva no produto; registros antigos ativos foram preservados com 3 parcelas.
 - Foi adicionada via Management API a coluna opcional `produtos.parcelas_sem_juros`, com restrição entre 2 e 12, sem RLS novo e sem alteração em tabelas de pedido/pagamento.
-- O payload de checkout permanece restrito a id, nome e preço do produto; os campos de parcelamento não são enviados nem persistidos no pedido.
+- Os campos visuais são removidos já na normalização do item do carrinho, e o payload de checkout permanece restrito a id, nome e preço do produto; o parcelamento não é enviado nem persistido no pedido.
 **Decisões tomadas:** manter `parcelamento_ativo` para compatibilidade e armazenar a quantidade separadamente; quando um registro legado não tiver quantidade, a UI usa 3x. A barra representa a proporção já vista, não somente a posição do primeiro card.
-**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · schema remoto e dados legados validados ✓ · checkout inspecionado e isolado ✓.
-**Pendências / próximos passos:** finalizar build, lint disponível e revisão de resíduos nesta resposta.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · schema remoto e dados legados validados ✓ · checkout inspecionado e isolado ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓ · `npm run lint` indisponível pelo script legado `next lint` incompatível com Next 16.
+**Pendências / próximos passos:** nenhuma dentro do escopo funcional; o lint do repositório continua exigindo uma tarefa própria de infraestrutura.
 **Armadilhas descobertas:** o checkout monta um objeto mínimo do produto antes do envio; não substituir esse mapeamento por spread do objeto de catálogo, pois isso levaria metadados puramente visuais ao pagamento.
 
 ## [2026-08-14] Desconto e parcelamento informativo por produto

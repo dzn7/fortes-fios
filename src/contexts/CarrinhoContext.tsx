@@ -23,10 +23,15 @@ function normalizarUrlImagem(urlImagem: unknown): string {
 }
 
 function normalizarProduto(produto: Produto): Produto {
-  return {
+  const produtoDoCarrinho = {
     ...produto,
     imagem_url: normalizarUrlImagem(produto.imagem_url),
   }
+
+  delete produtoDoCarrinho.parcelamento_ativo
+  delete produtoDoCarrinho.parcelas_sem_juros
+
+  return produtoDoCarrinho
 }
 
 function normalizarItemCarrinho(item: ItemCarrinho): ItemCarrinho {

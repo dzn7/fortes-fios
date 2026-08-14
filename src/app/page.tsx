@@ -6,7 +6,6 @@ import {
   useCallback,
   useMemo,
   useRef,
-  type UIEvent,
 } from 'react'
 import {
   ArrowRight,
@@ -153,15 +152,16 @@ export default function Home() {
     [],
   )
   const [carregandoMaisVendidos, setCarregandoMaisVendidos] = useState(true)
-  const [progressoMaisVendidos, setProgressoMaisVendidos] = useState(0)
   const [configuracaoOfertas, setConfiguracaoOfertas] =
     useState<ConfiguracaoOfertas>(CONFIGURACAO_OFERTAS_PADRAO)
   const [carregandoOfertas, setCarregandoOfertas] = useState(true)
-  const [progressoOfertas, setProgressoOfertas] = useState(0)
-  const [progressoCategorias, setProgressoCategorias] = useState(0)
   const trilhaCategoriasRef = useRef<HTMLDivElement>(null)
   const trilhaMaisVendidosRef = useRef<HTMLDivElement>(null)
   const trilhaOfertasRef = useRef<HTMLDivElement>(null)
+  const barraCategoriasRef = useRef<HTMLDivElement>(null)
+  const barraMaisVendidosRef = useRef<HTMLSpanElement>(null)
+  const barraOfertasRef = useRef<HTMLSpanElement>(null)
+  const quadroProgressoRef = useRef<number | null>(null)
   const [modalNotificacao, setModalNotificacao] =
     useState<EstadoModalNotificacao>({
       aberto: false,
@@ -529,42 +529,43 @@ export default function Home() {
       .slice(0, configuracaoOfertas.quantidade)
   }, [configuracaoOfertas, produtos])
 
-  const atualizarProgressoMaisVendidos = (
-    event: UIEvent<HTMLDivElement>,
-  ) => {
-    setProgressoMaisVendidos(calcularProgressoTrilha(event.currentTarget))
-  }
+  const atualizarIndicadores = useCallback(() => {
+    const pares = [
+      [trilhaCategoriasRef.current, barraCategoriasRef.current],
+      [trilhaMaisVendidosRef.current, barraMaisVendidosRef.current],
+      [trilhaOfertasRef.current, barraOfertasRef.current],
+    ] as const
 
-  const atualizarProgressoOfertas = (event: UIEvent<HTMLDivElement>) => {
-    setProgressoOfertas(calcularProgressoTrilha(event.currentTarget))
-  }
+    pares.forEach(([trilha, barra]) => {
+      if (!trilha || !barra) return
+      barra.style.transform = `scaleX(${calcularProgressoTrilha(trilha)})`
+    })
+  }, [])
 
-  const atualizarProgressoCategorias = (event: UIEvent<HTMLDivElement>) => {
-    setProgressoCategorias(calcularProgressoTrilha(event.currentTarget))
-  }
+  const agendarAtualizacaoIndicadores = useCallback(() => {
+    if (quadroProgressoRef.current !== null) return
+    quadroProgressoRef.current = window.requestAnimationFrame(() => {
+      quadroProgressoRef.current = null
+      atualizarIndicadores()
+    })
+  }, [atualizarIndicadores])
 
   useEffect(() => {
-    const atualizarIndicadores = () => {
-      if (trilhaCategoriasRef.current) {
-        setProgressoCategorias(calcularProgressoTrilha(trilhaCategoriasRef.current))
-      }
-      if (trilhaMaisVendidosRef.current) {
-        setProgressoMaisVendidos(
-          calcularProgressoTrilha(trilhaMaisVendidosRef.current),
-        )
-      }
-      if (trilhaOfertasRef.current) {
-        setProgressoOfertas(calcularProgressoTrilha(trilhaOfertasRef.current))
-      }
-    }
-
-    const quadro = window.requestAnimationFrame(atualizarIndicadores)
-    window.addEventListener('resize', atualizarIndicadores)
+    agendarAtualizacaoIndicadores()
+    window.addEventListener('resize', agendarAtualizacaoIndicadores)
     return () => {
-      window.cancelAnimationFrame(quadro)
-      window.removeEventListener('resize', atualizarIndicadores)
+      if (quadroProgressoRef.current !== null) {
+        window.cancelAnimationFrame(quadroProgressoRef.current)
+        quadroProgressoRef.current = null
+      }
+      window.removeEventListener('resize', agendarAtualizacaoIndicadores)
     }
-  }, [categorias.length, produtosEmOferta.length, produtosMaisVendidos.length])
+  }, [
+    agendarAtualizacaoIndicadores,
+    categorias.length,
+    produtosEmOferta.length,
+    produtosMaisVendidos.length,
+  ])
 
   const totalResultados = produtosFiltrados.length
   const navegacaoInferiorVisivel = !(
@@ -659,8 +660,8 @@ export default function Home() {
               </h3>
               <div
                 ref={trilhaCategoriasRef}
-                className="-mx-4 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:px-0"
-                onScroll={atualizarProgressoCategorias}
+                className="-mx-4 touch-pan-x overflow-x-auto overscroll-x-contain px-4 pb-1 scrollbar-hide sm:mx-0 sm:px-0"
+                onScroll={agendarAtualizacaoIndicadores}
               >
                 <div className="inline-flex min-w-max gap-3 sm:flex sm:min-w-0 sm:flex-wrap sm:gap-4">
                   {categorias.map((categoria) => {
@@ -702,8 +703,8 @@ export default function Home() {
                   aria-hidden="true"
                 >
                   <div
-                    className="h-full origin-left bg-foreground transition-[width] duration-150"
-                    style={{ width: `${progressoCategorias * 100}%` }}
+                    ref={barraCategoriasRef}
+                    className="h-full origin-left scale-x-0 bg-foreground will-change-transform motion-reduce:will-change-auto"
                   />
                 </div>
               ) : null}
@@ -762,8 +763,8 @@ export default function Home() {
               ) : (
                 <div
                   ref={trilhaMaisVendidosRef}
-                  className="-mx-4 overflow-x-auto px-4 pb-2 scrollbar-hide sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4"
-                  onScroll={atualizarProgressoMaisVendidos}
+                  className="-mx-4 touch-pan-x overflow-x-auto overscroll-x-contain px-4 pb-2 scrollbar-hide sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4"
+                  onScroll={agendarAtualizacaoIndicadores}
                 >
                   <div className="flex min-w-max snap-x snap-mandatory gap-4 sm:contents">
                     {produtosMaisVendidos.map((produto) => (
@@ -787,8 +788,8 @@ export default function Home() {
                   aria-hidden="true"
                 >
                   <span
-                    className="absolute inset-y-0 left-0 bg-foreground transition-[width] duration-150"
-                    style={{ width: `${progressoMaisVendidos * 100}%` }}
+                    ref={barraMaisVendidosRef}
+                    className="absolute inset-y-0 left-0 w-full origin-left scale-x-0 bg-foreground will-change-transform motion-reduce:will-change-auto"
                   />
                 </div>
               ) : null}
@@ -849,8 +850,8 @@ export default function Home() {
               ) : (
                 <div
                   ref={trilhaOfertasRef}
-                  className="-mx-4 overflow-x-auto px-4 pb-2 scrollbar-hide sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4"
-                  onScroll={atualizarProgressoOfertas}
+                  className="-mx-4 touch-pan-x overflow-x-auto overscroll-x-contain px-4 pb-2 scrollbar-hide sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4"
+                  onScroll={agendarAtualizacaoIndicadores}
                 >
                   <div className="flex min-w-max snap-x snap-mandatory gap-4 sm:contents">
                     {produtosEmOferta.map((produto) => (
@@ -875,8 +876,8 @@ export default function Home() {
                   aria-hidden="true"
                 >
                   <span
-                    className="absolute inset-y-0 left-0 bg-foreground transition-[width] duration-150"
-                    style={{ width: `${progressoOfertas * 100}%` }}
+                    ref={barraOfertasRef}
+                    className="absolute inset-y-0 left-0 w-full origin-left scale-x-0 bg-foreground will-change-transform motion-reduce:will-change-auto"
                   />
                 </div>
               ) : null}
