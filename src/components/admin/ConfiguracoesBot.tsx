@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { calcularCustoEstimadoIa } from '@/lib/ai-usage.mjs'
 import { supabase } from '@/lib/supabase'
+import { TEMPO_ENTREGA_PADRAO, tempoEstimadoValido } from '@/lib/configuracoes-pedidos'
 
 type ConfiguracoesState = {
   horario_abertura: string
@@ -89,7 +90,7 @@ const VALORES_PADRAO: ConfiguracoesState = {
   bot_ativo: 'true',
   ia_conversa_ativa: 'true',
   bot_timezone: 'America/Fortaleza',
-  tempo_entrega_estimado: '20-30',
+  tempo_entrega_estimado: TEMPO_ENTREGA_PADRAO,
   pix_chave: '',
   pix_tipo_chave: 'CNPJ',
   pix_nome: '',
@@ -254,6 +255,13 @@ export default function ConfiguracoesBot({ automacao, operacao, onAtualizarStatu
     )
 
     if (chavesAlteradas.length === 0) return
+    if (
+      chavesAlteradas.includes('tempo_entrega_estimado') &&
+      !tempoEstimadoValido(config.tempo_entrega_estimado)
+    ) {
+      setErro('Informe o prazo de entrega como 20 ou como intervalo, por exemplo 20-30.')
+      return
+    }
 
     setSalvando(true)
     setErro(null)
@@ -476,7 +484,7 @@ export default function ConfiguracoesBot({ automacao, operacao, onAtualizarStatu
             </div>
 
             <div className="rounded-xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
-              Prévia: tempo estimado de entrega em {config.tempo_entrega_estimado || '20-30'} minutos.
+              Prévia: tempo estimado de entrega em {config.tempo_entrega_estimado || TEMPO_ENTREGA_PADRAO} minutos.
             </div>
           </CardContent>
         </Card>

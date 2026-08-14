@@ -19,6 +19,13 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerNested, DrawerTitle } f
 import { Separator } from '@/components/ui/separator'
 import { useAjusteTecladoVirtual } from '@/hooks/useAjusteTecladoVirtual'
 import {
+  CHAVE_TEMPO_ENTREGA,
+  CHAVE_TEMPO_RETIRADA,
+  TEMPO_ENTREGA_PADRAO,
+  TEMPO_RETIRADA_PADRAO,
+  normalizarTempoEstimado,
+} from '@/lib/configuracoes-pedidos'
+import {
   calcularProximaDataEntrega,
   descreverAgendaEntrega,
   formatarDataPrevistaEntrega,
@@ -247,7 +254,8 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const [copiandoCodigoPix, setCopiandoCodigoPix] = useState(false)
   const [tempoRestanteSegundos, setTempoRestanteSegundos] = useState<number | null>(null)
   const expiracaoPixJaProcessada = useRef(false)
-  const [tempoEntregaEstimado, setTempoEntregaEstimado] = useState('20-30')
+  const [tempoEntregaEstimado, setTempoEntregaEstimado] = useState(TEMPO_ENTREGA_PADRAO)
+  const [tempoRetiradaEstimado, setTempoRetiradaEstimado] = useState(TEMPO_RETIRADA_PADRAO)
   const [entregasOnlineAtivas, setEntregasOnlineAtivas] = useState(true)
 
   // O Drawer do checkout tem formulário longo; medimos o teclado por conta própria
@@ -405,7 +413,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
     }
   }
 
-  // Restaurar nome/telefone do localStorage e buscar tempo de entrega
+  // Restaurar dados do cliente e carregar os prazos exibidos no checkout.
   useEffect(() => {
     try {
       const salvo = localStorage.getItem(CHAVE_DADOS_CLIENTE)
@@ -416,14 +424,43 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       }
     } catch {}
 
+    let ativo = true
+    const aplicarTempo = (chave: string, valor: unknown) => {
+      if (!ativo) return
+      if (chave === CHAVE_TEMPO_ENTREGA) {
+        setTempoEntregaEstimado(normalizarTempoEstimado(valor, TEMPO_ENTREGA_PADRAO))
+      }
+      if (chave === CHAVE_TEMPO_RETIRADA) {
+        setTempoRetiradaEstimado(normalizarTempoEstimado(valor, TEMPO_RETIRADA_PADRAO))
+      }
+    }
+
     supabase
       .from('configuracoes_loja')
-      .select('valor')
-      .eq('chave', 'tempo_entrega_estimado')
-      .single()
+      .select('chave, valor')
+      .in('chave', [CHAVE_TEMPO_ENTREGA, CHAVE_TEMPO_RETIRADA])
       .then(({ data }) => {
-        if (data?.valor) setTempoEntregaEstimado(data.valor)
+        for (const configuracao of data || []) {
+          aplicarTempo(configuracao.chave, configuracao.valor)
+        }
       })
+
+    const canal = supabase
+      .channel('config-tempos-pedidos-cliente')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'configuracoes_loja' },
+        (payload) => {
+          const configuracao = payload.new as { chave?: string; valor?: string } | null
+          if (configuracao?.chave) aplicarTempo(configuracao.chave, configuracao.valor)
+        },
+      )
+      .subscribe()
+
+    return () => {
+      ativo = false
+      void supabase.removeChannel(canal)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -479,30 +516,6 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       supabase.removeChannel(canal)
     }
   }, [])
-
-  useEffect(() => {
-    // O Vaul controla o scroll durante o checkout. O bloqueio manual só é
-    // necessário na tela de sucesso, que substitui o Drawer por um overlay legado.
-    if (!aberto || !pedidoEnviado || modoSimulacao) return
-
-    const scrollY = window.scrollY
-    document.body.style.overflow = 'hidden'
-    document.body.style.position = 'fixed'
-    document.body.style.top = `-${scrollY}px`
-    document.body.style.left = '0'
-    document.body.style.right = '0'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = ''
-      document.body.style.position = ''
-      document.body.style.top = ''
-      document.body.style.left = ''
-      document.body.style.right = ''
-      document.documentElement.style.overflow = ''
-      window.scrollTo(0, scrollY)
-    }
-  }, [aberto, modoSimulacao, pedidoEnviado])
 
   useEffect(() => {
     // Ao encolher o painel para caber acima do teclado, o campo em foco pode sair
@@ -1586,15 +1599,15 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   // Tela de Pedido Enviado com Sucesso
   if (pedidoEnviado) {
     return (
-      <div
-        className={modoSimulacao ? "absolute inset-0 z-[60] flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center" : "modal-overlay items-end p-0 sm:items-center sm:p-4"}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onFechar()
+      <Drawer
+        open={aberto}
+        onOpenChange={(open) => {
+          if (!open) onFechar()
         }}
       >
-          <div className={`modal-content max-w-md ${modoSimulacao ? 'w-full h-[90dvh] max-h-[90dvh] rounded-t-2xl sm:rounded-2xl mb-0' : 'max-h-[92dvh]'}`}>
-            <div className="flex h-full flex-col">
-              <div className="flex-1 overflow-y-auto px-6 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
+        <DrawerContent className="mx-auto h-auto max-h-[92dvh] w-full max-w-md overflow-hidden p-0">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
             {/* Ícone de sucesso animado */}
             <div className="flex justify-center mb-6">
               <div className="w-24 h-24 sm:w-28 sm:h-28 bg-primary/10 rounded-full flex items-center justify-center shadow-lg shadow-primary/10">
@@ -1605,14 +1618,14 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
             </div>
 
             {/* Título */}
-            <h2 className="text-2xl sm:text-3xl font-bold text-center text-foreground mb-2">
+            <DrawerTitle className="mb-2 text-center text-2xl font-bold text-foreground sm:text-3xl">
               {pedidoEnviado.pagamentoOnlineAprovado ? 'Pagamento aprovado' : 'Pedido enviado'}
-            </h2>
-            <p className="text-center text-muted-foreground text-sm mb-4">
+            </DrawerTitle>
+            <DrawerDescription className="mb-4 text-center text-sm text-muted-foreground">
               {pedidoEnviado.pagamentoOnlineAprovado
                 ? 'PIX Online confirmado em tempo real'
                 : 'Recebemos seu pedido com sucesso'}
-            </p>
+            </DrawerDescription>
 
             {pedidoEnviado.pagamentoOnlineAprovado && (
               <div className="mb-5 rounded-2xl border border-primary/30 bg-primary/10 p-4">
@@ -1684,15 +1697,15 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
             {/* Tempo estimado e Total */}
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-muted rounded-xl p-3 text-center">
-                <p className="text-xs text-muted-foreground mb-1">
+                <p className="mb-1 text-xs text-muted-foreground">
                   {pedidoEnviado.tipoEntrega === 'entrega' && pedidoEnviado.dataPrevistaEntrega
                     ? 'Previsão de entrega'
-                    : '⏱️ Tempo estimado'}
+                    : 'Tempo estimado'}
                 </p>
                 <p className="text-sm font-bold leading-snug text-foreground sm:text-base">
                   {pedidoEnviado.tipoEntrega === 'entrega' && pedidoEnviado.dataPrevistaEntrega
                     ? formatarDataPrevistaEntrega(pedidoEnviado.dataPrevistaEntrega)
-                    : `${tempoEntregaEstimado} min`}
+                    : `${pedidoEnviado.tipoEntrega === 'retirada' ? tempoRetiradaEstimado : tempoEntregaEstimado} min`}
                 </p>
               </div>
               <div className="bg-primary/10 rounded-xl p-3 text-center">
@@ -1702,24 +1715,25 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                 </p>
               </div>
             </div>
-              </div>
-            <div className="flex-shrink-0 border-t border-border bg-card/95 px-6 pb-6 pt-4 [padding-bottom:max(env(safe-area-inset-bottom),1.5rem)] sm:px-8">
+            </div>
+            <div className="shrink-0 border-t border-border bg-card/95 px-6 pt-4 [padding-bottom:max(env(safe-area-inset-bottom),1.5rem)] sm:px-8">
             {/* Botão de fechar */}
-            <button
+            <Button
+              type="button"
               onClick={onFechar}
-              className="w-full py-4 px-6 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-all duration-300 text-lg shadow-lg shadow-primary/25"
+              className="h-12 w-full text-base font-semibold"
             >
               Entendi
-            </button>
+            </Button>
 
             {/* Mensagem de agradecimento */}
             <p className="mt-3 text-center text-sm leading-relaxed text-muted-foreground">
               Obrigado por escolher a <span className="font-semibold text-primary">Fortes Fios</span>.
             </p>
-              </div>
             </div>
           </div>
-      </div>
+        </DrawerContent>
+      </Drawer>
     )
   }
 
@@ -1987,6 +2001,9 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                     >
                       <ShoppingBag className="w-5 h-5" />
                       Retirada
+                      <span className="text-[11px] text-muted-foreground">
+                        pronta em {tempoRetiradaEstimado} min
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -2006,6 +2023,9 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                     >
                       <MapPin className="w-5 h-5" />
                       Entrega
+                      <span className="text-[11px] text-muted-foreground">
+                        estimada em {tempoEntregaEstimado} min
+                      </span>
                       {!entregasOnlineAtivas && (
                         <span className="text-[10px] font-medium text-red-600 dark:text-red-400">indisponível</span>
                       )}
@@ -2028,22 +2048,27 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                         type="button"
                         onClick={() => setMostrarSeletorBairro(true)}
                         variant="outline"
-                        className="h-auto w-full justify-between px-4 py-3 text-left"
+                        aria-haspopup="dialog"
+                        aria-expanded={mostrarSeletorBairro}
+                        className={cn(
+                          'h-auto min-h-14 w-full justify-between border-primary/40 px-4 py-3 text-left hover:border-primary hover:bg-primary/10',
+                          bairroSelecionado ? 'bg-card' : 'bg-primary/5 text-primary',
+                        )}
                       >
-                        <span className={bairroSelecionado ? 'text-gray-900 dark:text-white' : 'text-gray-500'}>
+                        <span className={cn('flex min-w-0 items-center gap-2', bairroSelecionado ? 'text-foreground' : 'text-primary')}>
+                          <MapPin className="size-5 shrink-0" aria-hidden />
                           {bairroSelecionado ? (
-                            <span className="flex items-center gap-2">
-                              <MapPin className="w-4 h-4 text-bordo-600" />
+                            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                               {bairroSelecionado.nome}
-                              <span className={`font-medium text-sm ${bairroSelecionado.entrega_gratis ? 'text-emerald-600 dark:text-emerald-400' : 'text-green-600 dark:text-green-400'}`}>
+                              <span className="text-sm font-medium text-primary">
                                 {bairroSelecionado.entrega_gratis ? '(Grátis!)' : `(R$ ${bairroSelecionado.taxa_entrega.toFixed(2)})`}
                               </span>
                             </span>
                           ) : (
-                            'Selecione sua cidade'
+                            <span className="font-semibold">Selecionar cidade de entrega</span>
                           )}
                         </span>
-                        <ChevronDown className="w-5 h-5 text-gray-400" />
+                        <ChevronDown className="size-5 shrink-0 text-primary" />
                       </Button>
                       {!carregandoBairros && bairros.length === 0 && (
                         <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-300">
@@ -2479,19 +2504,28 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
               if (!open) setMostrarSeletorBairro(false)
             }}
           >
-            <DrawerContent className="mx-auto max-h-[85dvh] w-full max-w-md overflow-hidden p-0">
-              <div className="flex shrink-0 items-center justify-between border-b border-border p-4">
-                <DrawerTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
-                  <MapPin className="h-5 w-5 text-bordo-600" />
-                  Selecione sua cidade
-                </DrawerTitle>
+            <DrawerContent className="mx-auto max-h-[85dvh] w-full max-w-md overflow-hidden border-primary/30 bg-background p-0">
+              <div className="flex shrink-0 items-center justify-between bg-primary px-4 pb-4 pt-3 text-primary-foreground">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-foreground/15">
+                    <MapPin className="size-5" aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <DrawerTitle className="text-lg font-semibold text-primary-foreground">
+                      Onde será a entrega?
+                    </DrawerTitle>
+                    <p className="mt-1 text-xs text-primary-foreground/80">
+                      Taxa, valor mínimo e próximo dia variam por cidade.
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() => setMostrarSeletorBairro(false)}
-                  className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-lg text-primary-foreground transition-colors hover:bg-primary-foreground/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground"
                   aria-label="Fechar seleção de cidade"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="size-5" />
                 </button>
               </div>
               <DrawerDescription className="sr-only">
@@ -2529,33 +2563,33 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                   </div>
                 </div>
               ) : (
-                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                <div className="space-y-2 p-3">
                   {bairros.map((b) => (
                     <button
+                      type="button"
                       key={b.id}
                       onClick={() => {
                         setBairroSelecionado(b)
                         setMostrarSeletorBairro(false)
                       }}
-                      className={`w-full p-4 flex items-center justify-between text-left transition-colors
-                        ${bairroSelecionado?.id === b.id
-                          ? 'bg-bordo-50 dark:bg-bordo-900/20'
-                          : 'hover:bg-gray-50 dark:hover:bg-gray-800'
-                        }`}
+                      className={cn(
+                        'flex min-h-20 w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        bairroSelecionado?.id === b.id
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border/70 bg-card hover:border-primary/40 hover:bg-accent/50',
+                      )}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center
-                          ${bairroSelecionado?.id === b.id
-                            ? 'bg-bordo-600 text-white'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                          }`}
+                        <div className={cn(
+                          'flex size-10 shrink-0 items-center justify-center rounded-lg',
+                          bairroSelecionado?.id === b.id
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground',
+                        )}
                         >
-                          <MapPin className="w-5 h-5" />
+                          <MapPin className="size-5" />
                         </div>
-                        <span className={`min-w-0 font-medium ${bairroSelecionado?.id === b.id
-                            ? 'text-bordo-700 dark:text-bordo-400'
-                            : 'text-gray-900 dark:text-white'
-                          }`}>
+                        <span className="min-w-0 font-medium text-foreground">
                           <span className="block">{b.nome}</span>
                           <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
                             {descreverAgendaEntrega(b.dias_entrega)}
@@ -2563,7 +2597,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                         </span>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        <span className={`rounded-full px-3 py-1 text-sm font-medium ${
                           b.entrega_gratis
                             ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
                             : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
@@ -2572,7 +2606,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                           <span className="block text-[11px] opacity-80">mín. R$ {b.valor_minimo_pedido.toFixed(2)}</span>
                         </span>
                         {bairroSelecionado?.id === b.id && (
-                          <Check className="w-5 h-5 text-bordo-600" />
+                          <Check className="size-5 text-primary" aria-label="Cidade selecionada" />
                         )}
                       </div>
                     </button>

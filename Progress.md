@@ -1,5 +1,36 @@
 # Progress
 
+## [2026-08-14] Safari sem zoom, confirmação em drawer e identidade sem flash
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** estabilizar o checkout público no Safari/iOS, dar feedback claro à seleção de cidade e garantir que a identidade oliva esteja presente desde a primeira pintura.
+**Arquivos alterados:** `src/app/globals.css`, `src/app/contato/page.tsx`, `src/components/ModalCarrinho.tsx`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- Todos os inputs, textareas e selects da loja pública passaram a ter fonte computada mínima de 16 px, eliminando o gatilho de zoom automático do Safari/iOS sem alterar o admin.
+- Os tokens da Fortes Fios agora também são ativados pelo marcador SSR `.fortes-fios-site`, antes de efeitos do cliente, removendo a primeira pintura azul.
+- A confirmação de pedido deixou o overlay manual e passou a usar o Drawer Vaul compartilhado, com rolagem interna e ação protegida pela safe area.
+- O gatilho e o drawer aninhado de cidades receberam hierarquia oliva, mudança clara de contexto, foco visível e seleção identificada por cor, texto e ícone.
+**Decisões tomadas:** a proteção contra zoom foi aplicada por CSS escopado ao site público porque existem campos em vários componentes e portals; alterar cada campo separadamente deixaria lacunas. O marcador SSR já existente foi reutilizado em vez de inserir script bloqueante no cabeçalho.
+**Verificação:** registrada ao final da task.
+**Pendências / próximos passos:** nenhuma conhecida dentro do comportamento solicitado.
+**Armadilhas descobertas:** aplicar tokens da marca apenas em `useEffect` sempre permite uma pintura com o tema global do admin; drawers em portal continuam cobertos porque o seletor usa o marcador público como descendente do `body`.
+
+## [2026-08-14] Configurações de prazos e mínimos em Pedidos
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** centralizar em Pedidos os prazos informados ao cliente e oferecer edição rápida da compra mínima individual de cada cidade.
+**Arquivos alterados:** `src/lib/configuracoes-pedidos.ts`, `src/components/admin/pedidos/ConfiguracoesPedidosDialog.tsx`, `src/app/admin/pedidos/page.tsx`, `src/app/admin/bairros/page.tsx`, `src/components/ModalCarrinho.tsx`, `src/components/admin/ConfiguracoesBot.tsx`, `PRD.md`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- A página Pedidos ganhou uma engrenagem com painel responsivo de configurações.
+- Retirada e entrega possuem prazos independentes, aceitando número ou intervalo em minutos.
+- A compra mínima continua individual por cidade e usa os mesmos registros do checkout e de Cidades de entrega.
+- Cidades de entrega ganhou o atalho “Prazos e mínimos”, que abre diretamente a configuração de Pedidos.
+- O checkout mostra os prazos nos cards de escolha e usa o prazo correto na confirmação de retirada.
+**Decisões tomadas:** não foi criado mínimo global; a tabela legada `bairros` permanece como fonte única por cidade. A chave existente `tempo_entrega_estimado` foi preservada e `tempo_retirada_estimado` foi adicionada como configuração chave/valor.
+**Verificação:** validação de prazos ✓ · `npx tsc --noEmit` ✓ · build de produção ✓ (48 páginas) · `git diff --check` ✓ · revisão bug-hunter e verification-before-completion ✓ · `npm run lint` indisponível pelo script legado `next lint` incompatível com Next 16.
+**Pendências / próximos passos:** nenhuma conhecida dentro das configurações solicitadas.
+**Armadilhas descobertas:** `inputMode="numeric"` não oferece hífen de forma consistente no Safari móvel, portanto campos que aceitam intervalo usam teclado textual.
+
 ## [2026-08-14] Agenda semanal e previsão de entrega por cidade
 
 **Agente/Modelo:** Codex GPT-5

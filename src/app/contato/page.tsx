@@ -12,7 +12,7 @@ export default function ContatoPage() {
   }, [])
 
   return (
-    <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 sm:py-12">
+    <main className="fortes-fios-site min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 sm:py-12">
       <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-xl flex-col justify-center rounded-3xl border border-border bg-card p-6 text-center shadow-sm sm:p-10">
         <div className="mx-auto mb-6 relative h-24 w-24 overflow-hidden rounded-full border border-border bg-background">
           <Image src="/logo.webp" alt="Fortes Fios" fill sizes="96px" className="object-cover" priority />

@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CalendarDays, Check, Gift, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { CalendarDays, Check, Gift, MapPin, Pencil, Plus, Settings, Trash2, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import AdminLayout from '@/components/admin/AdminLayout'
@@ -39,6 +40,7 @@ type Bairro = {
 }
 
 export default function BairrosPage() {
+  const router = useRouter()
   const [bairros, setBairros] = useState<Bairro[]>([])
   const [carregando, setCarregando] = useState(true)
   const [editandoId, setEditandoId] = useState<string | null>(null)
@@ -203,15 +205,27 @@ export default function BairrosPage() {
               {bairros.length === 1 ? '' : 's'}
             </p>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            className="h-9 shadow-none"
-            onClick={() => setMostrarFormNovo(true)}
-          >
-            <Plus className="mr-2 size-4" />
-            Nova cidade
-          </Button>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-9 flex-1 shadow-none sm:flex-none"
+              onClick={() => router.push('/admin/pedidos?configuracoes=entrega')}
+            >
+              <Settings className="mr-2 size-4" />
+              Prazos e mínimos
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 flex-1 shadow-none sm:flex-none"
+              onClick={() => setMostrarFormNovo(true)}
+            >
+              <Plus className="mr-2 size-4" />
+              Nova cidade
+            </Button>
+          </div>
         </div>
 
         {mostrarFormNovo && (

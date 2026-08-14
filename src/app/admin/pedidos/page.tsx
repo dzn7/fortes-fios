@@ -9,6 +9,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Settings,
   Square,
   Trash2,
   X,
@@ -42,6 +43,7 @@ import {
 } from '@/features/entregas/lib/intervalo-entregas'
 import type { PeriodoEntrega } from '@/features/entregas/types'
 import PaginacaoPedidos from '@/features/pedidos/components/PaginacaoPedidos'
+import ConfiguracoesPedidosDialog from '@/components/admin/pedidos/ConfiguracoesPedidosDialog'
 import {
   FiltroPedidosAdmin,
   LABEL_PERIODO_PEDIDOS,
@@ -107,6 +109,7 @@ function PedidosContent() {
   const [modoSelecao, setModoSelecao] = useState(false)
   const [idsSelecionados, setIdsSelecionados] = useState<Set<string>>(new Set())
   const [excluindoEmMassa, setExcluindoEmMassa] = useState(false)
+  const [configuracoesAbertas, setConfiguracoesAbertas] = useState(false)
 
   const [modalNotificacao, setModalNotificacao] = useState<{
     aberto: boolean
@@ -123,6 +126,12 @@ function PedidosContent() {
   })
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('configuracoes') !== 'entrega') return
+    setConfiguracoesAbertas(true)
+    router.replace('/admin/pedidos', { scroll: false })
+  }, [router, searchParams])
 
   useEffect(() => {
     const pedidoIdParam = searchParams.get('pedido')
@@ -847,6 +856,16 @@ function PedidosContent() {
               </p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setConfiguracoesAbertas(true)}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                aria-label="Configurações de pedidos"
+                title="Configurações de pedidos"
+              >
+                <Settings strokeWidth={1.6} className="h-4 w-4" />
+                <span className="hidden lg:inline">Configurações</span>
+              </button>
               {!modoSelecao ? (
                 <button
                   onClick={() => setModoSelecao(true)}
@@ -882,6 +901,11 @@ function PedidosContent() {
               </button>
             </div>
           </div>
+
+          <ConfiguracoesPedidosDialog
+            open={configuracoesAbertas}
+            onOpenChange={setConfiguracoesAbertas}
+          />
 
           <div className="space-y-3 rounded-xl border border-border/70 bg-card p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

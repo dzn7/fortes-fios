@@ -144,8 +144,10 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Identidade exclusiva do catálogo Fortes Fios. Rotas administrativas mantêm os tokens azuis globais. */
-body.fortes-fios-public {
+/* Identidade exclusiva do catálogo Fortes Fios. A marcação renderizada pelo
+   servidor evita a primeira pintura azul antes de o efeito do cliente rodar. */
+body.fortes-fios-public,
+body:has(.fortes-fios-site) {
   --laranja: 70 39% 30%;
   --dourado: 70 39% 30%;
   --bordo: 70 39% 30%;
@@ -174,7 +176,8 @@ body.fortes-fios-public {
   font-weight: 200;
 }
 
-html.dark body.fortes-fios-public {
+html.dark body.fortes-fios-public,
+html.dark body:has(.fortes-fios-site) {
   --background: 69 25% 20%;
   --foreground: 0 0% 100%;
   --card: 69 24% 23%;
@@ -195,10 +198,18 @@ html.dark body.fortes-fios-public {
   --ring: 70 39% 48%;
 }
 
-body.fortes-fios-public :is(h1, h2, h3, h4, h5, h6, .fonte-titulo, .fortes-display) {
+body.fortes-fios-public :is(h1, h2, h3, h4, h5, h6, .fonte-titulo, .fortes-display),
+body:has(.fortes-fios-site) :is(h1, h2, h3, h4, h5, h6, .fonte-titulo, .fortes-display) {
   font-family: var(--font-fortes-display);
   font-weight: 300;
   letter-spacing: -0.035em;
+}
+
+/* O Safari/iOS amplia automaticamente controles com fonte menor que 16 px.
+   A regra fica restrita à loja pública e alcança também drawers em portals. */
+body.fortes-fios-public :is(input, textarea, select),
+body:has(.fortes-fios-site) :is(input, textarea, select) {
+  font-size: 1rem;
 }
 
 /* Mantém as prévias do admin fiéis à tipografia publicada no catálogo. */
