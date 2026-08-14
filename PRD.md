@@ -32,7 +32,7 @@ Oferecer um catálogo digital de produtos capilares, com navegação por categor
 - Painel administrativo com dashboard, Kanban de produção, PDV, histórico/listagem de pedidos e edição detalhada.
 - Gestão de salão: mesas, comandas, locais externos, ocupação, tempo limite e liberação.
 - Gestão de entregas, entregadores e repasses.
-- Catálogo: produtos, bebidas, combos, adicionais, categorias, ordenação, imagens e disponibilidade.
+- Catálogo: produtos, bebidas, combos, adicionais, categorias, ordenação, imagens, disponibilidade e condições comerciais por produto (desconto e parcelamento meramente informativo configurável entre 2x e 12x).
 - Caixa, movimentações, categorias financeiras, saldos, salários, crediário, relatórios e fechamento anual.
 - Gestão de usuários de sistema (`admin`, `garcom`, `entregador`) e cadastro derivado de clientes.
 - Controle global de visibilidade dos menus do admin e garçom pelo superusuário em `/dzn`.
@@ -123,6 +123,8 @@ Há ainda páginas de detalhes/edição de pedido, relatórios e saldos de caixa
 1. `src/app/page.tsx` carrega produtos e configurações de ordenação/merchandising; as categorias públicas ativas vêm do route handler `/api/vitrine/categorias`, que expõe somente `id`, `nome` e `ordem` de `categorias_cardapio`. “Todos” é filtro universal da interface, nunca categoria atribuível a produto.
 2. A seção Mais vendidos usa a ordem manual salva pelo administrador ou um ranking server-side por quantidade vendida; entram somente itens com `produto_id` em pedidos válidos de entrega/retirada, sem cancelados ou aguardando pagamento.
 3. Ofertas usa a curadoria manual `vitrine_produtos_ofertas`, aparece imediatamente depois de Mais vendidos somente quando está ativa e possui produtos disponíveis; o mesmo estado controla sua entrada no menu móvel.
+4. Desconto pertence ao produto: `preco_original` guarda o valor de referência, `desconto` o percentual e `preco` o valor final efetivamente usado no carrinho. A Vitrine oferece um atalho para atualizar esses mesmos campos, sem criar uma segunda fonte de preço.
+5. `produtos.parcelamento_ativo` controla a visibilidade do parcelamento e `parcelas_sem_juros` define a quantidade entre 2 e 12; o valor é derivado de `preco / parcelas_sem_juros` e nunca é enviado ao checkout, pedido ou integração de pagamento. Registros legados sem quantidade usam 3x.
 4. Depois da grade do catálogo, a seção de resultados do studio lê a configuração JSON `vitrine_resultados_studio`, exibe somente fotos publicadas e permanece ausente até o administrador ativar ao menos um resultado.
 5. As alterações do catálogo são acompanhadas por canais Realtime.
 6. `CarrinhoContext` mantém o carrinho no `localStorage`.
