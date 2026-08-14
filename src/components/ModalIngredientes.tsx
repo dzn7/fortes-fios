@@ -6,6 +6,10 @@ import { Produto } from '@/lib/supabase'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  calcularValorParcelaProduto,
+  normalizarQuantidadeParcelas,
+} from '@/lib/condicoesComerciaisProduto'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -37,6 +41,9 @@ export default function ModalIngredientes({
   const temImagem =
     typeof produto.imagem_url === 'string' &&
     produto.imagem_url.trim().length > 0
+  const quantidadeParcelas = normalizarQuantidadeParcelas(
+    produto.parcelas_sem_juros,
+  )
 
   const adicionarAoCarrinho = () => {
     onFechar()
@@ -106,6 +113,26 @@ export default function ModalIngredientes({
                   </span>
                 ) : null}
               </div>
+              {produto.parcelamento_ativo ? (
+                <div className="mt-2">
+                  <p className="text-sm text-muted-foreground">
+                    Ou {quantidadeParcelas}x de{' '}
+                    <strong className="font-medium tabular-nums text-foreground">
+                      R${' '}
+                      {calcularValorParcelaProduto(
+                        produto.preco,
+                        quantidadeParcelas,
+                      )
+                        .toFixed(2)
+                        .replace('.', ',')}
+                    </strong>{' '}
+                    sem juros
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Condição informativa; a forma de pagamento é escolhida ao finalizar.
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <DialogFooter className="mt-7 sm:mt-auto sm:pt-8">

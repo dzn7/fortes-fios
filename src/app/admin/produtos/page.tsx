@@ -26,6 +26,10 @@ import {
 } from '@/components/admin/produtos/ModalFormularioProduto'
 import { supabase } from '@/lib/supabase'
 import type { CategoriaCardapio, TipoCategoriaCardapio } from '@/lib/supabase'
+import {
+  calcularPrecoComDesconto,
+  normalizarPercentualDesconto,
+} from '@/lib/condicoesComerciaisProduto'
 import Image from 'next/image'
 import ModalRecorteImagem from '@/components/admin/ModalRecorteImagem'
 import { toast } from 'sonner'
@@ -85,6 +89,8 @@ type Produto = {
   custo_unitario?: number | null
   preco_original?: number | null
   desconto?: number | null
+  parcelamento_ativo?: boolean | null
+  parcelas_sem_juros?: number | null
   categoria: string
   imagem_url?: string
   disponivel: boolean
@@ -1170,6 +1176,19 @@ export default function ProdutosPage() {
       return
     }
 
+    const precoNumero = Number(dados.preco)
+    if (!Number.isFinite(precoNumero) || precoNumero < 0) {
+      setModalNotificacao({
+        aberto: true,
+        tipo: 'aviso',
+        titulo: 'Preço inválido',
+        mensagem: 'Informe um preço válido.'
+      })
+      return
+    }
+    const descontoNumero = normalizarPercentualDesconto(dados.desconto)
+    const precoFinal = calcularPrecoComDesconto(precoNumero, descontoNumero)
+
     setSalvandoNovoProduto(true)
     try {
       const categoriaNormalizadaNovoProduto = normalizarNomeCategoria(dados.categoria)
@@ -1194,7 +1213,7 @@ export default function ProdutosPage() {
             .insert({
               nome: dados.nome,
               descricao: dados.descricao || null,
-              preco: parseFloat(dados.preco),
+              preco: precoNumero,
               categoria: categoriaNormalizadaNovoProduto || categoriaBebidasAtual,
               ordem: proximaOrdem,
               disponivel: true,
@@ -1206,7 +1225,13 @@ export default function ProdutosPage() {
             .insert({
               nome: dados.nome,
               descricao: dados.descricao || null,
-              preco: parseFloat(dados.preco),
+              preco: precoFinal,
+              preco_original: descontoNumero > 0 ? precoNumero : null,
+              desconto: descontoNumero > 0 ? descontoNumero : null,
+              parcelamento_ativo: dados.parcelamentoAtivo,
+              parcelas_sem_juros: dados.parcelamentoAtivo
+                ? dados.quantidadeParcelas
+                : null,
               custo_unitario: custoUnitario,
               categoria: categoriaNormalizadaNovoProduto,
               ordem: proximaOrdem,
@@ -1294,10 +1319,8 @@ export default function ProdutosPage() {
       return
     }
 
-    const descontoNumero = Math.min(100, Math.max(0, parseFloat(dados.desconto) || 0))
-    const precoFinal = descontoNumero > 0
-      ? precoNumero * (1 - descontoNumero / 100)
-      : precoNumero
+    const descontoNumero = normalizarPercentualDesconto(dados.desconto)
+    const precoFinal = calcularPrecoComDesconto(precoNumero, descontoNumero)
     const categoriaNormalizada = normalizarNomeCategoria(dados.categoria) || produto.categoria
     const custoUnitario = dados.custoUnitario.trim() === '' ? null : Number(dados.custoUnitario)
     if (custoUnitario !== null && (!Number.isFinite(custoUnitario) || custoUnitario < 0)) {
@@ -1317,9 +1340,7 @@ export default function ProdutosPage() {
           ? {
               nome: dados.nome.trim(),
               descricao: dados.descricao || null,
-              preco: precoFinal,
-              preco_original: descontoNumero > 0 ? precoNumero : null,
-              desconto: descontoNumero > 0 ? descontoNumero : null,
+              preco: precoNumero,
               disponivel: dados.disponivel,
             }
           : {
@@ -1328,6 +1349,10 @@ export default function ProdutosPage() {
               preco: precoFinal,
               preco_original: descontoNumero > 0 ? precoNumero : null,
               desconto: descontoNumero > 0 ? descontoNumero : null,
+              parcelamento_ativo: dados.parcelamentoAtivo,
+              parcelas_sem_juros: dados.parcelamentoAtivo
+                ? dados.quantidadeParcelas
+                : null,
               categoria: categoriaNormalizada,
               disponivel: dados.disponivel,
               custo_unitario: custoUnitario,
@@ -1350,6 +1375,11 @@ export default function ProdutosPage() {
                     preco: precoFinal,
                     preco_original: descontoNumero > 0 ? precoNumero : null,
                     desconto: descontoNumero > 0 ? descontoNumero : null,
+                    parcelamento_ativo: tabela === 'bebidas' ? false : dados.parcelamentoAtivo,
+                    parcelas_sem_juros:
+                      tabela === 'bebidas' || !dados.parcelamentoAtivo
+                        ? null
+                        : dados.quantidadeParcelas,
                     custo_unitario: tabela === 'bebidas' ? item.custo_unitario : custoUnitario,
                     categoria: tabela === 'bebidas' ? item.categoria : categoriaNormalizada,
                     disponivel: dados.disponivel,

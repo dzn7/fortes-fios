@@ -8,6 +8,10 @@ import ModalIngredientes from './ModalIngredientes'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  calcularValorParcelaProduto,
+  normalizarQuantidadeParcelas,
+} from '@/lib/condicoesComerciaisProduto'
 
 type CartaoProdutoProps = {
   produto: Produto
@@ -44,6 +48,9 @@ export default function CartaoProduto({
   const exibindoPlaceholder = !srcImagem
   const ehDestaque = variante === 'destaque' || variante === 'oferta'
   const ehOferta = variante === 'oferta'
+  const quantidadeParcelas = normalizarQuantidadeParcelas(
+    produto.parcelas_sem_juros,
+  )
 
   return (
     <>
@@ -167,11 +174,27 @@ export default function CartaoProduto({
                 className={cn(
                   'text-lg font-semibold text-foreground',
                   ehDestaque && 'text-xl',
+                  possuiDesconto && 'text-primary',
                 )}
               >
                 {formatarMoeda(produto.preco)}
               </span>
             </div>
+
+            {produto.parcelamento_ativo ? (
+              <p className="text-xs text-muted-foreground">
+                Ou {quantidadeParcelas}x de{' '}
+                <strong className="font-semibold tabular-nums text-foreground">
+                  {formatarMoeda(
+                    calcularValorParcelaProduto(
+                      produto.preco,
+                      quantidadeParcelas,
+                    ),
+                  )}
+                </strong>{' '}
+                sem juros
+              </p>
+            ) : null}
 
             <Button
               type="button"

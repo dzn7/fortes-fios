@@ -20,6 +20,10 @@ import {
   CHAVE_OFERTAS_VITRINE,
   ConfiguracaoOfertas,
 } from '@/lib/vitrineOfertas'
+import {
+  calcularPrecoComDesconto,
+  normalizarPercentualDesconto,
+} from '@/lib/condicoesComerciaisProduto'
 
 export type ProdutoOfertaAdmin = {
   id: string
@@ -34,17 +38,25 @@ type EditorOfertasProps = {
   configuracaoInicial: ConfiguracaoOfertas
   produtos: ProdutoOfertaAdmin[]
   onConfiguracaoSalva: (configuracao: ConfiguracaoOfertas) => void
+  onProdutoAtualizado: (
+    produtoId: string,
+    atualizacao: Pick<ProdutoOfertaAdmin, 'preco' | 'preco_original' | 'desconto'>,
+  ) => void
 }
 
 export default function EditorOfertas({
   configuracaoInicial,
   produtos,
   onConfiguracaoSalva,
+  onProdutoAtualizado,
 }: EditorOfertasProps) {
   const [configuracao, setConfiguracao] =
     useState<ConfiguracaoOfertas>(configuracaoInicial)
   const [busca, setBusca] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [produtoEmDescontoId, setProdutoEmDescontoId] = useState<string | null>(null)
+  const [descontoRapido, setDescontoRapido] = useState('0')
+  const [salvandoDescontoId, setSalvandoDescontoId] = useState<string | null>(null)
 
   const produtosSelecionados = useMemo(
     () =>
@@ -94,6 +106,40 @@ export default function EditorOfertas({
       produtoIds.splice(novoIndice, 0, produtoId)
       return { ...configuracaoAtual, produtoIds }
     })
+  }
+
+  const abrirDescontoRapido = (produto: ProdutoOfertaAdmin) => {
+    setProdutoEmDescontoId(produto.id)
+    setDescontoRapido(String(produto.desconto || 0))
+  }
+
+  const salvarDescontoRapido = async (produto: ProdutoOfertaAdmin) => {
+    const desconto = normalizarPercentualDesconto(descontoRapido)
+    const precoBase = produto.preco_original ?? produto.preco
+    const precoFinal = calcularPrecoComDesconto(precoBase, desconto)
+
+    setSalvandoDescontoId(produto.id)
+    try {
+      const atualizacao = {
+        preco: precoFinal,
+        preco_original: desconto > 0 ? precoBase : null,
+        desconto: desconto > 0 ? desconto : null,
+      }
+      const { error } = await supabase
+        .from('produtos')
+        .update(atualizacao)
+        .eq('id', produto.id)
+
+      if (error) throw error
+      onProdutoAtualizado(produto.id, atualizacao)
+      setProdutoEmDescontoId(null)
+      toast.success(desconto > 0 ? 'Desconto aplicado' : 'Desconto removido')
+    } catch (erro) {
+      console.error('Erro ao atualizar desconto da oferta:', erro)
+      toast.error('Não foi possível atualizar o desconto')
+    } finally {
+      setSalvandoDescontoId(null)
+    }
   }
 
   const salvar = async () => {
@@ -235,62 +281,125 @@ export default function EditorOfertas({
           ) : (
             <div className="mt-3 divide-y divide-border/70 rounded-lg border border-border/70">
               {produtosSelecionados.map((produto, indice) => (
-                <div
-                  key={produto.id}
-                  className="flex min-w-0 items-center gap-3 p-3"
-                >
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
-                    {indice + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {produto.nome}
+                <div key={produto.id}>
+                  <div className="flex min-w-0 items-center gap-2 p-3 sm:gap-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
+                      {indice + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {produto.nome}
+                        </p>
+                        {produto.desconto && produto.desconto > 0 ? (
+                          <Badge variant="secondary" className="shrink-0">
+                            -{produto.desconto}%
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {produto.categoria || 'Sem categoria'}
                       </p>
-                      {produto.desconto && produto.desconto > 0 ? (
-                        <Badge variant="secondary" className="shrink-0">
-                          -{produto.desconto}%
-                        </Badge>
-                      ) : null}
                     </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {produto.categoria || 'Sem categoria'}
-                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 gap-1.5 px-2.5 shadow-none"
+                      onClick={() => abrirDescontoRapido(produto)}
+                      aria-expanded={produtoEmDescontoId === produto.id}
+                    >
+                      <BadgePercent className="size-4" />
+                      <span className="hidden sm:inline">Desconto</span>
+                    </Button>
+                    <div className="flex shrink-0 items-center">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-11"
+                        onClick={() => moverProduto(indice, -1)}
+                        disabled={indice === 0}
+                        aria-label={`Mover ${produto.nome} para cima`}
+                      >
+                        <ArrowUp className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-11"
+                        onClick={() => moverProduto(indice, 1)}
+                        disabled={indice === produtosSelecionados.length - 1}
+                        aria-label={`Mover ${produto.nome} para baixo`}
+                      >
+                        <ArrowDown className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-11 text-destructive hover:text-destructive"
+                        onClick={() => removerProduto(produto.id)}
+                        aria-label={`Remover ${produto.nome} das ofertas`}
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-11"
-                      onClick={() => moverProduto(indice, -1)}
-                      disabled={indice === 0}
-                      aria-label={`Mover ${produto.nome} para cima`}
-                    >
-                      <ArrowUp className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-11"
-                      onClick={() => moverProduto(indice, 1)}
-                      disabled={indice === produtosSelecionados.length - 1}
-                      aria-label={`Mover ${produto.nome} para baixo`}
-                    >
-                      <ArrowDown className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-11 text-destructive hover:text-destructive"
-                      onClick={() => removerProduto(produto.id)}
-                      aria-label={`Remover ${produto.nome} das ofertas`}
-                    >
-                      <X className="size-4" />
-                    </Button>
-                  </div>
+
+                  {produtoEmDescontoId === produto.id ? (
+                    <div className="grid gap-3 border-t border-border/60 bg-muted/20 p-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-end">
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`desconto-oferta-${produto.id}`}>Desconto (%)</Label>
+                        <Input
+                          id={`desconto-oferta-${produto.id}`}
+                          type="number"
+                          inputMode="numeric"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={descontoRapido}
+                          onChange={(event) => setDescontoRapido(event.target.value)}
+                          className="h-10 bg-background shadow-none"
+                          autoFocus
+                        />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        De R$ {(produto.preco_original ?? produto.preco).toFixed(2).replace('.', ',')}{' '}
+                        por{' '}
+                        <strong className="font-semibold text-foreground">
+                          R${' '}
+                          {calcularPrecoComDesconto(
+                            produto.preco_original ?? produto.preco,
+                            normalizarPercentualDesconto(descontoRapido),
+                          ).toFixed(2).replace('.', ',')}
+                        </strong>
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 sm:flex">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 shadow-none"
+                          onClick={() => setProdutoEmDescontoId(null)}
+                          disabled={salvandoDescontoId === produto.id}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          type="button"
+                          className="h-10 shadow-none"
+                          onClick={() => void salvarDescontoRapido(produto)}
+                          disabled={salvandoDescontoId === produto.id}
+                        >
+                          {salvandoDescontoId === produto.id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : null}
+                          Aplicar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>

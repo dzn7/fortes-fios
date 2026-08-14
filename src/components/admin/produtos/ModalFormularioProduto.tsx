@@ -32,6 +32,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  calcularPrecoComDesconto,
+  calcularValorParcelaProduto,
+  normalizarPercentualDesconto,
+  normalizarQuantidadeParcelas,
+  QUANTIDADE_MAXIMA_PARCELAS,
+  QUANTIDADE_MINIMA_PARCELAS,
+  QUANTIDADE_PARCELAS_PADRAO,
+} from '@/lib/condicoesComerciaisProduto'
 import { cn } from '@/lib/utils'
 
 export type ProdutoFormulario = {
@@ -42,6 +51,8 @@ export type ProdutoFormulario = {
   custo_unitario?: number | null
   preco_original?: number | null
   desconto?: number | null
+  parcelamento_ativo?: boolean | null
+  parcelas_sem_juros?: number | null
   categoria: string
   imagem_url?: string
   disponivel: boolean
@@ -54,6 +65,8 @@ export type DadosSalvarProduto = {
   preco: string
   custoUnitario: string
   desconto: string
+  parcelamentoAtivo: boolean
+  quantidadeParcelas: number
   categoria: string
   disponivel: boolean
 }
@@ -102,6 +115,10 @@ export const ModalFormularioProduto = ({
   const [preco, setPreco] = useState('')
   const [custoUnitario, setCustoUnitario] = useState('')
   const [desconto, setDesconto] = useState('0')
+  const [parcelamentoAtivo, setParcelamentoAtivo] = useState(false)
+  const [quantidadeParcelas, setQuantidadeParcelas] = useState(
+    QUANTIDADE_PARCELAS_PADRAO,
+  )
   const [categoria, setCategoria] = useState('')
   const [disponivel, setDisponivel] = useState(true)
   const [criandoCategoria, setCriandoCategoria] = useState(false)
@@ -116,6 +133,10 @@ export const ModalFormularioProduto = ({
       setPreco(String(produto.preco_original ?? produto.preco ?? ''))
       setCustoUnitario(produto.custo_unitario === null || produto.custo_unitario === undefined ? '' : String(produto.custo_unitario))
       setDesconto(String(produto.desconto || 0))
+      setParcelamentoAtivo(produto.parcelamento_ativo === true)
+      setQuantidadeParcelas(
+        normalizarQuantidadeParcelas(produto.parcelas_sem_juros),
+      )
       setCategoria(produto.categoria)
       setDisponivel(produto.disponivel)
     } else {
@@ -124,6 +145,8 @@ export const ModalFormularioProduto = ({
       setPreco('')
       setCustoUnitario('')
       setDesconto('0')
+      setParcelamentoAtivo(false)
+      setQuantidadeParcelas(QUANTIDADE_PARCELAS_PADRAO)
       setCategoria(categorias[0] || categoriasBebidas[0] || categoriaBebidasFallback || '')
       setDisponivel(true)
     }
@@ -152,6 +175,12 @@ export const ModalFormularioProduto = ({
       ? previewImagemCriacao || null
       : produto?.imagem_url || null
 
+  const precoNumero = Number(preco)
+  const descontoNumero = normalizarPercentualDesconto(desconto)
+  const precoFinalPreview = Number.isFinite(precoNumero)
+    ? calcularPrecoComDesconto(precoNumero, descontoNumero)
+    : 0
+
   const handleSalvar = () => {
     void onSalvar({
       nome: nome.trim(),
@@ -159,6 +188,8 @@ export const ModalFormularioProduto = ({
       preco,
       custoUnitario,
       desconto,
+      parcelamentoAtivo,
+      quantidadeParcelas,
       categoria,
       disponivel,
     })
@@ -350,16 +381,7 @@ export const ModalFormularioProduto = ({
             )}
           </div>
 
-          <div
-            className={cn(
-              'grid gap-3',
-              modo === 'editar' && !ehBebida
-                ? 'grid-cols-1 sm:grid-cols-3'
-                : modo === 'editar' || !ehBebida
-                  ? 'grid-cols-2'
-                  : 'grid-cols-1',
-            )}
-          >
+          <div className={cn('grid gap-3', !ehBebida ? 'grid-cols-2' : 'grid-cols-1')}>
             <div className="space-y-2">
               <Label htmlFor="modal-produto-preco">Preço (R$) *</Label>
               <Input
@@ -389,22 +411,105 @@ export const ModalFormularioProduto = ({
                 <p className="text-xs text-muted-foreground">Usado para calcular o lucro nas vendas futuras.</p>
               </div>
             ) : null}
-            {modo === 'editar' ? (
-              <div className="space-y-2">
-                <Label htmlFor="modal-produto-desconto">Desconto (%)</Label>
-                <Input
-                  id="modal-produto-desconto"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={desconto}
-                  onChange={(e) => setDesconto(e.target.value)}
-                  className="h-11 border-border/70 shadow-none"
-                />
-              </div>
-            ) : null}
           </div>
+
+          {!ehBebida ? (
+            <div className="space-y-4 rounded-xl border border-border/60 p-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">Condições comerciais</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  O desconto altera o preço do produto; as parcelas são apenas informativas.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="modal-produto-desconto">Desconto (%)</Label>
+                  <Input
+                    id="modal-produto-desconto"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={desconto}
+                    onChange={(e) => setDesconto(e.target.value)}
+                    className="h-11 border-border/70 shadow-none"
+                  />
+                </div>
+                <div className="rounded-lg bg-muted/40 px-3 py-2.5">
+                  <p className="text-xs text-muted-foreground">Preço exibido no site</p>
+                  <p className="mt-1 text-base font-semibold tabular-nums text-foreground">
+                    R$ {precoFinalPreview.toFixed(2).replace('.', ',')}
+                  </p>
+                  {descontoNumero > 0 && precoNumero > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      De R$ {precoNumero.toFixed(2).replace('.', ',')} · {descontoNumero}% OFF
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="grid gap-3 rounded-lg border border-border/60 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-end">
+                <label className="flex cursor-pointer items-start justify-between gap-4 sm:items-center">
+                  <span>
+                    <span className="block text-sm font-medium text-foreground">
+                      Mostrar parcelamento sem juros
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      Informação visual no catálogo; não altera o pagamento.
+                    </span>
+                  </span>
+                  <Checkbox
+                    checked={parcelamentoAtivo}
+                    onCheckedChange={(valor) => setParcelamentoAtivo(valor === true)}
+                    aria-label="Mostrar parcelamento sem juros no site"
+                  />
+                </label>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="modal-produto-parcelas">Quantidade</Label>
+                  <Select
+                    value={String(quantidadeParcelas)}
+                    onValueChange={(valor) => setQuantidadeParcelas(Number(valor))}
+                    disabled={!parcelamentoAtivo}
+                  >
+                    <SelectTrigger id="modal-produto-parcelas" className="h-11 border-border/70 shadow-none">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from(
+                        {
+                          length:
+                            QUANTIDADE_MAXIMA_PARCELAS -
+                            QUANTIDADE_MINIMA_PARCELAS +
+                            1,
+                        },
+                        (_, indice) => QUANTIDADE_MINIMA_PARCELAS + indice,
+                      ).map((quantidade) => (
+                        <SelectItem key={quantidade} value={String(quantidade)}>
+                          {quantidade}x
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {parcelamentoAtivo ? (
+                  <p className="text-xs text-muted-foreground sm:col-span-2">
+                    Prévia: {quantidadeParcelas}x de R${' '}
+                    {calcularValorParcelaProduto(
+                      precoFinalPreview,
+                      quantidadeParcelas,
+                    )
+                      .toFixed(2)
+                      .replace('.', ',')}{' '}
+                    sem juros
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
 
           {modo === 'editar' ? (
             <div className="flex items-center justify-between rounded-xl border border-border/60 px-3 py-3">

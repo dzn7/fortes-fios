@@ -16,6 +16,8 @@ export type Produto = {
   preco: number
   preco_original?: number
   desconto?: number
+  parcelamento_ativo?: boolean
+  parcelas_sem_juros?: number | null
   categoria: string
   imagem_url: string
   disponivel: boolean

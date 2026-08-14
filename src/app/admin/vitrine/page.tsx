@@ -1198,6 +1198,15 @@ export default function VitrinePage() {
                 configuracaoInicial={configuracaoOfertas}
                 produtos={produtosCatalogo}
                 onConfiguracaoSalva={setConfiguracaoOfertas}
+                onProdutoAtualizado={(produtoId, atualizacao) =>
+                  setProdutosCatalogo((produtosAtuais) =>
+                    produtosAtuais.map((produtoAtual) =>
+                      produtoAtual.id === produtoId
+                        ? { ...produtoAtual, ...atualizacao }
+                        : produtoAtual,
+                    ),
+                  )
+                }
               />
             </div>
           ) : null}

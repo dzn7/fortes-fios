@@ -1,5 +1,38 @@
 # Progress
 
+## [2026-08-14] Progresso contínuo dos trilhos e parcelas configuráveis
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** tornar inequívoco o avanço dos carrosséis públicos e permitir que cada produto informe sua própria quantidade de parcelas sem afetar o checkout.
+**Arquivos alterados:** `src/app/page.tsx`, `src/lib/condicoesComerciaisProduto.ts`, `src/lib/supabase.ts`, `src/components/admin/produtos/ModalFormularioProduto.tsx`, `src/app/admin/produtos/page.tsx`, `src/components/CartaoProduto.tsx`, `src/components/ModalIngredientes.tsx`, `PRD.md`, `UI.md`, `Progress.md`; schema remoto `public.produtos`.
+**O que foi feito:**
+- Os indicadores móveis de categorias, Mais vendidos e Ofertas passaram de marcador deslizante para barra acumulada, iniciando pela fração visível e preenchendo até 100% conforme o visitante avança.
+- O formulário de criar/editar produto permite ativar o aviso de parcelamento e escolher entre 2 e 12 parcelas, com prévia imediata do valor por parcela.
+- Cards e detalhes públicos usam a quantidade salva no produto; registros antigos ativos foram preservados com 3 parcelas.
+- Foi adicionada via Management API a coluna opcional `produtos.parcelas_sem_juros`, com restrição entre 2 e 12, sem RLS novo e sem alteração em tabelas de pedido/pagamento.
+- O payload de checkout permanece restrito a id, nome e preço do produto; os campos de parcelamento não são enviados nem persistidos no pedido.
+**Decisões tomadas:** manter `parcelamento_ativo` para compatibilidade e armazenar a quantidade separadamente; quando um registro legado não tiver quantidade, a UI usa 3x. A barra representa a proporção já vista, não somente a posição do primeiro card.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · schema remoto e dados legados validados ✓ · checkout inspecionado e isolado ✓.
+**Pendências / próximos passos:** finalizar build, lint disponível e revisão de resíduos nesta resposta.
+**Armadilhas descobertas:** o checkout monta um objeto mínimo do produto antes do envio; não substituir esse mapeamento por spread do objeto de catálogo, pois isso levaria metadados puramente visuais ao pagamento.
+
+## [2026-08-14] Desconto e parcelamento informativo por produto
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** completar as condições comerciais dos produtos com desconto editável no cadastro e na Vitrine, além de comunicação visual de parcelamento em 3x sem alterar pagamentos.
+**Arquivos alterados:** `src/lib/condicoesComerciaisProduto.ts`, `src/lib/supabase.ts`, `src/components/admin/produtos/ModalFormularioProduto.tsx`, `src/app/admin/produtos/page.tsx`, `src/components/admin/vitrine/EditorOfertas.tsx`, `src/app/admin/vitrine/page.tsx`, `src/app/page.tsx`, `src/components/CartaoProduto.tsx`, `src/components/ModalIngredientes.tsx`, `PRD.md`, `UI.md`, `Progress.md`; schema remoto `public.produtos`.
+**O que foi feito:**
+- O formulário de criar e editar produto ganhou uma seção única de condições comerciais com desconto percentual, prévia do preço final e ativação de parcelamento informativo.
+- O desconto passou a funcionar também no cadastro: o valor digitado é a referência, `preco_original` preserva esse valor e `preco` recebe o preço promocional arredondado em centavos.
+- A área Ofertas ganhou atalho inline para aplicar, trocar ou remover desconto sem abrir outro modal ou sair da curadoria.
+- Cards e detalhe público exibem preço anterior riscado, preço final destacado, badge de percentual e, quando ativado, `3x de R$ … sem juros`.
+- Foi adicionada via Management API a coluna `produtos.parcelamento_ativo boolean not null default false`, validada no OpenAPI do projeto.
+- Nenhum arquivo de carrinho, checkout, pedido, Mercado Pago ou pagamento foi alterado; parcelamento permanece estritamente visual.
+**Decisões tomadas:** o parcelamento é fixo em três vezes e armazena somente um booleano; quantidade e valor de parcela são derivados para evitar inconsistência. Desconto rápido e cadastro atualizam os mesmos campos do produto, mantendo uma fonte única de preço.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · schema remoto validado ✓ · busca de isolamento do checkout ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓ · `npm run lint` indisponível pelo script legado `next lint` incompatível com Next 16.
+**Pendências / próximos passos:** nenhuma dentro do escopo funcional; o lint do repositório continua exigindo uma tarefa própria de infraestrutura.
+**Armadilhas descobertas:** `bebidas` não possui colunas de desconto nem parcelamento no schema Fortes Fios; os novos controles ficam restritos a produtos e o fluxo legado de bebidas preserva apenas preço comum.
+
 ## [2026-08-14] Tipografia oficial no site público
 
 **Agente/Modelo:** Codex GPT-5

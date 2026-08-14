@@ -5,6 +5,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   type UIEvent,
 } from 'react'
 import {
@@ -115,6 +116,14 @@ const obterIconeCategoria = (categoria: string): LucideIcon => {
   return Tag
 }
 
+const calcularProgressoTrilha = (trilha: HTMLDivElement) => {
+  if (trilha.scrollWidth <= trilha.clientWidth) return 1
+  return Math.min(
+    1,
+    Math.max(0, (trilha.scrollLeft + trilha.clientWidth) / trilha.scrollWidth),
+  )
+}
+
 export default function Home() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [categoriasBanco, setCategoriasBanco] = useState<CategoriaPublica[]>([])
@@ -149,6 +158,10 @@ export default function Home() {
     useState<ConfiguracaoOfertas>(CONFIGURACAO_OFERTAS_PADRAO)
   const [carregandoOfertas, setCarregandoOfertas] = useState(true)
   const [progressoOfertas, setProgressoOfertas] = useState(0)
+  const [progressoCategorias, setProgressoCategorias] = useState(0)
+  const trilhaCategoriasRef = useRef<HTMLDivElement>(null)
+  const trilhaMaisVendidosRef = useRef<HTMLDivElement>(null)
+  const trilhaOfertasRef = useRef<HTMLDivElement>(null)
   const [modalNotificacao, setModalNotificacao] =
     useState<EstadoModalNotificacao>({
       aberto: false,
@@ -200,7 +213,7 @@ export default function Home() {
         let consulta = supabase
           .from('produtos')
           .select(
-            'id, nome, descricao, preco, preco_original, desconto, categoria, imagem_url, disponivel, destaque, ordem, created_at, updated_at',
+            'id, nome, descricao, preco, preco_original, desconto, parcelamento_ativo, parcelas_sem_juros, categoria, imagem_url, disponivel, destaque, ordem, created_at, updated_at',
           )
           .eq('disponivel', true)
 
@@ -519,34 +532,39 @@ export default function Home() {
   const atualizarProgressoMaisVendidos = (
     event: UIEvent<HTMLDivElement>,
   ) => {
-    const trilha = event.currentTarget
-    const limiteRolagem = trilha.scrollWidth - trilha.clientWidth
-    setProgressoMaisVendidos(
-      limiteRolagem > 0 ? trilha.scrollLeft / limiteRolagem : 0,
-    )
+    setProgressoMaisVendidos(calcularProgressoTrilha(event.currentTarget))
   }
-
-  const larguraIndicadorMaisVendidos = Math.max(
-    22,
-    Math.min(100, 100 / Math.max(produtosMaisVendidos.length, 1)),
-  )
-  const deslocamentoIndicadorMaisVendidos =
-    progressoMaisVendidos * (100 - larguraIndicadorMaisVendidos)
 
   const atualizarProgressoOfertas = (event: UIEvent<HTMLDivElement>) => {
-    const trilha = event.currentTarget
-    const limiteRolagem = trilha.scrollWidth - trilha.clientWidth
-    setProgressoOfertas(
-      limiteRolagem > 0 ? trilha.scrollLeft / limiteRolagem : 0,
-    )
+    setProgressoOfertas(calcularProgressoTrilha(event.currentTarget))
   }
 
-  const larguraIndicadorOfertas = Math.max(
-    22,
-    Math.min(100, 100 / Math.max(produtosEmOferta.length, 1)),
-  )
-  const deslocamentoIndicadorOfertas =
-    progressoOfertas * (100 - larguraIndicadorOfertas)
+  const atualizarProgressoCategorias = (event: UIEvent<HTMLDivElement>) => {
+    setProgressoCategorias(calcularProgressoTrilha(event.currentTarget))
+  }
+
+  useEffect(() => {
+    const atualizarIndicadores = () => {
+      if (trilhaCategoriasRef.current) {
+        setProgressoCategorias(calcularProgressoTrilha(trilhaCategoriasRef.current))
+      }
+      if (trilhaMaisVendidosRef.current) {
+        setProgressoMaisVendidos(
+          calcularProgressoTrilha(trilhaMaisVendidosRef.current),
+        )
+      }
+      if (trilhaOfertasRef.current) {
+        setProgressoOfertas(calcularProgressoTrilha(trilhaOfertasRef.current))
+      }
+    }
+
+    const quadro = window.requestAnimationFrame(atualizarIndicadores)
+    window.addEventListener('resize', atualizarIndicadores)
+    return () => {
+      window.cancelAnimationFrame(quadro)
+      window.removeEventListener('resize', atualizarIndicadores)
+    }
+  }, [categorias.length, produtosEmOferta.length, produtosMaisVendidos.length])
 
   const totalResultados = produtosFiltrados.length
   const navegacaoInferiorVisivel = !(
@@ -639,7 +657,11 @@ export default function Home() {
               <h3 className="mb-4 text-sm font-semibold text-foreground">
                 Compre por categoria
               </h3>
-              <div className="-mx-4 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:px-0">
+              <div
+                ref={trilhaCategoriasRef}
+                className="-mx-4 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:px-0"
+                onScroll={atualizarProgressoCategorias}
+              >
                 <div className="inline-flex min-w-max gap-3 sm:flex sm:min-w-0 sm:flex-wrap sm:gap-4">
                   {categorias.map((categoria) => {
                     const ativo = categoriaAtiva === categoria
@@ -674,6 +696,17 @@ export default function Home() {
                   })}
                 </div>
               </div>
+              {categorias.length > 4 ? (
+                <div
+                  className="mx-4 mt-4 h-0.5 overflow-hidden bg-border sm:hidden"
+                  aria-hidden="true"
+                >
+                  <div
+                    className="h-full origin-left bg-foreground transition-[width] duration-150"
+                    style={{ width: `${progressoCategorias * 100}%` }}
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
@@ -728,6 +761,7 @@ export default function Home() {
                 </div>
               ) : (
                 <div
+                  ref={trilhaMaisVendidosRef}
                   className="-mx-4 overflow-x-auto px-4 pb-2 scrollbar-hide sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4"
                   onScroll={atualizarProgressoMaisVendidos}
                 >
@@ -753,11 +787,8 @@ export default function Home() {
                   aria-hidden="true"
                 >
                   <span
-                    className="absolute inset-y-0 bg-foreground transition-[left] duration-150"
-                    style={{
-                      left: `${deslocamentoIndicadorMaisVendidos}%`,
-                      width: `${larguraIndicadorMaisVendidos}%`,
-                    }}
+                    className="absolute inset-y-0 left-0 bg-foreground transition-[width] duration-150"
+                    style={{ width: `${progressoMaisVendidos * 100}%` }}
                   />
                 </div>
               ) : null}
@@ -817,6 +848,7 @@ export default function Home() {
                 </div>
               ) : (
                 <div
+                  ref={trilhaOfertasRef}
                   className="-mx-4 overflow-x-auto px-4 pb-2 scrollbar-hide sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4"
                   onScroll={atualizarProgressoOfertas}
                 >
@@ -843,11 +875,8 @@ export default function Home() {
                   aria-hidden="true"
                 >
                   <span
-                    className="absolute inset-y-0 bg-foreground transition-[left] duration-150"
-                    style={{
-                      left: `${deslocamentoIndicadorOfertas}%`,
-                      width: `${larguraIndicadorOfertas}%`,
-                    }}
+                    className="absolute inset-y-0 left-0 bg-foreground transition-[width] duration-150"
+                    style={{ width: `${progressoOfertas * 100}%` }}
                   />
                 </div>
               ) : null}
