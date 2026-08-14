@@ -136,18 +136,19 @@ function ImagemResponsivaBanner({
         priority: prioridade,
       }).props
     : null
+  const imagemBase = mobile ?? desktop
 
   return (
     <picture>
       {mobile ? (
         <source
-          media="(max-width: 639px)"
-          srcSet={mobile.srcSet}
-          sizes={mobile.sizes}
+          media="(min-width: 640px)"
+          srcSet={desktop.srcSet}
+          sizes={desktop.sizes}
         />
       ) : null}
       <img
-        {...desktop}
+        {...imagemBase}
         alt={banner.titulo || 'Destaque Fortes Fios'}
         className="object-contain"
       />
