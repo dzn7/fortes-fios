@@ -325,7 +325,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
     try {
       const { data: itensData, error } = await supabase
         .from('itens_pedido')
-        .select('*')
+        .select('id, produto_id, nome_item, quantidade, preco_unitario, subtotal, created_at, observacoes, estoque_quantidade_consumida')
         .eq('pedido_id', pedido.id)
         .order('created_at')
 

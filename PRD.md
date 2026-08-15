@@ -28,11 +28,11 @@ Oferecer um catálogo digital de produtos capilares, com navegação por categor
 ## Escopo (o que o produto é)
 
 - Catálogo público responsivo com produtos capilares, categorias reais ordenadas em `categorias_cardapio`, busca, carrinho persistido, status da loja, vitrine configurável com artes independentes por tela, seção de mais vendidos em modo automático ou curadoria manual, ofertas selecionadas pelo administrador e prova social do studio parceiro com logo e resultados configuráveis.
-- Checkout para entrega ou retirada na loja, com cidades atendidas, compra mínima por cidade, taxa de entrega, bairro/endereço livres, cupons, troco, pagamentos múltiplos e PIX online.
+- Checkout para entrega ou retirada na loja, com cidades atendidas, compra mínima por cidade, taxa de entrega, bairro/endereço livres, cupons, troco e formas de pagamento registradas no pedido. Pagamento online/Mercado Pago não faz parte da operação Fortes Fios.
 - Painel administrativo com dashboard, Kanban de produção, PDV, histórico/listagem de pedidos e edição detalhada.
 - Gestão de salão: mesas, comandas, locais externos, ocupação, tempo limite e liberação.
 - Gestão de entregas, entregadores e repasses.
-- Catálogo: produtos, bebidas, combos, adicionais, categorias, ordenação, imagens, disponibilidade e condições comerciais por produto (desconto e parcelamento meramente informativo configurável entre 2x e 12x).
+- Catálogo: produtos, bebidas, combos, adicionais, categorias, ordenação, imagens, disponibilidade, controle de estoque e condições comerciais por produto (desconto e parcelamento meramente informativo configurável entre 2x e 12x).
 - Caixa, movimentações, categorias financeiras, saldos, salários, crediário, relatórios e fechamento anual.
 - Gestão de usuários de sistema (`admin`, `garcom`, `entregador`) e cadastro derivado de clientes.
 - Controle global de visibilidade dos menus do admin e garçom pelo superusuário em `/dzn`.
@@ -125,13 +125,13 @@ Há ainda páginas de detalhes/edição de pedido, relatórios e saldos de caixa
 3. Ofertas usa a curadoria manual `vitrine_produtos_ofertas`, aparece imediatamente depois de Mais vendidos somente quando está ativa e possui produtos disponíveis; o mesmo estado controla sua entrada no menu móvel.
 4. Desconto pertence ao produto: `preco_original` guarda o valor de referência, `desconto` o percentual e `preco` o valor final efetivamente usado no carrinho. A Vitrine oferece um atalho para atualizar esses mesmos campos, sem criar uma segunda fonte de preço.
 5. `produtos.parcelamento_ativo` controla a visibilidade do parcelamento e `parcelas_sem_juros` define a quantidade entre 2 e 12; o valor é derivado de `preco / parcelas_sem_juros` e nunca é enviado ao checkout, pedido ou integração de pagamento. Registros legados sem quantidade usam 3x.
-4. Depois da grade do catálogo, a seção de resultados do studio lê a configuração JSON `vitrine_resultados_studio`, exibe somente fotos publicadas e permanece ausente até o administrador ativar ao menos um resultado.
-5. As alterações do catálogo são acompanhadas por canais Realtime.
-6. `CarrinhoContext` mantém o carrinho no `localStorage`.
-7. `ModalCarrinho` revalida cupom, classifica itens e calcula frete/taxa de pagamento. Em entrega, o cliente seleciona uma cidade ativa, informa bairro e endereço em campos livres e pode acrescentar uma referência; a compra mínima é validada sobre o subtotal de produtos após descontos de item, antes de frete e cupom. Cada cidade possui dias semanais e compra mínima configuráveis: Porto opera diariamente, enquanto Nossa Senhora dos Remédios e Campo Largo iniciam, respectivamente, com segunda e terça-feira. Checkout e confirmação informam a próxima data habilitada, que é persistida no pedido e na entrega. Os prazos em minutos de retirada e entrega são configurações independentes da loja e aparecem na escolha do cliente.
-8. Para pagamento comum, cria `pedidos`, ocupa a mesa quando aplicável, grava `itens_pedido` e `item_adicionais`, registra cupom e dispara entrega/impressão.
-9. Se uma etapa crítica falhar, o frontend tenta compensar: libera mesa, remove uso do cupom e exclui o pedido criado.
-10. Para PIX online, a criação passa pelas rotas server-side do Mercado Pago; o pedido é confirmado após conciliação/aprovação.
+6. Depois da grade do catálogo, a seção de resultados do studio lê a configuração JSON `vitrine_resultados_studio`, exibe somente fotos publicadas e permanece ausente até o administrador ativar ao menos um resultado.
+7. As alterações do catálogo são acompanhadas por canais Realtime.
+8. `CarrinhoContext` mantém o carrinho no `localStorage`.
+9. Produtos possuem quantidade física, limite de estoque baixo e regra opcional de bloqueio no zero. O estado é sempre derivado; o carrinho reconcilia alterações e o banco reserva atomicamente ao criar `itens_pedido`, restaurando ao remover ou cancelar.
+10. `ModalCarrinho` revalida cupom, estoque e itens e calcula frete/taxa de pagamento. Em entrega, o cliente seleciona uma cidade ativa, informa bairro e endereço em campos livres e pode acrescentar uma referência; a compra mínima é validada sobre o subtotal de produtos após descontos de item, antes de frete e cupom. Cada cidade possui dias semanais e compra mínima configuráveis: Porto opera diariamente, enquanto Nossa Senhora dos Remédios e Campo Largo iniciam, respectivamente, com segunda e terça-feira. Checkout e confirmação informam a próxima data habilitada, que é persistida no pedido e na entrega. Os prazos em minutos de retirada e entrega são configurações independentes da loja e aparecem na escolha do cliente.
+11. Para pagamento comum, cria `pedidos`, grava `itens_pedido` e `item_adicionais`, registra cupom e cria a entrega quando necessário.
+12. Se uma etapa crítica falhar, o frontend remove uso do cupom e exclui o pedido criado, restaurando a reserva de estoque pela própria transação de itens.
 
 ### 2. Pedido interno (PDV, admin e garçom)
 

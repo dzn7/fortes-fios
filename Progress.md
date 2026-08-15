@@ -1,5 +1,23 @@
 # Progress
 
+## [2026-08-15] Controle de estoque integrado
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** entregar controle de estoque simples no Admin e autoritativo no banco, consistente até o catálogo e a criação do pedido.
+**Arquivos alterados:** `AGENTS.md`, `specs/controle-estoque.md`, `supabase/migrations/202608150001_controle_estoque_produtos.sql`, `tests/estoque-produtos.test.mjs`, `tests/estoque-banco.sql`, `src/lib/estoque-produto.mjs`, `src/lib/supabase.ts`, `src/lib/admin-sidebar-routes.ts`, `src/app/admin/estoque/page.tsx`, `src/components/admin/produtos/ControleEstoqueProduto.tsx`, `src/components/admin/produtos/ModalFormularioProduto.tsx`, `src/app/admin/produtos/page.tsx`, `src/app/admin/pedidos/novo/page.tsx`, `src/components/admin/ModalEditarPedido.tsx`, `src/app/page.tsx`, `src/contexts/CarrinhoContext.tsx`, `src/components/CartaoProduto.tsx`, `src/components/ModalIngredientes.tsx`, `src/components/ModalComplementos.tsx`, `src/components/ModalCarrinho.tsx`, `PRD.md`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- Os testes de domínio e SQL foram escritos e observados falhando antes da implementação; depois ficaram verdes.
+- Produtos receberam quantidade, limite baixo e bloqueio opcional de venda no zero, sem status persistido duplicado.
+- A migration aplicada pela Management API adicionou constraints, RPCs atômicas e reserva/restauração de estoque por item do pedido.
+- A nova tela Estoque oferece resumo, filtros, busca, ajuste direto, zerar e bloqueio comercial; Produtos reutiliza o mesmo controle compacto.
+- Catálogo, detalhe, personalização, carrinho, checkout, novo pedido e edição de pedido compartilham a regra de disponibilidade e preservam `produto_id`.
+- Produto bloqueado no zero permanece visível como `ESGOTADO`; chamadas diretas do frontend ainda são recusadas pelo contexto e pelo trigger do banco.
+- Atualizações Realtime de estoque reconciliam somente a linha alterada nas superfícies tocadas, sem refetch completo.
+**Decisões tomadas:** reserva ocorre na criação de `itens_pedido`; cancelamento/remoção restaura somente o valor efetivamente consumido. Produtos legados iniciam em zero com bloqueio desativado. Mercado Pago/pagamento online ficou explicitamente fora do escopo.
+**Verificação:** RED confirmado antes da implementação no teste de domínio e no SQL · `node --test tests/estoque-produtos.test.mjs` ✓ (11 testes, 16 cenários cobertos) · teste SQL transacional via Management API ✓ com rollback · `npx tsc --noEmit --incremental false` ✓ · `npm run build` ✓ (49 páginas) · `bug-hunter` ✓ · `verification-before-completion` ✓. `npm run lint` foi executado, mas o script legado `next lint` é incompatível com Next 16 e falha antes de analisar arquivos; a inspeção dirigida não encontrou `TODO`, `console.log` ou `debugger` novos.
+**Pendências / próximos passos:** corrigir o comando de lint do projeto em uma task própria de tooling, sem misturar essa mudança à entrega de estoque.
+**Armadilhas descobertas:** itens adicionados por `ModalEditarPedido` antes desta correção não preservavam `produto_id`; sem esse vínculo, qualquer trigger de produto seria contornado. O banco continua sem RLS conforme risco global já documentado.
+
 ## [2026-08-15] Governança TDD/Spec-Driven e especificação do estoque
 
 **Agente/Modelo:** Codex GPT-5  

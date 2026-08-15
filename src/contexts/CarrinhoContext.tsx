@@ -146,7 +146,8 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
     const produtosPorId = new Map(produtosAtuais.map((produto) => [produto.id, produto]))
     setItens((estadoAtual) => estadoAtual.flatMap((item) => {
       const produtoAtual = produtosPorId.get(item.produto.id)
-      if (!produtoAtual || !produtoDisponivelParaCompra(produtoAtual)) return []
+      if (!produtoAtual) return [item]
+      if (!produtoDisponivelParaCompra(produtoAtual)) return []
 
       const produtoNormalizado = normalizarProduto({ ...item.produto, ...produtoAtual })
       const quantidadeMaxima = produtoNormalizado.bloquear_venda_sem_estoque
