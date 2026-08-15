@@ -340,7 +340,6 @@ export default function HeroVitrine() {
                   <div
                     className={cn(
                       'max-w-[88%] sm:max-w-xl',
-                      FONTE_TEXTO_BANNER_CLASSES[banner.fonteTexto],
                       banner.contrasteTexto === 'claro'
                         ? 'text-white'
                         : 'text-foreground',
@@ -350,6 +349,7 @@ export default function HeroVitrine() {
                       <h2
                         className={cn(
                           'whitespace-pre-line text-3xl leading-none drop-shadow-sm sm:text-5xl lg:text-6xl',
+                          FONTE_TEXTO_BANNER_CLASSES[banner.fonteTexto],
                           PESO_TITULO_BANNER_CLASSES[banner.pesoTitulo],
                         )}
                       >
@@ -357,7 +357,12 @@ export default function HeroVitrine() {
                       </h2>
                     )}
                     {banner.subtitulo && (
-                      <p className="mt-3 max-w-lg whitespace-pre-line text-sm font-normal leading-relaxed drop-shadow-sm sm:text-lg">
+                      <p
+                        className={cn(
+                          'mt-3 max-w-lg whitespace-pre-line text-sm font-normal leading-relaxed drop-shadow-sm sm:text-lg',
+                          FONTE_TEXTO_BANNER_CLASSES[banner.fonteTexto],
+                        )}
+                      >
                         {banner.subtitulo}
                       </p>
                     )}

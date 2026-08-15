@@ -1,5 +1,19 @@
 # Progress
 
+## [2026-08-14] Correção da fonte selecionada no hero público
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** fazer a família escolhida no editor da Vitrine prevalecer no título e subtítulo publicados.
+**Arquivos alterados:** `src/components/HeroVitrine.tsx`, `src/app/globals.css`, `Progress.md`.
+**O que foi feito:**
+- Identificada por inspeção do CSS compilado a colisão entre a regra global dos headings públicos e a família herdada do contêiner do banner.
+- A família selecionada passou a ser aplicada diretamente ao título e ao subtítulo do hero.
+- Títulos configuráveis foram excluídos da regra tipográfica global, mantendo a regra inalterada para os demais headings do site e sem recorrer a `!important`.
+**Decisões tomadas:** corrigir a origem da cascata no hero, sem elevar globalmente a especificidade das quatro famílias e sem alterar persistência ou banco.
+**Verificação:** `npx tsc --noEmit` ✓ (0 erros) · build de produção ✓ (48 páginas) · CSS compilado confirma as quatro famílias e a exclusão dos headings configuráveis da regra global ✓ · `git diff --check` ✓ · `ui-review` Pass ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓ · `npm run lint` indisponível: o script legado `next lint` é incompatível com Next 16.
+**Pendências / próximos passos:** nenhuma conhecida dentro desta correção.
+**Armadilhas descobertas:** uma classe de fonte no ancestral não prevalece quando o heading filho recebe `font-family` diretamente de uma regra global mais específica.
+
 ## [2026-08-14] Tipografia configurável por banner da Vitrine
 
 **Agente/Modelo:** Codex GPT-5

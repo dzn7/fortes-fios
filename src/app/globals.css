@@ -198,8 +198,20 @@ html.dark body:has(.fortes-fios-site) {
   --ring: 70 39% 48%;
 }
 
-body.fortes-fios-public :is(h1, h2, h3, h4, h5, h6, .fonte-titulo, .fortes-display),
-body:has(.fortes-fios-site) :is(h1, h2, h3, h4, h5, h6, .fonte-titulo, .fortes-display) {
+body.fortes-fios-public
+  :is(h1, h2, h3, h4, h5, h6, .fonte-titulo, .fortes-display):not(
+    .fonte-banner-quiche,
+    .fonte-banner-bricolage,
+    .fonte-banner-raleway,
+    .fonte-banner-geist
+  ),
+body:has(.fortes-fios-site)
+  :is(h1, h2, h3, h4, h5, h6, .fonte-titulo, .fortes-display):not(
+    .fonte-banner-quiche,
+    .fonte-banner-bricolage,
+    .fonte-banner-raleway,
+    .fonte-banner-geist
+  ) {
   font-family: var(--font-fortes-display);
   font-weight: 300;
   letter-spacing: -0.035em;
