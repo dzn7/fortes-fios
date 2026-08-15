@@ -1,5 +1,20 @@
 # Progress
 
+## [2026-08-15] Hero desktop responsivo e carregamento resiliente de imagens
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** restaurar as artes horizontais do Hero no desktop sem alterar o mobile aprovado e impedir que falhas transitórias do Backblaze apareçam como imagens quebradas.
+**Arquivos alterados:** `specs/hero-responsivo-imagens-resilientes.md`, `tests/imagens-publicas.test.mjs`, `src/lib/imagem-publica.mjs`, `next.config.js`, `src/components/HeroVitrine.tsx`, `src/app/api/upload/route.ts`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- A spec e os cinco testes de regressão foram escritos antes da implementação; o RED confirmou a ausência do módulo e o GREEN validou a seleção de mídia e normalização das URLs.
+- O Hero passou a usar a arte desktop como fonte-base e a arte mobile somente até 639 px, mantendo as proporções já persistidas de 21:8/16:9 e 4:5/9:16.
+- Imagens do bucket passaram a usar a rota same-origin existente, com três tentativas no cliente S3 e cache público imutável; imagens locais e hosts externos permanecem intactos.
+- O carregador customizado do Next aplica essa proteção de forma central aos componentes `next/image`, enquanto o Hero reutiliza a mesma regra no `<picture>` de art direction.
+**Decisões tomadas:** manter `object-contain` e os recortes salvos, corrigindo apenas a origem selecionada. A rota existente foi estendida em vez de criar proxy ou componente paralelo.
+**Verificação:** RED ✓ · `node --test tests/*.test.mjs` ✓ (27 testes) · `npx tsc --noEmit --incremental false` ✓ · `npm run build` ✓ (49 páginas) · `git diff --check` ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓. `npm run lint` foi executado, mas o script legado `next lint` é incompatível com Next 16 e falha antes de analisar arquivos.
+**Pendências / próximos passos:** corrigir o script de lint em uma task própria de tooling.
+**Armadilhas descobertas:** com `images.unoptimized: true`, `getImageProps` não fornece `srcSet`; usar a arte mobile como `src` base fazia o desktop permanecer mobile. A mesma URL B2 respondeu `503` e depois `206`, confirmando a intermitência relatada.
+
 ## [2026-08-15] Controle de estoque integrado
 
 **Agente/Modelo:** Codex GPT-5

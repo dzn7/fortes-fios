@@ -14,6 +14,7 @@ function criarClienteB2(): S3Client {
   return new S3Client({
     region: process.env.B2_REGION || 'us-east-005',
     endpoint: process.env.NEXT_PUBLIC_B2_ENDPOINT,
+    maxAttempts: 3,
     credentials: {
       accessKeyId: process.env.B2_APPLICATION_KEY_ID || '',
       secretAccessKey: process.env.B2_APPLICATION_KEY || '',
@@ -45,7 +46,7 @@ function obterExtensao(tipoMime: string): string {
 }
 
 const CHAVE_IMAGEM_PERMITIDA =
-  /^(vitrine|geral|produtos|bebidas|combos|adicionais)\/[a-zA-Z0-9._/-]+\.(jpe?g|png|webp|gif)$/i
+  /^(vitrine|geral|produtos|bebidas|combos|adicionais)\/[a-zA-Z0-9._/ -]+\.(jpe?g|png|webp|gif)$/i
 
 /**
  * GET - Serve imagens públicas do B2 pela mesma origem para permitir recorte no Canvas.
@@ -70,7 +71,8 @@ export async function GET(requisicao: NextRequest) {
     return new NextResponse(conteudo, {
       headers: {
         'Content-Type': resposta.ContentType || 'application/octet-stream',
-        'Cache-Control': 'private, max-age=300',
+        'Cache-Control':
+          'public, max-age=86400, s-maxage=31536000, stale-while-revalidate=604800, immutable',
         'X-Content-Type-Options': 'nosniff',
       },
     })

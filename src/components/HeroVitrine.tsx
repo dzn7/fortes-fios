@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
-import Image, { getImageProps } from 'next/image'
 import useEmblaCarousel from 'embla-carousel-react'
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -17,6 +16,7 @@ import {
   type PesoTituloBanner,
   type PosicaoTextoBanner,
 } from '@/lib/vitrineBannerTexto'
+import { criarFontesResponsivasBanner } from '@/lib/imagem-publica.mjs'
 
 type ContrasteTexto = 'claro' | 'escuro'
 type IntensidadeOverlay = 'sem_overlay' | 'suave' | 'forte'
@@ -127,37 +127,21 @@ function ImagemResponsivaBanner({
   banner: BannerVitrine
   prioridade: boolean
 }) {
-  const desktop = getImageProps({
-    src: banner.imagemDesktopUrl,
-    alt: '',
-    fill: true,
-    sizes: '100vw',
-    priority: prioridade,
-  }).props
-  const mobile = banner.imagemMobileUrl
-    ? getImageProps({
-        src: banner.imagemMobileUrl,
-        alt: banner.titulo || 'Destaque Fortes Fios',
-        fill: true,
-        sizes: '100vw',
-        priority: prioridade,
-      }).props
-    : null
-  const imagemBase = mobile ?? desktop
+  const fontes = criarFontesResponsivasBanner({
+    desktop: banner.imagemDesktopUrl,
+    mobile: banner.imagemMobileUrl,
+  })
 
   return (
     <picture>
-      {mobile ? (
-        <source
-          media="(min-width: 640px)"
-          srcSet={desktop.srcSet}
-          sizes={desktop.sizes}
-        />
-      ) : null}
+      {fontes.srcMobile ? <source media={fontes.mediaMobile} srcSet={fontes.srcMobile} /> : null}
       <img
-        {...imagemBase}
+        src={fontes.srcDesktop}
         alt={banner.titulo || 'Destaque Fortes Fios'}
-        className="object-contain"
+        className="absolute inset-0 h-full w-full object-contain"
+        decoding="async"
+        fetchPriority={prioridade ? 'high' : 'auto'}
+        loading={prioridade ? 'eager' : 'lazy'}
       />
     </picture>
   )
