@@ -467,38 +467,33 @@ O `AppToaster` posiciona notificações no **topo** (`top-center` no mobile, `to
 - Cachear `/`, respostas HTML ou `text/x-component` no service worker do Next; uma versão antiga pode hidratar com chunks novos.
 - Executar transições de scroll suave enquanto uma lista paginada troca cards por skeletons; a mudança simultânea de altura pode deixar o container em uma posição intermediária.
 
-## Onboarding (aulas guiadas dos módulos)
+## Onboarding e Ajuda do Admin
 
-Módulo `src/features/onboarding/` — tour interativo + central de ajuda, montado uma vez em `src/app/admin/layout.tsx` (`OnboardingProvider` + `OnboardingRoot`). Inspirado no onboarding do Juridiq; **sem vídeos** e **sem "IA faz por você"**. Config-driven: um novo módulo = um `TourConfig` em `config/*` registrado em `config/index.ts`.
+Módulo `src/features/onboarding/` — documentação da Ajuda + tour opcional, montado uma vez em `src/app/admin/layout.tsx` (`OnboardingProvider` + `OnboardingRoot`). **Sem vídeos**. A fonte da verdade do conteúdo é o catálogo de artigos, não a lista antiga de treinamentos.
 
 | Peça | Caminho | Responsabilidade |
 |---|---|---|
-| Provider/estado | `context.tsx` | Estado global (tour ativo, etapa, progresso); `usePathname`/`useRouter` (App Router); id do usuário via `useAdminAuth`. |
-| Persistência | `storage.ts` | Progresso em **localStorage por usuário** (`edienai:onboarding:<userId>`). Sem tabela no Supabase (evita migração coordenada). |
-| Spotlight | `components/spotlight.tsx` | **Overlay escuro + recorte** (SVG mask) com anel `primaryBlue` pulsante; `pointer-events:none` (tela segue clicável). |
-| Popover / Sheet | `components/tour-popover.tsx` (desktop), `tour-mobile-sheet.tsx` (mobile, slider inferior com handle) | Conteúdo da etapa via `step-content.tsx` (badges, progresso, Voltar/Avançar, "Ver na prática"). Escolha por `useIsMobile`. |
-| Botão Ajuda | `components/help-button.tsx` | Pílula flutuante (bottom-right, `/admin`, fora do login; some durante tour). Abre o painel. |
-| Painel Ajuda | `components/help-panel.tsx` + `module-catalog.tsx` | `Sheet` (lateral desktop / inferior mobile): "Ver tutorial desta tela" + "Ver todos os treinamentos" (catálogo por grupo da sidebar, status Concluído/Continuar/Iniciar/**Em breve**) + card de progresso 🏆. |
-| Engine | `engine/*` | `element-tracker` (rastreio sem polling), `positioning`, `dom` (waitForElement), `route-match`, `use-foreign-dialog`, `demo-runner` (cursor simulado). |
+| Catálogo de artigos | `help/catalogo.mjs` | Um artigo por rota real do menu (`rota → título → categoria → resumo → seções → palavras-chave`) + Notificações (virtual). Busca, contexto por rota e auditoria de cobertura. |
+| Sincronia com o menu | `help/sincronizar-menu.ts` | Em desenvolvimento, alerta se o menu ganhar rota sem artigo. |
+| Provider/estado | `context.tsx` | Estado global (tour ativo, etapa, progresso); `usePathname`/`useRouter`; id do usuário via `useAdminAuth`. |
+| Persistência | `storage.ts` | Progresso de tour em **localStorage por usuário** (`edienai:onboarding:<userId>`). |
+| Spotlight | `components/spotlight.tsx` | Overlay + recorte (SVG mask) com anel `primaryBlue`; `pointer-events:none`. |
+| Popover / Sheet do tour | `components/tour-popover.tsx` (desktop), `tour-mobile-sheet.tsx` (mobile) | Etapas do tour guiado, só quando houver `TourConfig` registrado. |
+| Botão Ajuda | `components/help-button.tsx` | Pílula flutuante (bottom-right, `/admin`, fora do login; some durante tour). |
+| Painel Ajuda | `components/help-panel.tsx` + `module-catalog.tsx` | `Sheet` (lateral desktop / inferior mobile): artigo da tela atual, busca, índice das áreas reais (sem “Em breve”) e botão de tutorial guiado só em Finanças. |
+| Engine | `engine/*` | `element-tracker`, `positioning`, `dom`, `route-match`, `use-foreign-dialog`, `demo-runner`. |
 
-**Regra do dado de demonstração (ver AGENTS.md §0.2.5):** o alvo da div interativa é **simulado no cliente** — `demo/crediario-demo-store.ts` (store externa via `useSyncExternalStore`) mantém uma conta falsa (com consumos) + um flag `modalAberto` que o tour usa para pedir a abertura. **Reusa a UI REAL — nunca cria modal/linha paralelos** (AGENTS §5):
-- O `PainelCrediario` lê a store (`useDemoCrediario`), mapeia a conta falsa para o shape `ContaCrediario`/`MovimentoCrediario` e a **injeta no topo de `contasFiltradas`**. Ela renderiza pela mesma linha/card real e abre o **modal real** da tela.
-- Toda ação da conta demo é **guardada por `id === CONTA_DEMO_ID`**: quitar → store (client-side); pagamento/PDF/cancelar → toast de exemplo. **Nada toca o Supabase.**
-- Âncoras `data-onboarding` (condicionais à conta demo): `demo-card` (linha), `demo-dropdown` (menu ⋯), e no modal real `demo-modal-visao`, `demo-pagamento`, `demo-quitar`, `demo-pdf`.
-- `demo/CrediarioDemoBridge.tsx` dirige a conta pelo passo do tour: cria ao iniciar, seta `modalAberto` nas etapas `modal-*` (o painel abre/fecha o modal real via efeito), quita em `modal-quitar`, remove ao encerrar.
+**Regra do dado de demonstração (ver AGENTS.md §0.2.5):** o alvo de um tour guiado é **simulado no cliente** e entra na UI real. O tour de Finanças injeta uma diária falsa (`demo/financas-demo-store.ts` + `FinancasDemoBridge`) no calendário/lista reais, blindada por `DIARIA_DEMO_ID`. Stores de Crediário e Painel continuam no repositório, mas os tours **não estão registrados**. Nada grava no banco para tutorial.
 
-**Auto-start:** desligado (`autoStart: false` no tour) — o tour/ajuda **só abre ao clicar em Ajuda**, nunca ao entrar na tela.
+**Auto-start:** desligado (`autoStart: false`) — o tour **só abre pelo botão do tutorial guiado** na Ajuda de Finanças, nunca ao entrar na tela.
 
-Tours prontos (demais módulos aparecem no catálogo como "Em breve" até ganharem config):
+**Conteúdo da Ajuda:** artigos para todas as rotas de `GRUPOS_MENU_ADMIN` (Visão geral, Pedidos, Novo pedido, Pagamentos, Entregas, Equipe, Clientes e acessos, Cidades de entrega, Produtos e categorias, Estoque, Vitrine, Cupons, Finanças, Análise diária, Relatórios) e o artigo virtual Notificações. Abrir Ajuda em uma rota mostra o artigo correspondente; busca e o índice cobrem as demais áreas sem sair da página.
 
-- **Crediário** (`config/crediario.ts`): problema → benefício → onde se cria → menu ⋯ → abrir a conta → ensinar no modal real (visão, pagamento, quitar, PDF) → conclusão.
-- **Finanças** (`config/financas.ts`, 16 etapas): lucro/ocultar valores → Receitas / Despesas / Salário → cards recebido×pago → período e filtros → lista de lançamentos → **Diárias** (troca de aba com demonstração ao vivo, nova diária, calendário, calendário×lista) → Análise/Pagamentos → conclusão. Diária de exemplo client-side (`demo/financas-demo-store.ts` + `FinancasDemoBridge`) injetada no calendário/lista **reais** do `PainelDiarias`, com exclusão blindada por `DIARIA_DEMO_ID`.
+Tour registrado (os arquivos de Crediário e Painel existem, mas **não são registrados** — as telas estão em `ROTAS_ADMIN_OCULTAS`):
 
-- **Painel** (`config/painel.ts`, 11 etapas): as três colunas do fluxo → o card (canal, itens, total) → avançar status → menu ⋯ → arrastar → atalhos de coluna no mobile → busca → conclusão. Pedido de exemplo client-side (`demo/painel-demo-store.ts` + `PainelDemoBridge`) injetado na coluna **Em análise** do board real; todas as ações passam por `comGuardaDemo` (toast, sem banco), e o arraste é inócuo porque o demo não vive no estado `pedidos`.
+- **Finanças** (`config/financas.ts`): lucro bruto (subtotal − custo histórico do item) → Receitas / Despesas / Salário → cards → período → lançamentos → **Diárias** → Análise/Pagamentos. Diária de exemplo client-side (`demo/financas-demo-store.ts` + `FinancasDemoBridge`) injetada no calendário/lista **reais** do `PainelDiarias`, com exclusão blindada por `DIARIA_DEMO_ID`.
 
 Âncoras de Finanças: `financas-lucro`, `financas-receita`, `financas-despesa`, `financas-salario`, `financas-cards`, `financas-periodo`, `financas-lancamentos`, `financas-toggle-principal`, `financas-nova-diaria`, `financas-diarias-conteudo`, `financas-diarias-vista`, `financas-tabs`.
-
-Âncoras do Painel: `painel-resumo`, `painel-busca`, `painel-pills`, `painel-board` e, apenas no card de exemplo, `painel-card`, `painel-avancar`, `painel-menu`, `painel-arrastar`.
 
 ## Divergências existentes a preservar até tarefa específica
 

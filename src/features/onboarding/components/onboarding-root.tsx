@@ -9,6 +9,7 @@ import { TourRenderer } from './tour-renderer'
 
 // Registro config-driven de todos os tours (efeito colateral do import).
 import '../config'
+import '../help/sincronizar-menu'
 
 /**
  * Ponto único de montagem do onboarding no admin.

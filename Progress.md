@@ -1,5 +1,25 @@
 # Progress
 
+## [2026-08-15] Reconstrução da Ajuda do Admin a partir do produto real
+
+**Agente/Modelo:** Cursor Grok 4.6
+**Objetivo:** a Ajuda do `/admin` documentar só o que o usuário alcança hoje, com Estoque, Vitrine e Lucro alinhados ao código.
+**Arquivos alterados:** `specs/ajuda-admin.md`, `tests/ajuda-admin.test.mjs`, `src/features/onboarding/help/catalogo.mjs`, `src/features/onboarding/help/catalogo.d.mts`, `src/features/onboarding/help/sincronizar-menu.ts`, `src/features/onboarding/components/{help-panel,module-catalog,help-button,onboarding-root}.tsx`, `src/features/onboarding/config/index.ts`, `src/features/onboarding/config/financas.ts`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- Auditei o menu (`GRUPOS_MENU_ADMIN`), `ROTAS_ADMIN_OCULTAS` e as telas importadas; a lista antiga de treinamentos não foi usada como fonte.
+- Spec e 10 testes em RED (módulo inexistente) antes do catálogo; GREEN com cobertura, contexto, busca e exclusão de legado.
+- Catálogo central `rota → título → categoria → conteúdo → palavras-chave` para as 15 rotas reais + artigo virtual de Notificações.
+- Painel mostra o artigo da tela atual, busca e índice das áreas; sumiu o “Em breve” e o progresso 0 de 3 dos tours mortos.
+- Tours de Crediário e Painel deixaram de ser registrados (arquivos mantidos). Tour de Finanças corrigido: Lucro = subtotal − custo histórico do item; abas Lançamentos / Diárias / Lucro.
+- Alerta em desenvolvimento se o menu ganhar rota sem artigo.
+**Decisões tomadas:** documentação por artigo em vez de 15 tours com demo store; não apaguei configs/demos de Crediário e Painel; não documentei Fiado nem cupom de combo (legado visível, fora da operação). Lucro documentado pela RPC `obter_lucro_produtos`, não por fórmula inventada.
+**Verificação:** RED `ERR_MODULE_NOT_FOUND` → GREEN `node --test tests/ajuda-admin.test.mjs` (10/10) · `npx tsc --noEmit --incremental false` ✓ · ReadLints sem erros nos arquivos tocados · bug-hunter ✓ (tutorial guiado só na tela correspondente). Browser/mobile não exercitados nesta sessão (Ajuda só aparece após login).
+**Pendências / próximos passos:** smoke visual após login em cada rota do menu, desktop e mobile. `npm run lint` continua o script legado incompatível com Next 16.
+**Armadilhas descobertas:**
+- O progresso “0 de 3” vinha de tours registrados para `/admin/crediario` e `/admin/painel`, rotas que o layout redireciona. O catálogo da sidebar nunca mostrava esses tours, só “Em breve”.
+- Lucro bruto ≠ resultado do caixa: a aba Lucro ignora despesas/salário/diárias e só usa itens com `custo_unitario` em pedidos que não estão cancelados, aguardando ou pendentes.
+- `usePathname` não traz query string; `?produto=` em Estoque não muda o artigo contextual.
+
 ## [2026-08-15] Central de Notificações do Admin e alerta visual de estoque
 
 **Agente/Modelo:** Claude Opus 5

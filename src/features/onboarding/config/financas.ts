@@ -14,9 +14,9 @@ import type { TourConfig } from '../types'
 export const financasTour: TourConfig = {
   id: 'financas',
   name: 'Finanças',
-  module: 'Análise',
+  module: 'Gestão',
   routes: ['/admin/financas'],
-  descricao: 'Lucro, receitas, despesas, salários e diárias em um só lugar.',
+  descricao: 'Lucro bruto, receitas, despesas, salários e diárias em um só lugar.',
   order: 2,
   autoStart: false,
   steps: [
@@ -37,8 +37,8 @@ export const financasTour: TourConfig = {
     {
       id: 'lucro',
       kind: 'beneficio',
-      title: 'Seu lucro tem uma visão completa',
-      body: 'Abra Lucro para acompanhar vendas analisadas, custos, margem, evolução mensal e resultado por produto. O olhinho ao lado do título esconde os valores da tela quando você precisar de privacidade.',
+      title: 'Lucro bruto é venda menos custo do produto',
+      body: 'A aba Lucro mostra o subtotal dos itens vendidos menos o custo de compra gravado no item na hora da venda. Pedidos cancelados, aguardando ou pendentes ficam de fora. Itens sem custo não entram na conta e o aviso avisa que o resultado é parcial. O olho ao lado do título esconde os valores.',
       target: '[data-onboarding="financas-lucro"]',
       skipIfMissing: true,
       placement: 'bottom',
@@ -101,7 +101,7 @@ export const financasTour: TourConfig = {
       id: 'toggle-diarias',
       kind: 'demonstracao',
       title: 'Agora as Diárias',
-      body: 'Este botão troca a área principal entre "Lançamentos" e "Diárias". Clique em Diárias — é onde você controla quem trabalhou avulso e quanto recebeu.',
+      body: 'Estas abas trocam a área principal entre Lançamentos, Diárias e Lucro. Clique em Diárias — é onde você controla quem trabalhou avulso e quanto recebeu.',
       target: '[data-onboarding="financas-toggle-principal"]',
       advanceOn: {
         type: 'element-visible',
