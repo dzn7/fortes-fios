@@ -1,5 +1,21 @@
 # Progress
 
+## [2026-08-15] Governança TDD/Spec-Driven e especificação do estoque
+
+**Agente/Modelo:** Codex GPT-5  
+**Objetivo:** tornar TDD e Spec-Driven obrigatórios e definir, antes do código, o comportamento completo do controle de estoque.  
+**Arquivos alterados:** `AGENTS.md`, `specs/controle-estoque.md`, `Progress.md`.  
+**O que foi feito:**
+- `AGENTS.md` agora exige o ciclo SPEC → RED → GREEN → REFACTOR → VALIDAÇÃO e proíbe implementação antes do teste falho.
+- Auditados schema real do Supabase, formulário/listagem de Produtos, site público, Context/carrinho, checkout, novo pedido Admin, edição de pedido e pagamento online.
+- Documentada a proposta de quantidade, limite baixo e bloqueio comercial sem status duplicado.
+- Documentados os 16 cenários corrigidos, sem tenant/slug, incluindo proteção contra bypass do frontend.
+- Identificado que `ModalEditarPedido` não preserva `produto_id` em novos itens e que o checkout direto exige validação autoritativa no banco.
+**Decisões tomadas:** produtos existentes usam quantidade zero com bloqueio desativado para não interromper vendas; a reserva automática na criação do item foi recomendada, mas ficou no gate humano antes de migration ou implementação.  
+**Verificação:** leitura cruzada da spec com código e schema de produção via Management API ✓ · nenhuma migration ou implementação executada ✓.  
+**Pendências / próximos passos:** validar o momento de reserva/baixa; após aprovação, escrever e executar os testes em RED antes de implementar.  
+**Armadilhas descobertas:** o carrinho é localStorage e os pedidos são gravados direto no Supabase; bloquear apenas a UI não protege estoque. A autenticação Admin atual não sustenta um endpoint `service_role` realmente privilegiado sem uma task coordenada de auth/RLS.
+
 ## [2026-08-14] Correção da fonte selecionada no hero público
 
 **Agente/Modelo:** Codex GPT-5

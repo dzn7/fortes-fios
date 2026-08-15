@@ -31,6 +31,7 @@ import {
   type PedidoSnapshotImpressao,
 } from '@/lib/filaImpressao'
 import { limparSnapshotsOrfaosPagamentos } from '@/lib/pagamentoParcial'
+import { avaliarCompraProduto, produtoBloqueadoPorEstoque } from '@/lib/estoque-produto.mjs'
 import { ModalSheet } from '@/components/ui/modal-sheet'
 
 type Pedido = {
@@ -66,6 +67,7 @@ type Bairro = {
 
 type ItemPedido = {
   id: string
+  produto_id?: string | null
   nome_item?: string
   quantidade: number
   preco_unitario: number
@@ -80,6 +82,10 @@ type Produto = {
   nome: string
   preco: number
   categoria: string
+  origem: 'produto' | 'bebida'
+  estoque_quantidade?: number
+  estoque_minimo?: number
+  bloquear_venda_sem_estoque?: boolean
 }
 
 type Pagamento = {
@@ -348,7 +354,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
     try {
       const { data: produtosData } = await supabase
         .from('produtos')
-        .select('id, nome, preco, categoria')
+        .select('id, nome, preco, categoria, estoque_quantidade, estoque_minimo, bloquear_venda_sem_estoque')
         .eq('disponivel', true)
         .order('nome')
 
@@ -363,6 +369,10 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
         nome: p.nome,
         preco: Number(p.preco),
         categoria: p.categoria,
+        origem: 'produto' as const,
+        estoque_quantidade: Number(p.estoque_quantidade || 0),
+        estoque_minimo: Number(p.estoque_minimo || 0),
+        bloquear_venda_sem_estoque: p.bloquear_venda_sem_estoque === true,
       }))
 
       const bebidasFormatadas = (bebidasData || []).map((b) => ({
@@ -370,6 +380,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
         nome: `${b.nome}${b.descricao ? ` - ${b.descricao}` : ''}`,
         preco: Number(b.preco),
         categoria: normalizarNomeCategoria(b.categoria),
+        origem: 'bebida' as const,
       }))
 
       setProdutos([...produtosFormatados, ...bebidasFormatadas])
@@ -429,8 +440,17 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
   }, [])
 
   const adicionarItem = useCallback((produto: Produto) => {
+    const quantidadeAtual = itens
+      .filter((item) => item.produto_id === produto.id)
+      .reduce((total, item) => total + item.quantidade, 0)
+    const avaliacao = avaliarCompraProduto(produto, quantidadeAtual, 1)
+    if (!avaliacao.permitido) {
+      toast.warning(avaliacao.motivo || 'Produto indisponível')
+      return
+    }
     const novoItem: ItemPedido = {
       id: `temp-${Date.now()}`,
+      produto_id: produto.origem === 'produto' ? produto.id : null,
       nome_item: produto.nome,
       quantidade: 1,
       preco_unitario: produto.preco,
@@ -441,7 +461,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
     setItens((prev) => [...prev, novoItem])
     setBuscaProduto('')
     setMostrarProdutos(false)
-  }, [])
+  }, [itens])
 
   const removerItem = useCallback((itemId: string) => {
     setItens((prev) => prev.filter((item) => item.id !== itemId))
@@ -449,6 +469,20 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
 
   const atualizarQuantidade = useCallback((itemId: string, quantidade: number) => {
     if (quantidade < 1) return
+    const itemAtual = itens.find((item) => item.id === itemId)
+    const produto = itemAtual?.produto_id
+      ? produtos.find((produtoAtual) => produtoAtual.id === itemAtual.produto_id)
+      : null
+    if (itemAtual && produto && quantidade > itemAtual.quantidade) {
+      const quantidadeOutrosItens = itens
+        .filter((item) => item.id !== itemId && item.produto_id === produto.id)
+        .reduce((total, item) => total + item.quantidade, 0)
+      const avaliacao = avaliarCompraProduto(produto, quantidadeOutrosItens, quantidade)
+      if (!avaliacao.permitido) {
+        toast.warning(avaliacao.motivo || 'Quantidade indisponível')
+        return
+      }
+    }
     setItens((prev) =>
       prev.map((item) => {
         if (item.id !== itemId) return item
@@ -458,7 +492,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
         return { ...item, quantidade, subtotal: (item.preco_unitario + precoAdicionais) * quantidade }
       })
     )
-  }, [])
+  }, [itens, produtos])
 
   const atualizarObservacoes = useCallback((itemId: string, observacoes: string) => {
     setItens((prev) => prev.map((item) => (item.id === itemId ? { ...item, observacoes } : item)))
@@ -694,6 +728,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
       for (const item of itens) {
         const dadosItem = {
           pedido_id: pedido.id,
+          produto_id: item.produto_id || null,
           nome_item: item.nome_item || 'Produto',
           quantidade: item.quantidade,
           preco_unitario: item.preco_unitario,
@@ -1062,7 +1097,8 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
                             <button
                               key={produto.id}
                               onClick={() => adicionarItem(produto)}
-                              className="w-full px-4 py-2.5 text-left hover:bg-bordo-50 dark:hover:bg-bordo-950/20 transition-colors border-b border-zinc-100 dark:border-zinc-800 last:border-0 cursor-pointer"
+                              disabled={produtoBloqueadoPorEstoque(produto)}
+                              className="w-full px-4 py-2.5 text-left hover:bg-bordo-50 dark:hover:bg-bordo-950/20 transition-colors border-b border-zinc-100 dark:border-zinc-800 last:border-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <div className="flex items-center justify-between">
                                 <div>
@@ -1070,7 +1106,7 @@ export default function ModalEditarPedido({ pedido, aberto, onFechar, onSucesso 
                                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{produto.categoria}</p>
                                 </div>
                                 <span className="text-sm font-bold text-bordo-600 dark:text-bordo-400">
-                                  R$ {produto.preco.toFixed(2)}
+                                  {produtoBloqueadoPorEstoque(produto) ? 'Esgotado' : `R$ ${produto.preco.toFixed(2)}`}
                                 </span>
                               </div>
                             </button>

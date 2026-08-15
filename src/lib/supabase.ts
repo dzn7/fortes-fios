@@ -21,6 +21,9 @@ export type Produto = {
   categoria: string
   imagem_url: string
   disponivel: boolean
+  estoque_quantidade?: number
+  estoque_minimo?: number
+  bloquear_venda_sem_estoque?: boolean
   ordem: number
   destaque: boolean
   created_at: string

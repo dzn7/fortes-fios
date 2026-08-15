@@ -40,6 +40,7 @@ import { AjudaPedidoPublica } from '@/components/AjudaPedidoPublica'
 import { Produto, supabase } from '@/lib/supabase'
 import { useStatusLoja } from '@/lib/useStatusLoja'
 import { useCarrinho } from '@/contexts/CarrinhoContext'
+import { produtoDisponivelParaCompra } from '@/lib/estoque-produto.mjs'
 import {
   CATEGORIA_FILTRO_TODOS,
   normalizarNomeCategoria,
@@ -171,7 +172,7 @@ export default function Home() {
     })
 
   const { lojaFechada, numeroWhatsApp } = useStatusLoja()
-  const { adicionarItem } = useCarrinho()
+  const { adicionarItem, sincronizarProdutos } = useCarrinho()
 
   useEffect(() => {
     document.body.classList.add('fortes-fios-public')
@@ -213,7 +214,7 @@ export default function Home() {
         let consulta = supabase
           .from('produtos')
           .select(
-            'id, nome, descricao, preco, preco_original, desconto, parcelamento_ativo, parcelas_sem_juros, categoria, imagem_url, disponivel, destaque, ordem, created_at, updated_at',
+            'id, nome, descricao, preco, preco_original, desconto, parcelamento_ativo, parcelas_sem_juros, categoria, imagem_url, disponivel, destaque, ordem, estoque_quantidade, estoque_minimo, bloquear_venda_sem_estoque, created_at, updated_at',
           )
           .eq('disponivel', true)
 
@@ -349,11 +350,19 @@ export default function Home() {
       .channel('produtos-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'produtos' },
-        () => {
-          carregarProdutos()
+        { event: 'UPDATE', schema: 'public', table: 'produtos' },
+        (evento) => {
+          const atualizado = evento.new as Produto
+          setProdutos((estadoAtual) => atualizado.disponivel === false
+            ? estadoAtual.filter((produto) => produto.id !== atualizado.id)
+            : estadoAtual.map((produto) => produto.id === atualizado.id ? atualizado : produto))
         },
       )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'produtos' }, () => carregarProdutos())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'produtos' }, (evento) => {
+        const removido = evento.old as { id?: string }
+        if (removido.id) setProdutos((estadoAtual) => estadoAtual.filter((produto) => produto.id !== removido.id))
+      })
       .subscribe()
 
     const channelAdicionais = supabase
@@ -402,6 +411,10 @@ export default function Home() {
     sincronizarCardapio,
   ])
 
+  useEffect(() => {
+    if (!carregando) sincronizarProdutos(produtos)
+  }, [carregando, produtos, sincronizarProdutos])
+
   const mostrarAvisoLojaFechada = () => {
     setModalNotificacao({
       aberto: true,
@@ -428,9 +441,21 @@ export default function Home() {
       return
     }
 
+    if (!produtoDisponivelParaCompra(produto)) {
+      toast.warning('Produto esgotado', {
+        description: `${produto.nome} não está disponível para compra no momento.`,
+      })
+      return
+    }
+
     if (!temAdicionaisDisponiveis) {
-      adicionarItem(produto, 1, [], undefined)
-      mostrarItemAdicionado(produto.nome)
+      if (adicionarItem(produto, 1, [], undefined)) {
+        mostrarItemAdicionado(produto.nome)
+      } else {
+        toast.warning('Quantidade indisponível', {
+          description: 'O estoque deste produto foi atualizado. Revise o carrinho.',
+        })
+      }
       return
     }
 

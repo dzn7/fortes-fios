@@ -13,6 +13,7 @@ import { registrarClientePedido } from '@/lib/registrar-cliente-pedido'
 import { nomeClienteParaPedido, nomeClienteParaPontoSalao } from '@/lib/nome-cliente-local.mjs'
 import { TEMPO_PADRAO_MESA_MINUTOS, calcularLiberacaoMesa } from '@/lib/mesas-tempo'
 import { cn } from '@/lib/utils'
+import { avaliarCompraProduto } from '@/lib/estoque-produto.mjs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Drawer, DrawerContent, DrawerDescription, DrawerNested, DrawerTitle } from '@/components/ui/drawer'
@@ -737,6 +738,16 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
     setAlerta({ aberto: true, tipo, titulo, mensagem })
   }
 
+  const alterarQuantidadeCarrinho = (item: ItemCarrinho, quantidade: number) => {
+    if (!atualizarQuantidade(item.id, quantidade)) {
+      mostrarAlerta(
+        'aviso',
+        'Quantidade indisponível',
+        `O estoque de ${item.produto.nome} não comporta essa quantidade.`,
+      )
+    }
+  }
+
   const mostrarFeedbackCupom = (
     tipo: FeedbackCupom['tipo'],
     titulo: string,
@@ -1078,7 +1089,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
     }
 
     const [resProdutos, resBebidas, resCombos] = await Promise.all([
-      supabase.from('produtos').select('id').in('id', idsCatalogo),
+      supabase.from('produtos').select('id, nome, disponivel, estoque_quantidade, estoque_minimo, bloquear_venda_sem_estoque').in('id', idsCatalogo),
       supabase.from('bebidas').select('id').in('id', idsCatalogo),
       supabase.from('combos').select('id').in('id', idsCatalogo),
     ])
@@ -1086,6 +1097,23 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
     if (resProdutos.error) throw resProdutos.error
     if (resBebidas.error) throw resBebidas.error
     if (resCombos.error) throw resCombos.error
+
+    const produtosCatalogados = new Map(
+      (resProdutos.data || []).map((registro) => [String(registro.id), registro]),
+    )
+    const quantidadesPorProduto = itensCarrinho.reduce((acumulado, item) => {
+      acumulado.set(item.produto.id, (acumulado.get(item.produto.id) || 0) + item.quantidade)
+      return acumulado
+    }, new Map<string, number>())
+
+    quantidadesPorProduto.forEach((quantidade, produtoId) => {
+      const produtoAtual = produtosCatalogados.get(produtoId)
+      if (!produtoAtual) return
+      const avaliacao = avaliarCompraProduto(produtoAtual, 0, quantidade)
+      if (!avaliacao.permitido) {
+        throw new Error(`${produtoAtual.nome}: ${avaliacao.motivo || 'quantidade indisponível'}.`)
+      }
+    })
 
     const idsProdutos = new Set((resProdutos.data || []).map((registro) => String((registro as { id: string }).id)))
     const idsBebidas = new Set((resBebidas.data || []).map((registro) => String((registro as { id: string }).id)))
@@ -1529,7 +1557,10 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       const mensagemErro =
         error instanceof Error &&
         error.message &&
-        error.message.toLowerCase().includes('mesa')
+        (error.message.toLowerCase().includes('mesa') ||
+          error.message.toLowerCase().includes('estoque') ||
+          error.message.toLowerCase().includes('esgotado') ||
+          error.message.toLowerCase().includes('unidade'))
           ? error.message
           : 'Não foi possível enviar o pedido. Por favor, tente novamente.'
 
@@ -1891,7 +1922,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => atualizarQuantidade(item.id, item.quantidade - 1)}
+                                  onClick={() => alterarQuantidadeCarrinho(item, item.quantidade - 1)}
                                   className="h-10 w-10 rounded-r-none"
                                   aria-label={`Diminuir quantidade de ${item.produto.nome}`}
                                 >
@@ -1902,7 +1933,8 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => atualizarQuantidade(item.id, item.quantidade + 1)}
+                                  onClick={() => alterarQuantidadeCarrinho(item, item.quantidade + 1)}
+                                  disabled={item.produto.bloquear_venda_sem_estoque === true && item.quantidade >= Number(item.produto.estoque_quantidade || 0)}
                                   className="h-10 w-10 rounded-l-none"
                                   aria-label={`Aumentar quantidade de ${item.produto.nome}`}
                                 >

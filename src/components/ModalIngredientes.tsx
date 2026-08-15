@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { produtoBloqueadoPorEstoque } from '@/lib/estoque-produto.mjs'
 
 type ModalIngredientesProps = {
   produto: Produto | null
@@ -44,6 +45,7 @@ export default function ModalIngredientes({
   const quantidadeParcelas = normalizarQuantidadeParcelas(
     produto.parcelas_sem_juros,
   )
+  const esgotado = produtoBloqueadoPorEstoque(produto)
 
   const adicionarAoCarrinho = () => {
     onFechar()
@@ -64,7 +66,7 @@ export default function ModalIngredientes({
                 alt={produto.nome}
                 fill
                 sizes="(max-width: 640px) 100vw, 45vw"
-                className="object-cover"
+                className={esgotado ? 'object-cover grayscale opacity-50' : 'object-cover'}
               />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -76,6 +78,11 @@ export default function ModalIngredientes({
                 <span className="text-sm">Foto em breve</span>
               </div>
             )}
+            {esgotado ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/20">
+                <Badge variant="secondary" className="px-4 py-2 tracking-[0.18em]">ESGOTADO</Badge>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex min-h-0 flex-col p-5 sm:p-7">
@@ -140,10 +147,11 @@ export default function ModalIngredientes({
                 type="button"
                 size="lg"
                 onClick={adicionarAoCarrinho}
+                disabled={esgotado}
                 className="w-full gap-2"
               >
                 <ShoppingBag className="size-5" aria-hidden />
-                Adicionar ao carrinho
+                {esgotado ? 'Produto esgotado' : 'Adicionar ao carrinho'}
               </Button>
             </DialogFooter>
           </div>

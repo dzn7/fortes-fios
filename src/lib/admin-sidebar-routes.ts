@@ -61,6 +61,7 @@ export const GRUPOS_MENU_ADMIN: GrupoSidebarRota[] = [
     titulo: 'Catálogo',
     itens: [
       { id: '/admin/produtos', texto: 'Produtos e categorias', icone: Layers, path: '/admin/produtos', categoria: 'Catálogo' },
+      { id: '/admin/estoque', texto: 'Estoque', icone: Archive, path: '/admin/estoque', categoria: 'Catálogo' },
       { id: '/admin/vitrine', texto: 'Vitrine', icone: ImageIcon, path: '/admin/vitrine', categoria: 'Catálogo' },
       { id: '/admin/cupons', texto: 'Cupons', icone: BadgePercent, path: '/admin/cupons', categoria: 'Catálogo' },
     ],

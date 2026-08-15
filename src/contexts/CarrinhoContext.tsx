@@ -1,13 +1,15 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useCallback, useContext, useState, useEffect, ReactNode } from 'react'
 import { Produto, Adicional, ItemCarrinho } from '@/lib/supabase'
+import { avaliarCompraProduto, produtoDisponivelParaCompra } from '@/lib/estoque-produto.mjs'
 
 type CarrinhoContextType = {
   itens: ItemCarrinho[]
-  adicionarItem: (produto: Produto, quantidade: number, adicionais: Adicional[], observacoes?: string) => void
+  adicionarItem: (produto: Produto, quantidade: number, adicionais: Adicional[], observacoes?: string) => boolean
   removerItem: (id: string) => void
-  atualizarQuantidade: (id: string, quantidade: number) => void
+  atualizarQuantidade: (id: string, quantidade: number) => boolean
+  sincronizarProdutos: (produtos: Produto[]) => void
   limparCarrinho: () => void
   total: number
   quantidadeTotal: number
@@ -82,8 +84,13 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
     quantidade: number,
     adicionais: Adicional[],
     observacoes?: string
-  ) => {
+  ): boolean => {
     const produtoNormalizado = normalizarProduto(produto)
+    const quantidadeAtual = itens
+      .filter((item) => item.produto.id === produtoNormalizado.id)
+      .reduce((total, item) => total + item.quantidade, 0)
+    const avaliacao = avaliarCompraProduto(produtoNormalizado, quantidadeAtual, quantidade)
+    if (!avaliacao.permitido) return false
     const subtotalAdicionais = adicionais.reduce((acc, ad) => acc + ad.preco, 0)
     const subtotal = (produtoNormalizado.preco + subtotalAdicionais) * quantidade
 
@@ -97,17 +104,30 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
     }
 
     setItens((prev) => [...prev, novoItem])
+    return true
   }
 
   const removerItem = (id: string) => {
     setItens((prev) => prev.filter((item) => item.id !== id))
   }
 
-  const atualizarQuantidade = (id: string, quantidade: number) => {
+  const atualizarQuantidade = (id: string, quantidade: number): boolean => {
     if (quantidade <= 0) {
       removerItem(id)
-      return
+      return true
     }
+
+    const itemAtual = itens.find((item) => item.id === id)
+    if (!itemAtual) return false
+    const quantidadeOutrasLinhas = itens
+      .filter((item) => item.id !== id && item.produto.id === itemAtual.produto.id)
+      .reduce((total, item) => total + item.quantidade, 0)
+    const avaliacao = avaliarCompraProduto(
+      itemAtual.produto,
+      quantidadeOutrasLinhas,
+      quantidade,
+    )
+    if (!avaliacao.permitido) return false
 
     setItens((prev) =>
       prev.map((item) => {
@@ -119,7 +139,27 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
         return item
       })
     )
+    return true
   }
+
+  const sincronizarProdutos = useCallback((produtosAtuais: Produto[]) => {
+    const produtosPorId = new Map(produtosAtuais.map((produto) => [produto.id, produto]))
+    setItens((estadoAtual) => estadoAtual.flatMap((item) => {
+      const produtoAtual = produtosPorId.get(item.produto.id)
+      if (!produtoAtual || !produtoDisponivelParaCompra(produtoAtual)) return []
+
+      const produtoNormalizado = normalizarProduto({ ...item.produto, ...produtoAtual })
+      const quantidadeMaxima = produtoNormalizado.bloquear_venda_sem_estoque
+        ? Number(produtoNormalizado.estoque_quantidade || 0)
+        : null
+      const quantidade = quantidadeMaxima === null
+        ? item.quantidade
+        : Math.min(item.quantidade, quantidadeMaxima)
+      if (quantidade <= 0) return []
+
+      return [normalizarItemCarrinho({ ...item, produto: produtoNormalizado, quantidade })]
+    }))
+  }, [])
 
   const limparCarrinho = () => {
     setItens([])
@@ -135,6 +175,7 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
         adicionarItem,
         removerItem,
         atualizarQuantidade,
+        sincronizarProdutos,
         limparCarrinho,
         total,
         quantidadeTotal,

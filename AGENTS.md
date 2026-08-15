@@ -45,6 +45,18 @@ Se não puder preencher honestamente, **pare e pergunte** (§7). Depois execute 
 
 Comandos: `npx tsc --noEmit` (typecheck; **não há script `typecheck`**) · `npm run lint`. Rodou **nesta resposta**, ou não rodou — "deve passar" não conta. Feche com o bloco `CONCLUÍDO` do §8, acrescentando **arquivos vs. orçamento** (§0.1) e **decisão que tomei sozinho e você deveria revisar**.
 
+### §0.5 Desenvolvimento obrigatório: Spec-Driven + TDD
+
+Toda alteração funcional segue, nesta ordem: **SPEC → TESTE (RED) → IMPLEMENTAÇÃO (GREEN) → REFACTOR → VALIDAÇÃO**.
+
+1. Antes do código, registre objetivo, regras, estados, contratos, cenários e critérios de aceite em uma spec versionada. Decisão de negócio ou arquitetura ambígua exige validação do usuário (§7).
+2. Escreva ou ajuste primeiro o teste que demonstra o comportamento esperado e execute-o para confirmar que falha pela razão correta. Teste já verde não prova a mudança.
+3. Implemente somente o necessário para tornar o teste verde; não antecipe funcionalidade não especificada.
+4. Refatore apenas com a suíte verde e respeitando §4–§5.
+5. Valide a implementação contra a spec, os testes automatizados e o protocolo do §8. Correção sem teste de regressão exige justificativa explícita na spec e no `Progress.md`.
+
+É proibido implementar primeiro e escrever testes depois. Se o projeto não tiver infraestrutura adequada, use o mecanismo nativo já existente ou pare para alinhar uma dependência nova (§3.2); nunca simule que houve TDD.
+
 ## §1. Hierarquia de regras (resolução de conflitos)
 
 Quando duas orientações conflitarem, obedeça nesta ordem:

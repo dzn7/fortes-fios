@@ -8,6 +8,7 @@ import ModalIngredientes from './ModalIngredientes'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { produtoBloqueadoPorEstoque } from '@/lib/estoque-produto.mjs'
 import {
   calcularValorParcelaProduto,
   normalizarQuantidadeParcelas,
@@ -51,6 +52,7 @@ export default function CartaoProduto({
   const quantidadeParcelas = normalizarQuantidadeParcelas(
     produto.parcelas_sem_juros,
   )
+  const esgotado = produtoBloqueadoPorEstoque(produto)
 
   return (
     <>
@@ -86,6 +88,7 @@ export default function CartaoProduto({
                   'transition-[opacity,transform] duration-300 motion-reduce:transition-none motion-reduce:group-hover:scale-100',
                   ehDestaque ? 'object-cover' : 'object-contain p-3',
                   imagemCarregada ? 'opacity-100' : 'opacity-0',
+                  esgotado && 'grayscale opacity-45',
                 )}
                 onLoad={() => setImagemCarregada(true)}
                 onError={() => setErroImagem(true)}
@@ -121,6 +124,14 @@ export default function CartaoProduto({
               {ehOferta ? 'Oferta' : 'Mais vendido'}
             </Badge>
           )}
+
+          {esgotado ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/30">
+              <span className="rounded-full border border-foreground/15 bg-background/90 px-4 py-2 text-xs font-semibold tracking-[0.18em] text-foreground shadow-sm">
+                ESGOTADO
+              </span>
+            </div>
+          ) : null}
         </button>
 
         <div
@@ -200,14 +211,15 @@ export default function CartaoProduto({
             <Button
               type="button"
               onClick={() => onAdicionar(produto)}
+              disabled={esgotado}
               className={cn(
                 'min-h-11 w-full gap-1.5 px-3 text-xs sm:text-sm',
                 ehDestaque && 'rounded-full px-8',
               )}
-              aria-label={`Adicionar ${produto.nome} ao carrinho`}
+              aria-label={esgotado ? `${produto.nome} esgotado` : `Adicionar ${produto.nome} ao carrinho`}
             >
               <Plus className="h-4 w-4" />
-              <span>{ehDestaque ? 'Comprar' : 'Adicionar'}</span>
+              <span>{esgotado ? 'Esgotado' : ehDestaque ? 'Comprar' : 'Adicionar'}</span>
               {!ehDestaque && (
                 <span className="hidden sm:inline"> ao carrinho</span>
               )}

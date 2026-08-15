@@ -56,6 +56,9 @@ export type ProdutoFormulario = {
   categoria: string
   imagem_url?: string
   disponivel: boolean
+  estoque_quantidade?: number | null
+  estoque_minimo?: number | null
+  bloquear_venda_sem_estoque?: boolean | null
   tabela?: string
 }
 
@@ -69,6 +72,9 @@ export type DadosSalvarProduto = {
   quantidadeParcelas: number
   categoria: string
   disponivel: boolean
+  estoqueQuantidade: string
+  estoqueMinimo: string
+  bloquearVendaSemEstoque: boolean
 }
 
 type ModalFormularioProdutoProps = {
@@ -121,6 +127,9 @@ export const ModalFormularioProduto = ({
   )
   const [categoria, setCategoria] = useState('')
   const [disponivel, setDisponivel] = useState(true)
+  const [estoqueQuantidade, setEstoqueQuantidade] = useState('0')
+  const [estoqueMinimo, setEstoqueMinimo] = useState('5')
+  const [bloquearVendaSemEstoque, setBloquearVendaSemEstoque] = useState(false)
   const [criandoCategoria, setCriandoCategoria] = useState(false)
   const [novaCategoria, setNovaCategoria] = useState('')
   const [criandoCat, setCriandoCat] = useState(false)
@@ -139,6 +148,9 @@ export const ModalFormularioProduto = ({
       )
       setCategoria(produto.categoria)
       setDisponivel(produto.disponivel)
+      setEstoqueQuantidade(String(produto.estoque_quantidade ?? 0))
+      setEstoqueMinimo(String(produto.estoque_minimo ?? 5))
+      setBloquearVendaSemEstoque(produto.bloquear_venda_sem_estoque === true)
     } else {
       setNome('')
       setDescricao('')
@@ -149,6 +161,9 @@ export const ModalFormularioProduto = ({
       setQuantidadeParcelas(QUANTIDADE_PARCELAS_PADRAO)
       setCategoria(categorias[0] || categoriasBebidas[0] || categoriaBebidasFallback || '')
       setDisponivel(true)
+      setEstoqueQuantidade('0')
+      setEstoqueMinimo('5')
+      setBloquearVendaSemEstoque(false)
     }
     setCriandoCategoria(false)
     setNovaCategoria('')
@@ -192,6 +207,9 @@ export const ModalFormularioProduto = ({
       quantidadeParcelas,
       categoria,
       disponivel,
+      estoqueQuantidade,
+      estoqueMinimo,
+      bloquearVendaSemEstoque,
     })
   }
 
@@ -508,6 +526,60 @@ export const ModalFormularioProduto = ({
                   </p>
                 ) : null}
               </div>
+            </div>
+          ) : null}
+
+          {!ehBebida ? (
+            <div className="space-y-4 rounded-xl border border-border/60 p-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">Estoque</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Controle a quantidade física sem confundir com a visibilidade no catálogo.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="modal-produto-estoque">Quantidade atual</Label>
+                  <Input
+                    id="modal-produto-estoque"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    step="1"
+                    value={estoqueQuantidade}
+                    onChange={(evento) => setEstoqueQuantidade(evento.target.value)}
+                    className="h-11 border-border/70 shadow-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="modal-produto-estoque-minimo">Avisar quando chegar a</Label>
+                  <Input
+                    id="modal-produto-estoque-minimo"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    step="1"
+                    value={estoqueMinimo}
+                    onChange={(evento) => setEstoqueMinimo(evento.target.value)}
+                    className="h-11 border-border/70 shadow-none"
+                  />
+                </div>
+              </div>
+              <label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-border/60 px-3 py-3 sm:items-center">
+                <span>
+                  <span className="block text-sm font-medium text-foreground">
+                    Impedir vendas quando o estoque zerar
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Desativado, o produto continua vendável mesmo com quantidade zero.
+                  </span>
+                </span>
+                <Checkbox
+                  checked={bloquearVendaSemEstoque}
+                  onCheckedChange={(valor) => setBloquearVendaSemEstoque(valor === true)}
+                  aria-label="Impedir vendas quando o estoque zerar"
+                />
+              </label>
             </div>
           ) : null}
 

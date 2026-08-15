@@ -35,6 +35,7 @@ import { supabase } from '@/lib/supabase'
 import { buscarProximoNumeroPedidoDiario, normalizarNumeroPedido, sincronizarNumeroPedidoDiario } from '@/lib/pedidos/numero-diario'
 import { registrarClientePedido } from '@/lib/registrar-cliente-pedido'
 import { cn } from '@/lib/utils'
+import { avaliarCompraProduto, produtoBloqueadoPorEstoque } from '@/lib/estoque-produto.mjs'
 
 type Produto = {
   id: string
@@ -42,6 +43,10 @@ type Produto = {
   preco: number
   categoria: string | null
   descricao: string | null
+  disponivel: boolean
+  estoque_quantidade: number
+  estoque_minimo: number
+  bloquear_venda_sem_estoque: boolean
 }
 
 type ItemPedido = Produto & {
@@ -145,7 +150,7 @@ function NovoPedidoLoja() {
       const [produtosResposta, bairrosResposta, pagamentosResposta] = await Promise.all([
         supabase
           .from('produtos')
-          .select('id, nome, preco, categoria, descricao')
+          .select('id, nome, preco, categoria, descricao, disponivel, estoque_quantidade, estoque_minimo, bloquear_venda_sem_estoque')
           .eq('disponivel', true)
           .order('nome'),
         supabase
@@ -302,6 +307,14 @@ function NovoPedidoLoja() {
   const total = arredondarMoeda(subtotal + taxaEntrega)
 
   const adicionarProduto = (produto: Produto) => {
+    const quantidadeAtual = itens
+      .filter((item) => item.id === produto.id)
+      .reduce((total, item) => total + item.quantidade, 0)
+    const avaliacao = avaliarCompraProduto(produto, quantidadeAtual, 1)
+    if (!avaliacao.permitido) {
+      toast.warning(avaliacao.motivo || 'Produto indisponível')
+      return
+    }
     setItens((itensAtuais) => {
       const itemExistente = itensAtuais.find((item) => (
         item.id === produto.id
@@ -322,6 +335,17 @@ function NovoPedidoLoja() {
   }
 
   const alterarQuantidade = (linhaId: string, variacao: number) => {
+    const itemAtual = itens.find((item) => item.linhaId === linhaId)
+    if (itemAtual && variacao > 0) {
+      const quantidadeAtual = itens
+        .filter((item) => item.id === itemAtual.id)
+        .reduce((total, item) => total + item.quantidade, 0)
+      const avaliacao = avaliarCompraProduto(itemAtual, quantidadeAtual, variacao)
+      if (!avaliacao.permitido) {
+        toast.warning(avaliacao.motivo || 'Quantidade indisponível')
+        return
+      }
+    }
     setItens((itensAtuais) => itensAtuais.flatMap((item) => {
       if (item.linhaId !== linhaId) return [item]
       const quantidade = item.quantidade + variacao
@@ -377,6 +401,19 @@ function NovoPedidoLoja() {
     descontoManualInput: string
   }) => {
     if (!personalizacaoAberta) return
+
+    const quantidadeOutrasLinhas = itens
+      .filter((item) => item.id === personalizacaoAberta.produto.id && item.linhaId !== personalizacaoAberta.linhaId)
+      .reduce((total, item) => total + item.quantidade, 0)
+    const avaliacao = avaliarCompraProduto(
+      personalizacaoAberta.produto,
+      quantidadeOutrasLinhas,
+      atualizado.quantidade,
+    )
+    if (!avaliacao.permitido) {
+      toast.warning(avaliacao.motivo || 'Quantidade indisponível')
+      return
+    }
 
     if (personalizacaoAberta.linhaId) {
       setItens((itensAtuais) => itensAtuais.map((item) => item.linhaId === personalizacaoAberta.linhaId
@@ -558,11 +595,12 @@ function NovoPedidoLoja() {
           const quantidadeNoPedido = itens
             .filter((item) => item.id === produto.id)
             .reduce((totalItensProduto, item) => totalItensProduto + item.quantidade, 0)
+          const esgotado = produtoBloqueadoPorEstoque(produto)
 
           return (
             <article
               key={produto.id}
-              className="flex min-w-0 flex-col rounded-xl border border-border/70 bg-background p-3 transition-colors hover:border-primary/45"
+              className={cn('flex min-w-0 flex-col rounded-xl border border-border/70 bg-background p-3 transition-colors hover:border-primary/45', esgotado && 'opacity-65')}
             >
               <div className="min-w-0 flex-1">
                 <div className="flex min-h-5 items-center justify-between gap-2">
@@ -574,6 +612,7 @@ function NovoPedidoLoja() {
                       {quantidadeNoPedido} no pedido
                     </span>
                   ) : null}
+                  {esgotado ? <span className="shrink-0 text-xs font-medium text-muted-foreground">Esgotado</span> : null}
                 </div>
                 <h3 className="mt-2 line-clamp-2 text-sm font-semibold leading-5 text-foreground">
                   {produto.nome}
@@ -589,6 +628,7 @@ function NovoPedidoLoja() {
                   size="sm"
                   className="h-10 px-2 shadow-none"
                   onClick={() => abrirPersonalizacao(produto, origem)}
+                  disabled={esgotado}
                 >
                   <Pencil className="size-3.5" strokeWidth={1.8} />
                   Personalizar
@@ -598,9 +638,10 @@ function NovoPedidoLoja() {
                   size="sm"
                   className="h-10 px-2 shadow-none"
                   onClick={() => adicionarProduto(produto)}
+                  disabled={esgotado}
                 >
                   <Plus className="size-4" strokeWidth={1.8} />
-                  Adicionar
+                  {esgotado ? 'Esgotado' : 'Adicionar'}
                 </Button>
               </div>
             </article>

@@ -24,12 +24,14 @@ import {
   ModalFormularioProduto,
   type DadosSalvarProduto,
 } from '@/components/admin/produtos/ModalFormularioProduto'
+import { ControleEstoqueProduto } from '@/components/admin/produtos/ControleEstoqueProduto'
 import { supabase } from '@/lib/supabase'
 import type { CategoriaCardapio, TipoCategoriaCardapio } from '@/lib/supabase'
 import {
   calcularPrecoComDesconto,
   normalizarPercentualDesconto,
 } from '@/lib/condicoesComerciaisProduto'
+import { normalizarConfiguracaoEstoque, obterSituacaoEstoque } from '@/lib/estoque-produto.mjs'
 import Image from 'next/image'
 import ModalRecorteImagem from '@/components/admin/ModalRecorteImagem'
 import { toast } from 'sonner'
@@ -94,6 +96,9 @@ type Produto = {
   categoria: string
   imagem_url?: string
   disponivel: boolean
+  estoque_quantidade: number
+  estoque_minimo: number
+  bloquear_venda_sem_estoque: boolean
   ordem?: number | null
   tabela?: string
 }
@@ -302,7 +307,7 @@ export default function ProdutosPage() {
       ] = await Promise.all([
         supabase
           .from('produtos')
-          .select('*')
+          .select('id, nome, descricao, preco, custo_unitario, preco_original, desconto, parcelamento_ativo, parcelas_sem_juros, categoria, imagem_url, disponivel, ordem, estoque_quantidade, estoque_minimo, bloquear_venda_sem_estoque')
           .order('ordem', { ascending: true })
           .order('nome', { ascending: true }),
         supabase
@@ -355,6 +360,9 @@ export default function ProdutosPage() {
         categoria: normalizarNomeCategoria(bebida.categoria || nomeCategoriaBebidas),
         imagem_url: bebida.imagem_url,
         disponivel: bebida.disponivel,
+        estoque_quantidade: 0,
+        estoque_minimo: 5,
+        bloquear_venda_sem_estoque: false,
         ordem: bebida.ordem,
         tabela: 'bebidas'
       }))
@@ -396,8 +404,17 @@ export default function ProdutosPage() {
 
     const channelProdutos = supabase
       .channel('admin-produtos-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'produtos' }, () => {
-        carregarProdutos(false)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'produtos' }, (evento) => {
+        const atualizado = evento.new as Partial<Produto> & { id?: string }
+        if (!atualizado.id) return
+        setProdutos((estadoAtual) => estadoAtual.map((produto) =>
+          produto.id === atualizado.id ? { ...produto, ...atualizado, tabela: produto.tabela } : produto
+        ))
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'produtos' }, () => carregarProdutos(false))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'produtos' }, (evento) => {
+        const removido = evento.old as { id?: string }
+        if (removido.id) setProdutos((estadoAtual) => estadoAtual.filter((produto) => produto.id !== removido.id))
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bebidas' }, () => {
         carregarProdutos(false)
@@ -1188,6 +1205,22 @@ export default function ProdutosPage() {
     }
     const descontoNumero = normalizarPercentualDesconto(dados.desconto)
     const precoFinal = calcularPrecoComDesconto(precoNumero, descontoNumero)
+    let configuracaoEstoque
+    try {
+      configuracaoEstoque = normalizarConfiguracaoEstoque({
+        estoque_quantidade: dados.estoqueQuantidade,
+        estoque_minimo: dados.estoqueMinimo,
+        bloquear_venda_sem_estoque: dados.bloquearVendaSemEstoque,
+      })
+    } catch (erro) {
+      setModalNotificacao({
+        aberto: true,
+        tipo: 'aviso',
+        titulo: 'Estoque inválido',
+        mensagem: erro instanceof Error ? erro.message : 'Revise a quantidade e o estoque mínimo.',
+      })
+      return
+    }
 
     setSalvandoNovoProduto(true)
     try {
@@ -1233,6 +1266,7 @@ export default function ProdutosPage() {
                 ? dados.quantidadeParcelas
                 : null,
               custo_unitario: custoUnitario,
+              ...configuracaoEstoque,
               categoria: categoriaNormalizadaNovoProduto,
               ordem: proximaOrdem,
               disponivel: true,
@@ -1333,6 +1367,23 @@ export default function ProdutosPage() {
       return
     }
 
+    let configuracaoEstoque
+    try {
+      configuracaoEstoque = normalizarConfiguracaoEstoque({
+        estoque_quantidade: dados.estoqueQuantidade,
+        estoque_minimo: dados.estoqueMinimo,
+        bloquear_venda_sem_estoque: dados.bloquearVendaSemEstoque,
+      })
+    } catch (erro) {
+      setModalNotificacao({
+        aberto: true,
+        tipo: 'aviso',
+        titulo: 'Estoque inválido',
+        mensagem: erro instanceof Error ? erro.message : 'Revise a quantidade e o estoque mínimo.',
+      })
+      return
+    }
+
     setSalvando(produto.id)
     try {
       const payload =
@@ -1356,6 +1407,7 @@ export default function ProdutosPage() {
               categoria: categoriaNormalizada,
               disponivel: dados.disponivel,
               custo_unitario: custoUnitario,
+              ...configuracaoEstoque,
             }
 
       const { error } = await supabase.from(tabela).update(payload).eq('id', produto.id)
@@ -1383,6 +1435,15 @@ export default function ProdutosPage() {
                     custo_unitario: tabela === 'bebidas' ? item.custo_unitario : custoUnitario,
                     categoria: tabela === 'bebidas' ? item.categoria : categoriaNormalizada,
                     disponivel: dados.disponivel,
+                    estoque_quantidade: tabela === 'bebidas'
+                      ? item.estoque_quantidade
+                      : configuracaoEstoque.estoque_quantidade,
+                    estoque_minimo: tabela === 'bebidas'
+                      ? item.estoque_minimo
+                      : configuracaoEstoque.estoque_minimo,
+                    bloquear_venda_sem_estoque: tabela === 'bebidas'
+                      ? item.bloquear_venda_sem_estoque
+                      : configuracaoEstoque.bloquear_venda_sem_estoque,
                   }
                 : item
             ),
@@ -1839,7 +1900,7 @@ export default function ProdutosPage() {
                             key={produto.id}
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="flex min-w-0 items-center gap-3 rounded-xl border border-border/70 bg-card p-2.5 sm:p-3"
+                            className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-border/70 bg-card p-2.5 sm:p-3"
                           >
                             <div className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-muted sm:size-16">
                               {produto.imagem_url ? (
@@ -1882,6 +1943,17 @@ export default function ProdutosPage() {
                                     {produto.tabela === 'bebidas' ? 'Produto' : produto.categoria}
                                   </span>
                                 </Badge>
+                                {produto.tabela !== 'bebidas' ? (
+                                  <Badge
+                                    variant={obterSituacaoEstoque(produto) === 'em_estoque'
+                                      ? 'success'
+                                      : obterSituacaoEstoque(produto) === 'baixo'
+                                        ? 'warning'
+                                        : 'secondary'}
+                                  >
+                                    {produto.estoque_quantidade} un.
+                                  </Badge>
+                                ) : null}
                               </div>
                             </div>
 
@@ -1896,6 +1968,23 @@ export default function ProdutosPage() {
                               <Pencil className="h-3.5 w-3.5" />
                               <span className="hidden sm:inline">Editar</span>
                             </Button>
+                            {produto.tabela !== 'bebidas' ? (
+                              <ControleEstoqueProduto
+                                produtoId={produto.id}
+                                produtoNome={produto.nome}
+                                quantidade={produto.estoque_quantidade}
+                                estoqueMinimo={produto.estoque_minimo}
+                                compacto
+                                className="col-span-3 justify-end border-t border-border/50 pt-2"
+                                onQuantidadeAlterada={(quantidade) => {
+                                  setProdutos((estadoAtual) => estadoAtual.map((item) =>
+                                    item.id === produto.id
+                                      ? { ...item, estoque_quantidade: quantidade }
+                                      : item
+                                  ))
+                                }}
+                              />
+                            ) : null}
                           </motion.div>
                         ))}
 

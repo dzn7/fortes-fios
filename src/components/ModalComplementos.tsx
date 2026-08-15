@@ -5,6 +5,8 @@ import { X, Check, Minus, Plus, ShoppingBag, ChevronDown, ChevronUp } from 'luci
 import Image from 'next/image'
 import { Produto, Adicional, supabase } from '@/lib/supabase'
 import { useCarrinho } from '@/contexts/CarrinhoContext'
+import { toast } from 'sonner'
+import { avaliarCompraProduto, produtoBloqueadoPorEstoque } from '@/lib/estoque-produto.mjs'
 
 type ModalComplementosProps = {
   produto: Produto | null
@@ -163,7 +165,12 @@ export default function ModalComplementos({ produto, aberto, onFechar, onItemAdi
 
   const confirmar = () => {
     if (!produto) return
-    adicionarItem(produto, quantidade, adicionaisSelecionados, observacoes)
+    if (!adicionarItem(produto, quantidade, adicionaisSelecionados, observacoes)) {
+      toast.warning('Quantidade indisponível', {
+        description: 'O estoque deste produto foi atualizado. Escolha uma quantidade menor.',
+      })
+      return
+    }
     onFechar()
     onItemAdicionado(produto.nome)
   }
@@ -174,6 +181,8 @@ export default function ModalComplementos({ produto, aberto, onFechar, onItemAdi
   const adicionaisAgrupados = agruparPorCategoria(adicionais)
   const categoriasAdicionais = Object.keys(adicionaisAgrupados)
   const temImagem = produto.imagem_url && produto.imagem_url.trim() !== ''
+  const esgotado = produtoBloqueadoPorEstoque(produto)
+  const podeAumentar = avaliarCompraProduto(produto, 0, quantidade + 1).permitido
 
   return (
     <div
@@ -385,6 +394,7 @@ export default function ModalComplementos({ produto, aberto, onFechar, onItemAdi
               </span>
               <button
                 onClick={() => setQuantidade(quantidade + 1)}
+                disabled={!podeAumentar}
                 className="w-9 h-9 flex items-center justify-center rounded-r-lg 
                          hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                 aria-label="Aumentar quantidade"
@@ -404,13 +414,14 @@ export default function ModalComplementos({ produto, aberto, onFechar, onItemAdi
           {/* Botão de confirmar */}
           <button
             onClick={confirmar}
+            disabled={esgotado}
             className="w-full flex items-center justify-between py-3.5 px-5 rounded-xl
                      bg-bordo-600 hover:bg-bordo-700 active:bg-bordo-800
-                     text-white font-bold transition-colors shadow-lg shadow-bordo-600/20"
+                     text-white font-bold transition-colors shadow-lg shadow-bordo-600/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-5 h-5" />
-              <span>Adicionar ao pedido</span>
+              <span>{esgotado ? 'Produto esgotado' : 'Adicionar ao pedido'}</span>
             </div>
             <span className="text-base font-extrabold">
               R$ {calcularTotal().toFixed(2)}
