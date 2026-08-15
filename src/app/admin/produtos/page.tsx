@@ -75,6 +75,11 @@ import {
   ordenarNomesPorCategoriasDoBanco
 } from '@/lib/categoriasCardapio'
 import {
+  CHAVE_ROTULO_CATEGORIA_TODOS,
+  ROTULO_CATEGORIA_TODOS_PADRAO,
+  normalizarRotuloCategoriaTodos,
+} from '@/lib/categorias-publicas.mjs'
+import {
   CHAVE_ORDEM_CATEGORIAS_PRODUTOS,
   CHAVE_ORDENACAO_PRODUTOS_SITE,
   normalizarTipoOrdenacaoProdutos,
@@ -179,6 +184,9 @@ export default function ProdutosPage() {
 
   const [categoriasCardapio, setCategoriasCardapio] = useState<CategoriaCardapio[]>([])
   const [categoriasReais, setCategoriasReais] = useState<string[]>([])
+  const [rotuloCategoriaTodos, setRotuloCategoriaTodos] = useState(
+    ROTULO_CATEGORIA_TODOS_PADRAO,
+  )
   const [categoriaBebidasAtual, setCategoriaBebidasAtual] = useState('')
   const [tipoOrdenacaoSite, setTipoOrdenacaoSite] = useState<TipoOrdenacaoProdutosSite>('manual')
   const [ordemCategoriasConfigurada, setOrdemCategoriasConfigurada] = useState<string[]>([])
@@ -197,10 +205,12 @@ export default function ProdutosPage() {
   const [categoriasExpandidasProdutos, setCategoriasExpandidasProdutos] = useState<string[]>([])
   const [modalRenomearCategoria, setModalRenomearCategoria] = useState<{
     aberto: boolean
+    tipo: 'categoria' | 'filtro_geral'
     categoriaAtual: string
     novoNome: string
   }>({
     aberto: false,
+    tipo: 'categoria',
     categoriaAtual: '',
     novoNome: ''
   })
@@ -324,7 +334,11 @@ export default function ProdutosPage() {
         supabase
           .from('configuracoes_loja')
           .select('chave, valor')
-          .in('chave', [CHAVE_ORDENACAO_PRODUTOS_SITE, CHAVE_ORDEM_CATEGORIAS_PRODUTOS])
+          .in('chave', [
+            CHAVE_ORDENACAO_PRODUTOS_SITE,
+            CHAVE_ORDEM_CATEGORIAS_PRODUTOS,
+            CHAVE_ROTULO_CATEGORIA_TODOS,
+          ])
       ])
 
       if (produtosError) throw produtosError
@@ -338,11 +352,17 @@ export default function ProdutosPage() {
       const valorOrdemCategoriasSalva = configuracoesOrdenacao?.find(
         (configuracaoAtual) => configuracaoAtual.chave === CHAVE_ORDEM_CATEGORIAS_PRODUTOS
       )?.valor
+      const valorRotuloCategoriaTodos = configuracoesOrdenacao?.find(
+        (configuracaoAtual) => configuracaoAtual.chave === CHAVE_ROTULO_CATEGORIA_TODOS
+      )?.valor
 
       const modoOrdenacaoAtual = normalizarTipoOrdenacaoProdutos(valorOrdenacaoSalvo)
       const ordemCategoriasSalva = parsearOrdemCategoriasProdutos(valorOrdemCategoriasSalva)
 
       setTipoOrdenacaoSite(modoOrdenacaoAtual)
+      setRotuloCategoriaTodos(
+        normalizarRotuloCategoriaTodos(valorRotuloCategoriaTodos),
+      )
       const categoriasAtivas = (categoriasData || []) as CategoriaCardapio[]
       setCategoriasCardapio(categoriasAtivas)
 
@@ -478,9 +498,13 @@ export default function ProdutosPage() {
     if (error) throw error
   }, [categoriasCardapio])
 
-  const abrirModalRenomearCategoria = useCallback((categoria: string) => {
+  const abrirModalRenomearCategoria = useCallback((
+    categoria: string,
+    tipo: 'categoria' | 'filtro_geral' = 'categoria',
+  ) => {
     setModalRenomearCategoria({
       aberto: true,
+      tipo,
       categoriaAtual: categoria,
       novoNome: categoria
     })
@@ -489,6 +513,7 @@ export default function ProdutosPage() {
   const fecharModalRenomearCategoria = useCallback(() => {
     setModalRenomearCategoria({
       aberto: false,
+      tipo: 'categoria',
       categoriaAtual: '',
       novoNome: ''
     })
@@ -497,6 +522,7 @@ export default function ProdutosPage() {
   const salvarRenomeacaoCategoria = useCallback(async () => {
     const categoriaAtual = modalRenomearCategoria.categoriaAtual
     const novoNomeCategoria = normalizarNomeCategoria(modalRenomearCategoria.novoNome)
+    const editandoFiltroGeral = modalRenomearCategoria.tipo === 'filtro_geral'
 
     if (!categoriaAtual) return
 
@@ -525,7 +551,7 @@ export default function ProdutosPage() {
 
     const categoriaJaExiste = categoriasExistentes.some(
       (categoriaExistente) =>
-        !categoriasSaoIguais(categoriaExistente, categoriaAtual) &&
+        (editandoFiltroGeral || !categoriasSaoIguais(categoriaExistente, categoriaAtual)) &&
         categoriasSaoIguais(categoriaExistente, novoNomeCategoria)
     )
 
@@ -542,6 +568,33 @@ export default function ProdutosPage() {
     setSalvandoCategoria(true)
     setCategoriaEmProcesso(categoriaAtual)
     try {
+      if (editandoFiltroGeral) {
+        const rotuloNormalizado = normalizarRotuloCategoriaTodos(novoNomeCategoria)
+        const { error } = await supabase
+          .from('configuracoes_loja')
+          .upsert(
+            {
+              chave: CHAVE_ROTULO_CATEGORIA_TODOS,
+              valor: rotuloNormalizado,
+              tipo: 'texto',
+              descricao: 'Nome do filtro que reúne todos os produtos no catálogo público.',
+            },
+            { onConflict: 'chave' },
+          )
+
+        if (error) throw error
+
+        setRotuloCategoriaTodos(rotuloNormalizado)
+        fecharModalRenomearCategoria()
+        setModalNotificacao({
+          aberto: true,
+          tipo: 'sucesso',
+          titulo: 'Filtro Geral Atualizado',
+          mensagem: `O catálogo agora exibe "${rotuloNormalizado}".`,
+        })
+        return
+      }
+
       const categoriaTemBebida = produtos.some(
         (produtoAtual) => produtoAtual.tabela === 'bebidas' && categoriasSaoIguais(produtoAtual.categoria, categoriaAtual)
       )
@@ -1833,6 +1886,38 @@ export default function ProdutosPage() {
             </div>
           ) : (
             <div className="space-y-4">
+              <Card className="min-w-0 overflow-hidden border-border/70 bg-muted/15 shadow-none">
+                <CardHeader className="flex-row items-center justify-between gap-3 p-3.5 sm:p-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                      Filtro geral do catálogo
+                    </p>
+                    <CardTitle className="mt-1 truncate text-base font-medium">
+                      {rotuloCategoriaTodos}
+                    </CardTitle>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Esta opção reúne todos os produtos no site.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => abrirModalRenomearCategoria(rotuloCategoriaTodos, 'filtro_geral')}
+                    disabled={salvandoCategoria}
+                    className="h-9 shrink-0 gap-2 px-3 shadow-none"
+                  >
+                    {salvandoCategoria && categoriaEmProcesso === rotuloCategoriaTodos ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Pencil className="h-4 w-4" />
+                    )}
+                    <span className="hidden sm:inline">Editar nome</span>
+                    <span className="sr-only sm:hidden">Editar nome do filtro geral</span>
+                  </Button>
+                </CardHeader>
+              </Card>
+
               {categoriasVisiveis.length === 0 ? (
                 <div className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-card p-6 text-center">
                   <Search className="h-8 w-8 text-muted-foreground/60" />
@@ -1868,18 +1953,20 @@ export default function ProdutosPage() {
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         <Button
+                          type="button"
                           variant="outline"
-                          size="icon"
+                          size="sm"
                           onClick={() => abrirModalRenomearCategoria(categoria)}
                           disabled={salvandoCategoria}
-                          className="size-9 shadow-none"
-                          title="Renomear categoria"
+                          className="h-9 gap-2 px-3 shadow-none"
+                          aria-label={`Editar categoria ${categoria}`}
                         >
                           {salvandoCategoria && categoriaEmProcesso === categoria ? (
                             <RefreshCw className="h-4 w-4 animate-spin" />
                           ) : (
                             <Pencil className="h-4 w-4" />
                           )}
+                          <span className="hidden sm:inline">Editar categoria</span>
                         </Button>
                         <Button
                           variant="ghost"
@@ -2166,18 +2253,29 @@ export default function ProdutosPage() {
         }}>
           <DialogContent className="flex max-h-[92dvh] max-w-md flex-col gap-0 overflow-hidden p-0">
             <DialogHeader className="shrink-0 space-y-1 border-b border-border/60 px-5 pb-4 pt-5 pr-12 text-left">
-              <DialogTitle className="text-[15px] font-semibold tracking-tight">Renomear categoria</DialogTitle>
+              <DialogTitle className="text-[15px] font-semibold tracking-tight">
+                {modalRenomearCategoria.tipo === 'filtro_geral'
+                  ? 'Editar filtro geral'
+                  : 'Editar categoria'}
+              </DialogTitle>
               <DialogDescription className="text-[13px] text-muted-foreground">
-                Atualize o nome da categoria sem apagar os produtos vinculados.
+                {modalRenomearCategoria.tipo === 'filtro_geral'
+                  ? 'Escolha como a opção que reúne todos os produtos aparecerá no site.'
+                  : 'Atualize o nome da categoria sem apagar os produtos vinculados.'}
               </DialogDescription>
             </DialogHeader>
 
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
               <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm">
-                Atual: <span className="font-semibold">{modalRenomearCategoria.categoriaAtual}</span>
+                {modalRenomearCategoria.tipo === 'filtro_geral' ? 'Exibido atualmente' : 'Nome atual'}:{' '}
+                <span className="font-semibold">{modalRenomearCategoria.categoriaAtual}</span>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="renomear-categoria">Novo nome</Label>
+                <Label htmlFor="renomear-categoria">
+                  {modalRenomearCategoria.tipo === 'filtro_geral'
+                    ? 'Nome exibido no catálogo'
+                    : 'Novo nome'}
+                </Label>
                 <Input
                   id="renomear-categoria"
                   value={modalRenomearCategoria.novoNome}
@@ -2191,6 +2289,7 @@ export default function ProdutosPage() {
                     }
                   }}
                   placeholder="Novo nome da categoria"
+                  maxLength={60}
                   className="h-11 border-border/70 shadow-none"
                   autoFocus
                 />

@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
 import { obterSupabaseAdmin } from '@/lib/server/supabase-admin'
+import {
+  CHAVE_ROTULO_CATEGORIA_TODOS,
+  normalizarRotuloCategoriaTodos,
+} from '@/lib/categorias-publicas.mjs'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,18 +14,32 @@ export async function GET() {
     }
 
     const supabase = obterSupabaseAdmin()
-    const { data, error } = await supabase
-      .from('categorias_cardapio')
-      .select('id, nome, ordem')
-      .eq('tipo', 'produto')
-      .eq('ativo', true)
-      .order('ordem', { ascending: true })
-      .order('nome', { ascending: true })
+    const [categorias, configuracaoRotulo] = await Promise.all([
+      supabase
+        .from('categorias_cardapio')
+        .select('id, nome, ordem')
+        .eq('tipo', 'produto')
+        .eq('ativo', true)
+        .order('ordem', { ascending: true })
+        .order('nome', { ascending: true }),
+      supabase
+        .from('configuracoes_loja')
+        .select('valor')
+        .eq('chave', CHAVE_ROTULO_CATEGORIA_TODOS)
+        .maybeSingle(),
+    ])
 
-    if (error) throw error
+    if (categorias.error) throw categorias.error
+    if (configuracaoRotulo.error) throw configuracaoRotulo.error
 
     return NextResponse.json(
-      { sucesso: true, categorias: data || [] },
+      {
+        sucesso: true,
+        categorias: categorias.data || [],
+        rotuloTodos: normalizarRotuloCategoriaTodos(
+          configuracaoRotulo.data?.valor,
+        ),
+      },
       {
         headers: {
           'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',

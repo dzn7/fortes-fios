@@ -1,6 +1,8 @@
 import type { CategoriaCardapio, TipoCategoriaCardapio } from './supabase'
 
-export const CATEGORIA_FILTRO_TODOS = 'Todos'
+export {
+  ROTULO_CATEGORIA_TODOS_PADRAO as CATEGORIA_FILTRO_TODOS,
+} from './categorias-publicas.mjs'
 
 export const normalizarNomeCategoria = (categoria: string | null | undefined) =>
   (categoria || '').trim().replace(/\s+/g, ' ')

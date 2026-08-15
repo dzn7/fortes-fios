@@ -1,5 +1,21 @@
 # Progress
 
+## [2026-08-15] Edição clara das categorias do catálogo
+
+**Agente/Modelo:** Codex GPT-5
+**Objetivo:** tornar o renomeio de categorias encontrável no Admin e permitir editar o nome do filtro que reúne todo o catálogo.
+**Arquivos alterados:** `specs/edicao-categorias-catalogo.md`, `tests/categorias-publicas.test.mjs`, `src/lib/categorias-publicas.mjs`, `src/lib/categoriasCardapio.ts`, `src/app/api/vitrine/categorias/route.ts`, `src/app/admin/produtos/page.tsx`, `src/app/page.tsx`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- Especificação e testes do rótulo geral foram escritos antes da implementação; o RED confirmou a ausência da regra e o GREEN validou padrão, normalização e chave estável.
+- A ação antes escondida no lápis virou `Editar categoria` no desktop, mantendo um alvo acessível e compacto no mobile.
+- O filtro geral aparece separadamente e usa por padrão `Todos os tipos de cabelo`; o administrador pode renomeá-lo sem criar uma categoria falsa nem alterar produtos.
+- Categorias reais continuam usando o fluxo existente, que preserva vínculos; o rótulo geral reutiliza `configuracoes_loja` e chega ao site na mesma resposta das categorias.
+- O catálogo mantém o filtro ativo ao receber um novo nome e reage em tempo real a alterações de categorias e da configuração.
+**Decisões tomadas:** nenhuma migration foi criada porque `configuracoes_loja` já é a estrutura chave/valor destinada a esse tipo de preferência. O filtro universal foi separado visual e estruturalmente das categorias atribuíveis.
+**Verificação:** RED ✓ · `node --test tests/*.test.mjs` ✓ (32 testes) · `npx tsc --noEmit --incremental false` ✓ · `npm run build` ✓ (49 páginas) · `git diff --check` ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓. `npm run lint` foi executado, mas o script legado `next lint` é incompatível com Next 16 e falha antes de analisar arquivos.
+**Pendências / próximos passos:** nenhuma dentro deste escopo.
+**Armadilhas descobertas:** a capacidade de renomear já existia, mas um botão somente com ícone a tornava praticamente invisível; “Todos” era constante de frontend e não uma linha de `categorias_cardapio`.
+
 ## [2026-08-15] Hero desktop responsivo e carregamento resiliente de imagens
 
 **Agente/Modelo:** Codex GPT-5

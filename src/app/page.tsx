@@ -42,9 +42,13 @@ import { useStatusLoja } from '@/lib/useStatusLoja'
 import { useCarrinho } from '@/contexts/CarrinhoContext'
 import { produtoDisponivelParaCompra } from '@/lib/estoque-produto.mjs'
 import {
-  CATEGORIA_FILTRO_TODOS,
   normalizarNomeCategoria,
 } from '@/lib/categoriasCardapio'
+import {
+  CHAVE_ROTULO_CATEGORIA_TODOS,
+  ROTULO_CATEGORIA_TODOS_PADRAO,
+  normalizarRotuloCategoriaTodos,
+} from '@/lib/categorias-publicas.mjs'
 import {
   CHAVE_ORDENACAO_PRODUTOS_SITE,
   normalizarTipoOrdenacaoProdutos,
@@ -94,6 +98,7 @@ type CategoriaPublica = {
 type RespostaCategorias = {
   sucesso: boolean
   categorias?: CategoriaPublica[]
+  rotuloTodos?: string
 }
 
 const normalizarCategoriaFortesFios = (categoria: string | null | undefined) =>
@@ -105,7 +110,7 @@ const normalizarCategoriaFortesFios = (categoria: string | null | undefined) =>
 const obterIconeCategoria = (categoria: string): LucideIcon => {
   const categoriaNormalizada = normalizarCategoriaFortesFios(categoria)
 
-  if (categoriaNormalizada === 'todos') return Grid2X2
+  if (categoriaNormalizada.startsWith('todos')) return Grid2X2
   if (categoriaNormalizada.includes('kit')) return PackageOpen
   if (categoriaNormalizada.includes('pos-quimica')) return ShieldCheck
   if (categoriaNormalizada.includes('cachead')) return Waves
@@ -127,6 +132,10 @@ const calcularProgressoTrilha = (trilha: HTMLDivElement) => {
 export default function Home() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [categoriasBanco, setCategoriasBanco] = useState<CategoriaPublica[]>([])
+  const [rotuloCategoriaTodos, setRotuloCategoriaTodos] = useState(
+    ROTULO_CATEGORIA_TODOS_PADRAO,
+  )
+  const rotuloCategoriaTodosRef = useRef(ROTULO_CATEGORIA_TODOS_PADRAO)
   const [modalCarrinhoAberto, setModalCarrinhoAberto] = useState(false)
   const [modalPedidosClienteAberto, setModalPedidosClienteAberto] =
     useState(false)
@@ -138,7 +147,7 @@ export default function Home() {
   const [temAdicionaisDisponiveis, setTemAdicionaisDisponiveis] =
     useState(false)
   const [categoriaAtiva, setCategoriaAtiva] = useState<string>(
-    CATEGORIA_FILTRO_TODOS,
+    ROTULO_CATEGORIA_TODOS_PADRAO,
   )
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
@@ -257,6 +266,13 @@ export default function Home() {
       }
 
       setCategoriasBanco(dados.categorias)
+      const proximoRotulo = normalizarRotuloCategoriaTodos(dados.rotuloTodos)
+      const rotuloAnterior = rotuloCategoriaTodosRef.current
+      rotuloCategoriaTodosRef.current = proximoRotulo
+      setRotuloCategoriaTodos(proximoRotulo)
+      setCategoriaAtiva((categoriaAtual) =>
+        categoriaAtual === rotuloAnterior ? proximoRotulo : categoriaAtual,
+      )
     } catch (error) {
       console.error('Erro ao carregar categorias do catálogo:', error)
       setCategoriasBanco([])
@@ -392,8 +408,19 @@ export default function Home() {
             carregarMaisVendidos()
           } else if (chave === CHAVE_OFERTAS_VITRINE) {
             carregarOfertas()
+          } else if (chave === CHAVE_ROTULO_CATEGORIA_TODOS) {
+            carregarCategorias()
           }
         },
+      )
+      .subscribe()
+
+    const channelCategorias = supabase
+      .channel('categorias-cardapio-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'categorias_cardapio' },
+        () => carregarCategorias(),
       )
       .subscribe()
 
@@ -401,6 +428,7 @@ export default function Home() {
       supabase.removeChannel(channelProdutos)
       supabase.removeChannel(channelAdicionais)
       supabase.removeChannel(channelConfiguracoes)
+      supabase.removeChannel(channelCategorias)
     }
   }, [
     carregarDisponibilidadeAdicionais,
@@ -475,10 +503,10 @@ export default function Home() {
 
   const categorias = useMemo(
     () => [
-      CATEGORIA_FILTRO_TODOS,
+      rotuloCategoriaTodos,
       ...categoriasBanco.map((categoria) => categoria.nome),
     ],
-    [categoriasBanco],
+    [categoriasBanco, rotuloCategoriaTodos],
   )
 
   const selecionarCategoria = useCallback((categoria: string) => {
@@ -492,18 +520,18 @@ export default function Home() {
 
   useEffect(() => {
     if (
-      categoriaAtiva !== CATEGORIA_FILTRO_TODOS &&
+      categoriaAtiva !== rotuloCategoriaTodos &&
       !categorias.includes(categoriaAtiva)
     ) {
-      setCategoriaAtiva(CATEGORIA_FILTRO_TODOS)
+      setCategoriaAtiva(rotuloCategoriaTodos)
     }
-  }, [categoriaAtiva, categorias])
+  }, [categoriaAtiva, categorias, rotuloCategoriaTodos])
 
   const buscaLower = busca.toLowerCase()
 
   const produtosFiltrados = useMemo(() => {
     const produtosDaCategoria =
-      categoriaAtiva === CATEGORIA_FILTRO_TODOS
+      categoriaAtiva === rotuloCategoriaTodos
         ? produtos.filter(
             (p) => !busca || p.nome.toLowerCase().includes(buscaLower),
           )
@@ -519,7 +547,7 @@ export default function Home() {
     if (ordenacaoCliente === 'maior_preco')
       return [...produtosDaCategoria].sort((a, b) => b.preco - a.preco)
     return produtosDaCategoria
-  }, [busca, buscaLower, categoriaAtiva, ordenacaoCliente, produtos])
+  }, [busca, buscaLower, categoriaAtiva, ordenacaoCliente, produtos, rotuloCategoriaTodos])
 
   const produtosMaisVendidos = useMemo(() => {
     if (!configuracaoMaisVendidos.ativo) return []
@@ -937,7 +965,7 @@ export default function Home() {
             <div className="mb-5 mt-6 flex flex-col gap-3 border-t border-border/70 pt-6 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <h3 className="text-xl font-semibold text-foreground sm:text-2xl">
-                  {categoriaAtiva === CATEGORIA_FILTRO_TODOS
+                  {categoriaAtiva === rotuloCategoriaTodos
                     ? 'Todos os produtos'
                     : categoriaAtiva}
                 </h3>
@@ -1000,7 +1028,7 @@ export default function Home() {
                   type="button"
                   onClick={() => {
                     setBusca('')
-                    setCategoriaAtiva(CATEGORIA_FILTRO_TODOS)
+                    setCategoriaAtiva(rotuloCategoriaTodos)
                   }}
                   className="mt-4 min-h-11 rounded-lg border border-border bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
