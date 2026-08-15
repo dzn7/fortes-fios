@@ -1,5 +1,33 @@
 # Progress
 
+## [2026-08-15] Central de Notificações do Admin e alerta visual de estoque
+
+**Agente/Modelo:** Claude Opus 5
+**Objetivo:** entregar uma central interna de notificações persistente e sem duplicação, com estoque e pedidos como casos críticos, e tornar o estoque baixo evidente na listagem de Estoque.
+**Arquivos alterados:** `specs/central-notificacoes-admin.md`, `supabase/migrations/202608150002_central_notificacoes_admin.sql`, `tests/notificacoes.test.mjs`, `tests/notificacoes-banco.sql`, `src/lib/notificacoes.mjs`, `src/lib/notificacoes.d.mts`, `src/contexts/NotificacoesContext.tsx`, `src/app/api/admin/notificacoes/route.ts`, `src/components/admin/notificacoes/{index.ts,aparencia.ts,ItemNotificacao.tsx,PainelNotificacoes.tsx,SinoNotificacoes.tsx,ModalAlertasEntrada.tsx,NotificacoesRoot.tsx}`, `src/app/admin/layout.tsx`, `src/components/admin/AdminLayout.tsx`, `src/components/admin/produtos/ControleEstoqueProduto.tsx`, `src/app/admin/estoque/page.tsx`, `PRD.md`, `UI.md`, `Progress.md`.
+**O que foi feito:**
+- Spec e testes escritos e observados em RED antes da implementação (domínio: módulo inexistente; banco: `relation "public.notificacoes" does not exist`).
+- Uma notificação passou a representar uma **condição**, não um evento: `notificacoes` com `chave_dedupe` e índice único parcial `where estado = 'ativa'`, o que torna a duplicação estruturalmente impossível.
+- Geração por trigger em `produtos` e `pedidos`, nunca na leitura da tela — abrir a página não cria nada. `reconciliar_notificacoes()` faz uma passada conjunta idempotente e escala pedido parado há 12 h de `normal` para `urgente` na mesma linha.
+- Estado por usuário em `notificacoes_leitura` (visualizada/lida/silenciada) e preferência do modal em `notificacoes_preferencias` — ambos no banco, então sobrevivem a refresh, logout/login e reabertura do navegador.
+- Sino no header com badge que vem de contadores (`resumo_notificacoes`), nunca de varredura da lista; painel separando "Precisa de atenção" de "Informações"; modal de entrada com "Não mostrar novamente" reversível pelo rodapé do painel.
+- Item da notificação leva ao contexto: produto abre `/admin/estoque?produto=<id>` com a linha destacada; pedido abre `/admin/pedidos/<id>`.
+- Tela de Estoque ganhou barra lateral âmbar/vermelha, ícone no badge, quantidade colorida e card "Esgotados" em vermelho quando há esgotado.
+**Decisões tomadas:**
+- **Sem Realtime**, por decisão explícita do usuário de não consumir o egress do plano free: uma busca ao montar, invalidação após mutação na própria aba e revalidação por foco (throttle de 60 s) que só busca a lista quando os contadores mudam. Nenhum polling por intervalo.
+- **Tipos limitados a estoque e pedidos.** Crediário, caixa e cupons ficaram de fora porque as telas estão em `ROTAS_ADMIN_OCULTAS` (legado do restaurante) e as tabelas têm zero linhas. A engine nasceu genérica: um gerador novo é só uma função SQL, sem migration de schema.
+- **Estoque baixo = âmbar, esgotado = vermelho**, escolhido pelo usuário. Vermelho fica reservado ao caso terminal; com 4 de 5 produtos esgotados hoje, pintar tudo de vermelho destruiria a hierarquia.
+- Funções de sincronização são `SECURITY DEFINER` com `search_path` vazio (mesmo padrão de `sincronizar_estoque_item_pedido`), o que permitiu **revogar** as tabelas novas de `anon`/`authenticated` sem quebrar a escrita do site público.
+- `usuario_chave` é `text`, não FK `uuid`, porque `usuarioAtual` é `null` nos logins hardcoded; cai para `'admin-local'`, como o `'default'` do onboarding.
+**Verificação:** RED confirmado nos dois níveis antes da implementação · red-green de regressão validado (remover a regra de silenciamento derruba o teste 10; restaurar volta ao verde) · `node --test tests/*.test.mjs` ✓ (48 testes) · teste SQL transacional com rollback ✓ (10 cenários, sem fixture vazada) · ciclo completo exercitado contra o banco real: repor→resolvida, reincidir→**linha nova**, continuar baixo→**não duplica**, esgotar→troca de tipo, e 1 ativa por produto em todas as transições · endpoints exercitados por HTTP: badge, marcar lida, isolamento entre usuários e persistência do "não mostrar novamente" · `npx tsc --noEmit --incremental false` ✓ 0 erros · `npm run build` ✓ (49 páginas) · `git diff --check` ✓ · `bug-hunter` ✓ · `verification-before-completion` ✓. `npm run lint` continua quebrado por motivo pré-existente (`next lint` incompatível com Next 16 — interpreta "lint" como diretório).
+**Pendências / próximos passos:** corrigir o script de lint em task própria de tooling. Avaliar geradores de notificação para crediário/caixa quando esses fluxos entrarem em uso.
+**Armadilhas descobertas:**
+- 🔴 **A publication `supabase_realtime` deste projeto está VAZIA.** `pg_publication_rel` só contém `realtime.messages_*`. A migration `202607280016_realtime.sql` existe no repositório mas **nunca foi aplicada aqui** — ela veio transcrita do projeto original do Edienai. Consequência verificada: o `postgres_changes` de `src/app/admin/estoque/page.tsx` **nunca dispara**. Não foi corrigido por estar fora do escopo; é task própria, e qualquer tela que "depende de Realtime" hoje está, na prática, sem atualização automática.
+- As migrations em `supabase/migrations/` não são espelho fiel do banco: parte foi transcrita do projeto antigo e não aplicada. Confirme pelo banco, não pelo arquivo.
+- `ALTER DEFAULT PRIVILEGES` do Supabase concede tudo a `anon`/`authenticated` em tabela nova. Tabela criada sem `revoke` explícito nasce aberta.
+- Declaração de tipos de módulo `.mjs` precisa se chamar `<nome>.d.mts`. O `<nome>.mjs.d.ts` (padrão de `nome-cliente-local.mjs.d.ts`) **não** é lido pelo TypeScript — a tipagem vinha da inferência do JSDoc.
+- `useSearchParams` em página client obriga fronteira de `Suspense`, senão o build falha no prerender. `/admin/pedidos` já tinha o padrão.
+
 ## [2026-08-15] Edição clara das categorias do catálogo
 
 **Agente/Modelo:** Codex GPT-5

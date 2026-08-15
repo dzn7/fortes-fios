@@ -110,10 +110,15 @@ Primitivos Kibo UI disponíveis:
 | Componente | Caminho | Responsabilidade |
 |---|---|---|
 | `AdminLayout` | `src/components/admin/AdminLayout.tsx` | Sidebar, header, comandos, atalhos, tema e personalização via `SidebarPersonalizarModal` + API; exibe logo e marca Fortes Fios sem alterar a paleta azul administrativa |
+| `SinoNotificacoes` | `src/components/admin/notificacoes/SinoNotificacoes.tsx` | Sino do header, entre o botão de tema e o menu do usuário. Badge com não lidas (vermelho quando há urgente, `9+` acima de nove); o número vem de contadores do servidor, nunca de varredura da lista |
+| `PainelNotificacoes` | `src/components/admin/notificacoes/PainelNotificacoes.tsx` | Central: separa **Precisa de atenção** (urgentes, acento vermelho) de **Informações**; marcar como lida, dispensar, marcar todas, mostrar resolvidas e reativar o modal de entrada. `Dialog` compartilhado → `Drawer` no mobile |
+| `ModalAlertasEntrada` | `src/components/admin/notificacoes/ModalAlertasEntrada.tsx` | Modal de entrada, uma vez por sessão, com até 3 alertas e "e mais N". Fechar marca como visualizado; **Não mostrar novamente** desliga o modal para o usuário, de forma reversível pelo rodapé do painel |
+| `ItemNotificacao` | `src/components/admin/notificacoes/ItemNotificacao.tsx` | Linha compartilhada por painel e modal: ícone por tipo, selo **Urgente**, barra vermelha à esquerda, tempo relativo e navegação para o contexto |
+| `NotificacoesProvider` | `src/contexts/NotificacoesContext.tsx` | Origem única dos dados, montada em `src/app/admin/layout.tsx`. Nenhuma tela abre consulta própria |
 | `/admin/vitrine` | `src/app/admin/vitrine/page.tsx` | Gestão dos banners: arte desktop obrigatoriamente horizontal (21:8 ou 16:9), arte mobile 16:9/4:5/9:16, prévia alternável Desktop/Celular fiel à proporção e tipografia públicas, título multilinear de até 240 caracteres, família tipográfica e peso configuráveis por banner, nove posições de texto (grade 3×3), cor/contraste, publicação, ordem e exclusão; persiste imediatamente no JSON existente. Editor e recorte são etapas sequenciais: nunca manter dois overlays ou dois focus traps montados ao mesmo tempo |
 | `EditorFaixaRodape` | `src/components/admin/vitrine/EditorFaixaRodape.tsx` | Aba Cabeçalho da Vitrine: ativa/oculta a faixa promocional, edita a mensagem em linguagem comercial e mostra uma prévia fiel sem exigir caminhos de arquivo ou conhecimento técnico |
 | `/admin/pedidos/novo` | `src/app/admin/pedidos/novo/page.tsx` | Venda manual da loja: catálogo permanente no desktop e `Drawer` Vaul no mobile; pedido, cliente, retirada/entrega, desconto e pagamento; não inclui mesas, comandas, cozinha ou impressão |
-| `/admin/estoque` | `src/app/admin/estoque/page.tsx` | Gestão rápida do estoque: resumo por estado, busca, filtros e lista responsiva. Ajustes `− / valor / +`, zerar e bloqueio de venda ficam inline, sem modal e sem refetch integral da coleção |
+| `/admin/estoque` | `src/app/admin/estoque/page.tsx` | Gestão rápida do estoque: resumo por estado, busca, filtros e lista responsiva. Ajustes `− / valor / +`, zerar e bloqueio de venda ficam inline, sem modal e sem refetch integral da coleção. Cada linha comunica o estado por **barra lateral** (transparente / âmbar / vermelha), ícone no badge e quantidade colorida; aceita `?produto=<id>` para destacar e rolar até a linha vinda de uma notificação |
 | `ControleEstoqueProduto` | `src/components/admin/produtos/ControleEstoqueProduto.tsx` | Controle compacto compartilhado por Estoque e Produtos; aplica atualização otimista por linha, confirma o valor atômico retornado pela RPC e reverte com feedback em erro |
 | `ConfiguracoesPedidosDialog` | `src/components/admin/pedidos/ConfiguracoesPedidosDialog.tsx` | Engrenagem de `/admin/pedidos`: painel responsivo para prazos de retirada/entrega e compra mínima individual por cidade; reutiliza `configuracoes_loja` e a tabela legada `bairros`, sem criar valor global concorrente |
 | Dashboard | `src/app/admin/dashboard/page.tsx` | Faixa KPI (hoje/mês) + loja compacta + fila impressão + pedidos (tabela desktop / cards mobile); sem aviso de jogo |
@@ -186,6 +191,44 @@ Primitivos Kibo UI disponíveis:
 | `TransicaoLogin` | `src/components/login/TransicaoLogin.tsx` | Transição após autenticação |
 | `GarcomLayout` | `src/components/garcom/GarcomLayout.tsx` | Shell das telas do garçom |
 | Novo pedido do garçom | `src/app/garcom/novo/page.tsx` | Em `entrega`, **bairro é obrigatório** (select do cadastro, acima do endereço) e a taxa vem dele; pré-preenchido pelo cliente salvo e por "repetir pedido", mas só vale se o nome existir no cadastro ativo |
+
+## Notificações do Admin
+
+Central interna do Admin (não é push, e-mail ou WhatsApp). Spec: `specs/central-notificacoes-admin.md`.
+
+### Semântica de cor
+
+- **Vermelho = urgência**, e no estoque fica reservado ao caso terminal: `esgotado` (não vende mais).
+- **Âmbar = estoque baixo** — atenção, ainda vende.
+- A cor do **ícone** diz *qual* é o problema; a **barra vermelha à esquerda** e o selo **Urgente** dizem que é urgente. São eixos separados, então "urgente" não obriga tudo a ficar vermelho.
+- Nunca comunicar estado só por cor: sempre acompanha texto e ícone.
+- Com 4 de 5 produtos esgotados hoje, pintar estoque baixo de vermelho destruiria a hierarquia — por isso a divisão âmbar/vermelho.
+
+### Ciclo de vida
+
+Dois eixos, porque quem resolve o problema é a operação e quem lê é a pessoa:
+
+```
+notificação (sistema):  ativa ──────────────► resolvida
+por usuário (leitura):  nova → visualizada → lida
+                                 └─ silenciada (não volta ao modal)
+```
+
+Uma condição contínua gera **um** alerta ativo — garantido por índice único parcial no banco, não por disciplina de código. Resolver e reincidir gera **ocorrência nova**, que volta a aparecer.
+
+### Regras de superfície
+
+- Painel e modal usam o `Dialog` compartilhado, que já vira `Drawer` vaul abaixo de 768 px; camada vem de `overlay-layer.tsx`, nunca `z-index` literal.
+- Cadeia `flex flex-col` + `min-h-0 flex-1 overflow-y-auto`, com rodapé fora da área que rola e `pb-[max(...,env(safe-area-inset-bottom))]`.
+- Mensagem longa usa `break-words`; o modal não bloqueia o uso do sistema (Escape, clique fora e botão de 44 px).
+- O modal de entrada aparece **uma vez por sessão** e no máximo com 3 itens; o excedente vira "e mais N".
+
+### Anti-padrões desta área
+
+- Abrir consulta de notificação dentro de uma tela: a origem é o `NotificacoesProvider`, montado uma única vez no layout.
+- Contar notificação varrendo a lista para montar o badge — a lista vem truncada, o contador vem do servidor.
+- Transformar toda notificação em urgente. Pedido novo é `normal`; ele só escala para urgente depois de 12 h parado.
+- Tratar "não mostrar novamente" como estado local: a preferência mora no banco e precisa sobreviver a logout e a outro dispositivo.
 
 ## Padrões de layout
 

@@ -70,6 +70,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { AvatarUsuario } from '@/components/admin/AvatarUsuario'
 import { SidebarPersonalizarModal } from '@/components/admin/SidebarPersonalizarModal'
+import { SinoNotificacoes } from '@/components/admin/notificacoes'
 import {
   normalizarConfigVisibilidade,
   telaEstaVisivel,
@@ -926,6 +927,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <Moon strokeWidth={1.6} className="size-[18px]" />
               )}
             </button>
+
+            <SinoNotificacoes />
 
             {/*
               Menu portalizado em vez do par backdrop `fixed z-40` + painel

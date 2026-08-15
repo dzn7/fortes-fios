@@ -11,6 +11,7 @@ import {
   ajustarQuantidadeEstoque,
   obterSituacaoEstoque,
 } from '@/lib/estoque-produto.mjs'
+import { useNotificacoesOpcional } from '@/contexts/NotificacoesContext'
 import { cn } from '@/lib/utils'
 
 type ControleEstoqueProdutoProps = {
@@ -40,6 +41,7 @@ export function ControleEstoqueProduto({
 }: ControleEstoqueProdutoProps) {
   const [salvando, setSalvando] = useState(false)
   const [valorDigitado, setValorDigitado] = useState(String(quantidade))
+  const notificacoes = useNotificacoesOpcional()
   const situacao = obterSituacaoEstoque({
     estoque_quantidade: quantidade,
     estoque_minimo: estoqueMinimo,
@@ -74,6 +76,10 @@ export function ControleEstoqueProduto({
       }
       onQuantidadeAlterada(quantidadeConfirmada)
       setValorDigitado(String(quantidadeConfirmada))
+
+      // O trigger do banco já abriu/resolveu a notificação nesta transação.
+      // Buscamos de novo em vez de manter subscription aberta (spec §6).
+      notificacoes?.invalidar()
     } catch (erro) {
       onQuantidadeAlterada(quantidadeAnterior)
       setValorDigitado(String(quantidadeAnterior))

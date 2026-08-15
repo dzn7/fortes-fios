@@ -30,6 +30,7 @@ Oferecer um catálogo digital de produtos capilares, com navegação por categor
 - Catálogo público responsivo com produtos capilares, categorias reais ordenadas em `categorias_cardapio`, busca, carrinho persistido, status da loja, vitrine configurável com artes independentes por tela, seção de mais vendidos em modo automático ou curadoria manual, ofertas selecionadas pelo administrador e prova social do studio parceiro com logo e resultados configuráveis.
 - Checkout para entrega ou retirada na loja, com cidades atendidas, compra mínima por cidade, taxa de entrega, bairro/endereço livres, cupons, troco e formas de pagamento registradas no pedido. Pagamento online/Mercado Pago não faz parte da operação Fortes Fios.
 - Painel administrativo com dashboard, Kanban de produção, PDV, histórico/listagem de pedidos e edição detalhada.
+- Central de Notificações interna do Admin: alertas de estoque baixo, produto esgotado e pedido aguardando atendimento, com sino no header, painel, modal de entrada e preferência de "não mostrar novamente" persistida por usuário. Não é push do navegador, e-mail nem WhatsApp.
 - Gestão de salão: mesas, comandas, locais externos, ocupação, tempo limite e liberação.
 - Gestão de entregas, entregadores e repasses.
 - Catálogo: produtos, bebidas, combos, adicionais, categorias, ordenação, imagens, disponibilidade, controle de estoque e condições comerciais por produto (desconto e parcelamento meramente informativo configurável entre 2x e 12x).
@@ -129,6 +130,7 @@ Há ainda páginas de detalhes/edição de pedido, relatórios e saldos de caixa
 7. As alterações do catálogo são acompanhadas por canais Realtime.
 8. `CarrinhoContext` mantém o carrinho no `localStorage`.
 9. Produtos possuem quantidade física, limite de estoque baixo e regra opcional de bloqueio no zero. O estado é sempre derivado; o carrinho reconcilia alterações e o banco reserva atomicamente ao criar `itens_pedido`, restaurando ao remover ou cancelar.
+9.1. Cruzar o limite de estoque, esgotar ou criar um pedido pendente abre uma notificação no Admin, gerada por trigger no banco — nunca pela leitura de uma tela. Uma condição contínua mantém **um** alerta ativo (índice único parcial sobre `chave_dedupe where estado = 'ativa'`); resolver e reincidir gera ocorrência nova. Pedido nasce `normal` e escala para `urgente` após 12 h parado, na mesma linha.
 10. `ModalCarrinho` revalida cupom, estoque e itens e calcula frete/taxa de pagamento. Em entrega, o cliente seleciona uma cidade ativa, informa bairro e endereço em campos livres e pode acrescentar uma referência; a compra mínima é validada sobre o subtotal de produtos após descontos de item, antes de frete e cupom. Cada cidade possui dias semanais e compra mínima configuráveis: Porto opera diariamente, enquanto Nossa Senhora dos Remédios e Campo Largo iniciam, respectivamente, com segunda e terça-feira. Checkout e confirmação informam a próxima data habilitada, que é persistida no pedido e na entrega. Os prazos em minutos de retirada e entrega são configurações independentes da loja e aparecem na escolha do cliente.
 11. Para pagamento comum, cria `pedidos`, grava `itens_pedido` e `item_adicionais`, registra cupom e cria a entrega quando necessário.
 12. Se uma etapa crítica falhar, o frontend remove uso do cupom e exclui o pedido criado, restaurando a reserva de estoque pela própria transação de itens.
@@ -235,6 +237,7 @@ O `.env.local` da aplicação principal aponta para esse projeto. Alguns scripts
 | Produtividade | `produtividade_config` (pesos/metas; fechada para `anon`) + funções `produtividade_*` |
 | Histórico | `historico_caixas`, `historico_entregas`, `historico_item_adicionais`, `historico_itens_pedido`, `historico_movimentacoes_caixa`, `historico_pedidos`, `resumo_anual` |
 | WhatsApp | `whatsapp_conversations`, `whatsapp_customer_memory`, `whatsapp_messages`, `whatsapp_order_drafts`, `whatsapp_order_notifications`, `whatsapp_outbox`, `whatsapp_product_aliases`, `whatsapp_product_lookup_misses`, `whatsapp_session` |
+| Notificações do Admin | `notificacoes` (condição ativa/resolvida + `chave_dedupe`), `notificacoes_leitura` (visualizada/lida/silenciada por usuário), `notificacoes_preferencias` (modal de entrada por usuário). Fechadas para `anon`/`authenticated`: o acesso é por route handler com `service_role`, e os triggers funcionam porque as funções são `SECURITY DEFINER` |
 | Views | `vw_crediario_contas_resumo`, `vw_usuarios_cliente_metricas` |
 
 ### Acoplamentos por trigger

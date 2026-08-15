@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
+import { useSearchParams } from 'next/navigation'
 import {
   Archive,
   ImageIcon,
@@ -43,12 +44,64 @@ const rotulosSituacao = {
   esgotado: 'Esgotado',
 } as const
 
+/**
+ * Vermelho é reservado ao caso terminal (esgotado: não vende mais); estoque
+ * baixo é âmbar. Assim os três estados se distinguem numa passada de olho sem
+ * saturar a tela — o UI.md exige status por texto + ícone, nunca só por cor.
+ */
+const aparenciaSituacao = {
+  em_estoque: {
+    barra: 'bg-transparent',
+    quantidade: 'text-foreground',
+    Icone: PackageCheck,
+    badge: 'success',
+  },
+  baixo: {
+    barra: 'bg-amber-500',
+    quantidade: 'text-amber-600 dark:text-amber-500',
+    Icone: AlertTriangle,
+    badge: 'warning',
+  },
+  esgotado: {
+    barra: 'bg-destructive',
+    quantidade: 'text-destructive',
+    Icone: PackageX,
+    badge: 'destructive',
+  },
+} as const
+
+// `useSearchParams` obriga a fronteira de Suspense no App Router; mesmo padrão
+// já usado em `/admin/pedidos`.
 export default function EstoquePage() {
+  return (
+    <Suspense
+      fallback={
+        <ProtectedRoute>
+          <AdminLayout>
+            <div className="flex min-h-[60vh] items-center justify-center">
+              <RefreshCw className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          </AdminLayout>
+        </ProtectedRoute>
+      }
+    >
+      <EstoqueConteudo />
+    </Suspense>
+  )
+}
+
+function EstoqueConteudo() {
   const [produtos, setProdutos] = useState<ProdutoEstoque[]>([])
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<FiltroEstoque>('todos')
   const [salvandoBloqueioId, setSalvandoBloqueioId] = useState<string | null>(null)
+
+  // Uma notificação de estoque leva a `?produto=<id>`: a linha é destacada e
+  // trazida para a viewport, sem filtrar a lista nem esconder o resto.
+  const searchParams = useSearchParams()
+  const produtoDestacado = searchParams.get('produto')
+  const linhaDestacadaRef = useRef<HTMLElement | null>(null)
 
   const carregarProdutos = useCallback(async () => {
     setCarregando(true)
@@ -105,6 +158,11 @@ export default function EstoquePage() {
       void supabase.removeChannel(canal)
     }
   }, [carregarProdutos])
+
+  useEffect(() => {
+    if (!produtoDestacado || carregando) return
+    linhaDestacadaRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [carregando, produtoDestacado])
 
   const contadores = useMemo(() => produtos.reduce(
     (acumulado, produto) => {
@@ -194,12 +252,12 @@ export default function EstoquePage() {
                 <div><p className="text-2xl font-semibold tabular-nums">{contadores.baixo}</p><p className="text-xs text-muted-foreground">Estoque baixo</p></div>
               </CardContent>
             </Card>
-            <Card className="border-border/70 shadow-none">
+            <Card className={cn('shadow-none', contadores.esgotado > 0 ? 'border-destructive/40 bg-destructive/[0.03]' : 'border-border/70')}>
               <CardContent className="flex items-center gap-3 p-4">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <div className={cn('flex size-10 items-center justify-center rounded-xl', contadores.esgotado > 0 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground')}>
                   <PackageX className="size-5" />
                 </div>
-                <div><p className="text-2xl font-semibold tabular-nums">{contadores.esgotado}</p><p className="text-xs text-muted-foreground">Esgotados</p></div>
+                <div><p className={cn('text-2xl font-semibold tabular-nums', contadores.esgotado > 0 && 'text-destructive')}>{contadores.esgotado}</p><p className="text-xs text-muted-foreground">Esgotados</p></div>
               </CardContent>
             </Card>
           </section>
@@ -232,8 +290,19 @@ export default function EstoquePage() {
                 <div className="divide-y divide-border/70">
                   {produtosFiltrados.map((produto) => {
                     const situacao = obterSituacaoEstoque(produto)
+                    const aparencia = aparenciaSituacao[situacao]
+                    const IconeSituacao = aparencia.Icone
+                    const destacado = produto.id === produtoDestacado
                     return (
-                      <article key={produto.id} className="grid gap-4 py-4 first:pt-0 last:pb-0 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+                      <article
+                        key={produto.id}
+                        ref={destacado ? linhaDestacadaRef : undefined}
+                        className={cn(
+                          'relative grid gap-4 rounded-lg py-4 pl-3 transition-colors first:pt-0 last:pb-0 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center',
+                          destacado && 'bg-primary/[0.06] ring-1 ring-primary/30',
+                        )}
+                      >
+                        <span className={cn('absolute inset-y-2 left-0 w-[3px] rounded-full', aparencia.barra)} aria-hidden />
                         <div className="flex min-w-0 items-center gap-3">
                           <div className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-muted">
                             {produto.imagem_url ? <Image src={produto.imagem_url} alt="" fill className="object-cover" sizes="56px" /> : <ImageIcon className="absolute left-1/2 top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 text-muted-foreground" />}
@@ -241,9 +310,14 @@ export default function EstoquePage() {
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <h2 className="truncate font-medium">{produto.nome}</h2>
-                              <Badge variant={situacao === 'em_estoque' ? 'success' : situacao === 'baixo' ? 'warning' : 'secondary'}>{rotulosSituacao[situacao]}</Badge>
+                              <Badge variant={aparencia.badge} className="gap-1">
+                                <IconeSituacao className="size-3" aria-hidden />
+                                {rotulosSituacao[situacao]}
+                              </Badge>
                             </div>
-                            <p className="mt-0.5 truncate text-sm text-muted-foreground">{produto.categoria} · alerta em {produto.estoque_minimo} un.</p>
+                            <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                              {produto.categoria} · <span className={cn('font-semibold tabular-nums', aparencia.quantidade)}>{produto.estoque_quantidade} un.</span> · alerta em {produto.estoque_minimo}
+                            </p>
                           </div>
                         </div>
                         <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm lg:border-0 lg:px-0">
