@@ -38,9 +38,7 @@ import { useStatusLoja } from '@/lib/useStatusLoja'
 import IconeWhatsApp from '@/components/icons/IconeWhatsApp'
 import {
   CHAVE_FRETE_GRATIS,
-  CHAVE_TEMPO_ENTREGA,
   CHAVE_TEMPO_RETIRADA,
-  TEMPO_ENTREGA_PADRAO,
   TEMPO_RETIRADA_PADRAO,
   normalizarTempoEstimado,
 } from '@/lib/configuracoes-pedidos'
@@ -50,6 +48,8 @@ import {
   formatarDataPrevistaEntrega,
   normalizarDiasEntrega,
   type DiaSemanaEntrega,
+  PRAZO_ENTREGA_PADRAO,
+  descreverPrazoEntrega,
 } from '@/lib/agenda-entrega'
 import ModalAlerta from './ModalAlerta'
 
@@ -167,6 +167,10 @@ type PedidoEnviado = {
   mesa?: number
   pagamentoOnlineAprovado?: boolean
   dataPrevistaEntrega?: string | null
+  /** Texto já resolvido: data da cidade de dia fixo, ou o prazo de 24 horas. */
+  prazoEntrega?: string
+  /** `true` quando `prazoEntrega` é data; muda o rótulo e a frase da tela. */
+  prazoEhData?: boolean
   /**
    * Retrato para a mensagem do WhatsApp. Precisa ser capturado no envio: logo
    * depois o carrinho e o formulário são limpos, e aí não há mais de onde tirar
@@ -285,7 +289,6 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const [copiandoCodigoPix, setCopiandoCodigoPix] = useState(false)
   const [tempoRestanteSegundos, setTempoRestanteSegundos] = useState<number | null>(null)
   const expiracaoPixJaProcessada = useRef(false)
-  const [tempoEntregaEstimado, setTempoEntregaEstimado] = useState(TEMPO_ENTREGA_PADRAO)
   const [tempoRetiradaEstimado, setTempoRetiradaEstimado] = useState(TEMPO_RETIRADA_PADRAO)
   const [entregasOnlineAtivas, setEntregasOnlineAtivas] = useState(true)
   const [configFreteGratis, setConfigFreteGratis] = useState<ConfigFreteGratis>(
@@ -322,6 +325,12 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const textoAgendaEntrega = bairroSelecionado
     ? descreverAgendaEntrega(bairroSelecionado.dias_entrega)
     : null
+  /*
+   * Prazo mostrado no seletor de tipo. Cidade de dia fixo continua anunciando a
+   * data; cidade que entrega todo dia — e o estado sem cidade escolhida — passam
+   * a anunciar "em até 24 horas", em vez dos minutos herdados do restaurante.
+   */
+  const prazoEntrega = descreverPrazoEntrega(bairroSelecionado?.dias_entrega)
   const textoDataPrevistaEntrega = dataPrevistaEntrega
     ? formatarDataPrevistaEntrega(dataPrevistaEntrega)
     : null
@@ -480,9 +489,6 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
     let ativo = true
     const aplicarTempo = (chave: string, valor: unknown) => {
       if (!ativo) return
-      if (chave === CHAVE_TEMPO_ENTREGA) {
-        setTempoEntregaEstimado(normalizarTempoEstimado(valor, TEMPO_ENTREGA_PADRAO))
-      }
       if (chave === CHAVE_TEMPO_RETIRADA) {
         setTempoRetiradaEstimado(normalizarTempoEstimado(valor, TEMPO_RETIRADA_PADRAO))
       }
@@ -494,7 +500,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
     supabase
       .from('configuracoes_loja')
       .select('chave, valor')
-      .in('chave', [CHAVE_TEMPO_ENTREGA, CHAVE_TEMPO_RETIRADA, CHAVE_FRETE_GRATIS])
+      .in('chave', [CHAVE_TEMPO_RETIRADA, CHAVE_FRETE_GRATIS])
       .then(({ data }) => {
         for (const configuracao of data || []) {
           aplicarTempo(configuracao.chave, configuracao.valor)
@@ -1635,6 +1641,8 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         mesa: mesaSelecionada || undefined,
         pagamentoOnlineAprovado: false,
         dataPrevistaEntrega,
+        prazoEntrega: descreverPrazoEntrega(bairroSelecionado?.dias_entrega).texto,
+        prazoEhData: descreverPrazoEntrega(bairroSelecionado?.dias_entrega).ehData,
         // Mesmo objeto que abriu o WhatsApp, para a tela poder reenviar.
         resumoWhatsApp: resumoParaEnvio,
       })
@@ -1876,9 +1884,9 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                   </h3>
                   <p className="text-muted-foreground text-sm">
                     {pedidoEnviado.tipoEntrega === 'entrega'
-                      ? pedidoEnviado.dataPrevistaEntrega
-                        ? `Seu pedido tem entrega prevista para ${formatarDataPrevistaEntrega(pedidoEnviado.dataPrevistaEntrega)}.`
-                        : 'Seu pedido será entregue no endereço informado.'
+                      ? pedidoEnviado.prazoEhData
+                        ? `Seu pedido tem entrega prevista para ${pedidoEnviado.prazoEntrega}.`
+                        : `Seu pedido será entregue no endereço informado ${pedidoEnviado.prazoEntrega || PRAZO_ENTREGA_PADRAO}.`
                       : 'Retire seu pedido quando estiver pronto.'}
                   </p>
                 </div>
@@ -1889,14 +1897,16 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-muted rounded-xl p-3 text-center">
                 <p className="mb-1 text-xs text-muted-foreground">
-                  {pedidoEnviado.tipoEntrega === 'entrega' && pedidoEnviado.dataPrevistaEntrega
-                    ? 'Previsão de entrega'
-                    : 'Tempo estimado'}
+                  {pedidoEnviado.tipoEntrega !== 'entrega'
+                    ? 'Tempo estimado'
+                    : pedidoEnviado.prazoEhData
+                      ? 'Previsão de entrega'
+                      : 'Prazo de entrega'}
                 </p>
                 <p className="text-sm font-bold leading-snug text-foreground sm:text-base">
-                  {pedidoEnviado.tipoEntrega === 'entrega' && pedidoEnviado.dataPrevistaEntrega
-                    ? formatarDataPrevistaEntrega(pedidoEnviado.dataPrevistaEntrega)
-                    : `${pedidoEnviado.tipoEntrega === 'retirada' ? tempoRetiradaEstimado : tempoEntregaEstimado} min`}
+                  {pedidoEnviado.tipoEntrega === 'entrega'
+                    ? pedidoEnviado.prazoEntrega || PRAZO_ENTREGA_PADRAO
+                    : `${tempoRetiradaEstimado} min`}
                 </p>
               </div>
               <div className="bg-primary/10 rounded-xl p-3 text-center">
@@ -2257,7 +2267,9 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                       <MapPin className="w-5 h-5" />
                       Entrega
                       <span className="text-[11px] text-muted-foreground">
-                        estimada em {tempoEntregaEstimado} min
+                        {prazoEntrega.ehData
+                          ? `chega ${prazoEntrega.texto}`
+                          : prazoEntrega.texto}
                       </span>
                       {!entregasOnlineAtivas && (
                         <span className="text-[10px] font-medium text-red-600 dark:text-red-400">indisponível</span>

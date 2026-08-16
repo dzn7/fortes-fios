@@ -1,5 +1,40 @@
 # Progress
 
+## [2026-08-16] Prazo de entrega: 24 horas no lugar dos minutos do restaurante
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Arquivos criados:** `src/lib/agenda-entrega.mjs`, `src/lib/agenda-entrega.d.mts`, `tests/agenda-entrega.test.mjs`.
+**Arquivos alterados:** `src/lib/agenda-entrega.ts` (virou reexport tipado), `src/components/ModalCarrinho.tsx`, `UI.md`, `Progress.md`.
+
+**Defeito relatado:** o card de Entrega dizia "estimada em 20-30 min"; deveria
+ser "em até 24 horas", inclusive para Porto.
+
+**Causa:** duas, e só a primeira era óbvia.
+1. O card do passo 2 renderiza **antes** de haver cidade escolhida e caía no
+   `tempo_entrega_estimado = '20-30'` herdado do projeto de restaurante.
+2. Porto tem `dias_entrega = [0,1,2,3,4,5,6]` — entrega todo dia. O cálculo de
+   "próxima data" devolvia **hoje**, e a tela de sucesso prometia "entrega
+   prevista para domingo, 16 de agosto". Cidade que entrega todo dia não tem
+   próxima data útil; prometer hoje é promessa que a operação não controla.
+
+As outras duas cidades têm dia fixo (`[2]` e `[1]`) e por isso já mostravam data
+correta — como o usuário observou.
+
+**O que foi feito:**
+- `descreverPrazoEntrega(dias)` devolve `{ texto, ehData }`. Semana completa ou sem configuração → `em até 24 horas`; dias fixos → a data. `ehData` deixa a tela escolher entre "Previsão de entrega" e "Prazo de entrega".
+- A lógica migrou de `agenda-entrega.ts` para `.mjs` (testável por `node --test` sem transpilação, como os demais domínios); o `.ts` virou reexport tipado e nenhum call site mudou.
+- O retrato do pedido guarda `prazoEntrega` e `prazoEhData`, para a tela de sucesso não recalcular nem prometer data para quem recebeu prazo.
+- `tempoEntregaEstimado` saiu do fluxo de entrega — estado, carregamento e a chave na consulta. Minutos permanecem só para retirada.
+
+**Verificação:** `node --test tests/*.test.mjs` **194/194** (6 novos) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · conferido com as três cidades reais: Porto → `em até 24 horas`, Campo Largo → `chega terça-feira, 18 de agosto`, Nossa Senhora dos Remédios → `chega segunda-feira, 17 de agosto`, sem cidade → `em até 24 horas`.
+
+**Pendências / próximos passos:**
+- `tempo_entrega_estimado` continua na tabela e no `ConfiguracoesBot`, agora sem efeito no site. Remover exige mexer numa tela legada; deixei a chave intacta.
+
+**Armadilhas descobertas:**
+- "Próxima data de entrega" só é informação útil quando a entrega **não** é diária. Para quem entrega todo dia, o cálculo devolve hoje e vira uma promessa que a loja não fez.
+- O card do seletor de tipo renderiza antes de qualquer cidade existir; qualquer texto que dependa da cidade precisa de um caminho para esse estado.
+
 ## [2026-08-16] WhatsApp do cabeçalho, about:blank e fluxo de categorias
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

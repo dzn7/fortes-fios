@@ -491,6 +491,30 @@ nome, num campo solto.
 - Editar abre com o ícone atual, não com o padrão — senão salvar sem mexer trocaria o ícone sozinho.
 - O mesmo ícone aparece no menu da loja, que é onde ele serve: o cliente reconhece antes de ler.
 
+## Prazo de entrega
+
+O checkout herdou do projeto de restaurante uma estimativa em **minutos**
+(`tempo_entrega_estimado = '20-30'`). Aqui a entrega é logística de encomenda,
+não delivery de comida — e a tela anunciava "estimada em 20-30 min" antes mesmo
+de haver cidade escolhida.
+
+`descreverPrazoEntrega(dias)` decide o texto e devolve `ehData`, que é o que
+permite a tela escolher o rótulo certo:
+
+| Situação | Texto | Rótulo |
+|---|---|---|
+| Cidade com dias fixos | `chega terça-feira, 18 de agosto` | Previsão de entrega |
+| Cidade que entrega **todos os dias** | `em até 24 horas` | Prazo de entrega |
+| Nenhuma cidade escolhida ainda | `em até 24 horas` | Prazo de entrega |
+
+**Cidade que entrega todo dia não tem "próxima data" útil** — ela é sempre hoje,
+e prometer hoje é promessa que a operação não controla. Era o caso do Porto:
+`dias_entrega = [0..6]` fazia o cálculo devolver a data de hoje, e a tela dizia
+"entrega prevista para domingo, 16 de agosto".
+
+O valor em minutos permanece só para **retirada**. A única tela que o configura
+(`/admin/whatsapp`) é rota legada e oculta.
+
 ## Padrões de layout
 
 ### Cardápio público
