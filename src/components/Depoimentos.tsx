@@ -8,10 +8,36 @@ import { cn } from '@/lib/utils'
 import {
   CONFIGURACAO_DEPOIMENTOS_PADRAO,
   depoimentosVisiveis,
-  proporcaoDoFormato,
   type ConfiguracaoDepoimentos,
   type Depoimento,
+  type FormatoDepoimento,
 } from '@/lib/vitrineDepoimentos.mjs'
+
+/**
+ * Classes por formato — escritas por extenso e AQUI, não no módulo de domínio.
+ *
+ * O `content` do `tailwind.config` cobre `pages|components|features|app` com
+ * extensão `{js,ts,jsx,tsx,mdx}`. Classe declarada em `src/lib/*.mjs` fica fora
+ * do scanner e simplesmente não é gerada: foi assim que o card perdeu largura e
+ * proporção, o container do `<Image fill>` colapsou para altura zero, e a seção
+ * virou uma fileira de nomes sem imagem.
+ *
+ * Pelo mesmo motivo nada aqui pode ser interpolado (`w-[${x}]`): o JIT lê texto
+ * literal, não expressão.
+ */
+const ESTILO_FORMATO: Record<FormatoDepoimento, { proporcao: string; largura: string }> = {
+  vertical: {
+    proporcao: 'aspect-[9/16]',
+    largura: 'w-[220px] sm:w-[240px] lg:w-[260px]',
+  },
+  horizontal: {
+    proporcao: 'aspect-[16/10]',
+    largura: 'w-[300px] sm:w-[400px] lg:w-[460px]',
+  },
+}
+
+const estiloDoFormato = (formato: string) =>
+  ESTILO_FORMATO[formato as FormatoDepoimento] ?? ESTILO_FORMATO.vertical
 
 /**
  * Depoimentos na vitrine.
@@ -123,7 +149,7 @@ export default function Depoimentos() {
         <div className="mt-6 overflow-hidden" ref={emblaRef}>
           <div className="flex gap-3 sm:gap-4">
             {itens.map((depoimento, indice) => {
-              const formato = proporcaoDoFormato(depoimento.formato)
+              const estilo = estiloDoFormato(depoimento.formato)
 
               return (
                 <button
@@ -137,10 +163,10 @@ export default function Depoimentos() {
                   }
                   className={cn(
                     'group relative shrink-0 overflow-hidden rounded-2xl border border-border/70 bg-card text-left transition-colors hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
-                    formato.classeLargura,
+                    estilo.largura,
                   )}
                 >
-                  <div className={cn('relative w-full', formato.classeProporcao)}>
+                  <div className={cn('relative w-full', estilo.proporcao)}>
                     <Image
                       src={depoimento.imagemUrl}
                       alt={

@@ -1,5 +1,35 @@
 # Progress
 
+## [2026-08-16] Correção: seção de Depoimentos renderizava sem imagem
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Arquivos alterados:** `src/lib/vitrineDepoimentos.mjs|.d.mts`, `src/components/Depoimentos.tsx`, `src/components/admin/vitrine/EditorDepoimentos.tsx`, `tests/depoimentos.test.mjs`, `UI.md`, `Progress.md`.
+
+**Defeito relatado:** a seção aparecia como uma fileira de "bolhas" com o nome
+dos clientes, sem nenhuma imagem.
+
+**Causa raiz — regressão minha, da entrega anterior:** eu coloquei as classes de
+Tailwind (`aspect-[9/16]`, `w-[220px]`…) dentro de `src/lib/vitrineDepoimentos.mjs`.
+O `content` do `tailwind.config` cobre `pages|components|features|app` com
+extensão `{js,ts,jsx,tsx,mdx}`: **`src/lib/` não está na lista, e `.mjs` não casa
+com o glob**. As classes nunca foram geradas. Sem largura e sem proporção, o
+container do `<Image fill>` colapsou para altura zero e sobrou apenas o parágrafo
+do nome — as "bolhas".
+
+Falha silenciosa: build passa, tsc passa, nenhum aviso.
+
+**Correção:** as classes saíram do domínio e foram para os componentes, escritas
+por extenso em um `Record` — que é onde o scanner do Tailwind lê e onde
+presentation pertence. O domínio agora carrega `proporcao: 9/16` (número), e
+`formatoDepoimento` substituiu `proporcaoDoFormato`.
+
+**Verificação:** `node --test tests/*.test.mjs` **172/172** · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · **conferido no CSS emitido**, não no build passar: `aspect-\[9\/16\]{aspect-ratio:9/16}`, `.w-\[220px\]{width:220px}`, `lg\:w-\[260px\]{width:260px}` presentes em `.next/static/chunks/*.css`. Teste novo falha se classe voltar a vazar para o domínio.
+
+**Armadilhas descobertas:**
+- Classe de Tailwind fora do `content` não gera erro em lugar nenhum — nem build, nem tipo, nem console. O elemento só colapsa.
+- Verificar "o build passou" não prova que o CSS existe. A checagem certa é grep no arquivo emitido, com o escape que o Tailwind aplica (`aspect-\[9\/16\]`).
+- Minha primeira tentativa de conferir isso grepou um caminho inexistente e o `&& echo ✓` disparou no warning do grep, dando falso positivo nos dois sentidos. Comando de verificação também precisa ser verificado.
+
 ## [2026-08-16] Nova seção de Depoimentos (Admin + site)
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

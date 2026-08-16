@@ -19,8 +19,8 @@ export type DescritorFormato = {
   id: FormatoDepoimento
   rotulo: string
   ajuda: string
-  classeProporcao: string
-  classeLargura: string
+  /** Largura ÷ altura. A tradução para classe mora no componente. */
+  proporcao: number
 }
 
 export const CHAVE_DEPOIMENTOS: string
@@ -28,7 +28,7 @@ export const LIMITE_DEPOIMENTOS: number
 export const FORMATOS_DEPOIMENTO: DescritorFormato[]
 export const CONFIGURACAO_DEPOIMENTOS_PADRAO: ConfiguracaoDepoimentos
 
-export function proporcaoDoFormato(id: string): DescritorFormato
+export function formatoDepoimento(id: string): DescritorFormato
 export function normalizarConfiguracaoDepoimentos(
   valor: string | null | undefined,
 ): ConfiguracaoDepoimentos

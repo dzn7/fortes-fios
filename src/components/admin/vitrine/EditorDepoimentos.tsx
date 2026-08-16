@@ -27,7 +27,6 @@ import {
   LIMITE_DEPOIMENTOS,
   criarIdDepoimento,
   normalizarConfiguracaoDepoimentos,
-  proporcaoDoFormato,
   reordenarDepoimentos,
   type ConfiguracaoDepoimentos,
   type Depoimento,
@@ -46,6 +45,12 @@ import {
  * O upload vai para a pasta `depoimentos/`, a única processada por Sharp no
  * servidor com parâmetros que preservam texto (ver `/api/upload`).
  */
+/** Mesma razão do componente do site: classe literal, dentro do alcance do JIT. */
+const PROPORCAO_MINIATURA: Record<string, string> = {
+  vertical: 'aspect-[9/16]',
+  horizontal: 'aspect-[16/10]',
+}
+
 export function EditorDepoimentos() {
   const [configuracao, setConfiguracao] = useState<ConfiguracaoDepoimentos>(
     CONFIGURACAO_DEPOIMENTOS_PADRAO,
@@ -301,7 +306,7 @@ export function EditorDepoimentos() {
         ) : (
           <ul className="grid gap-2.5 sm:grid-cols-2">
             {configuracao.depoimentos.map((item, indice) => {
-              const formato = proporcaoDoFormato(item.formato)
+              const proporcao = PROPORCAO_MINIATURA[item.formato] ?? PROPORCAO_MINIATURA.vertical
 
               return (
                 <li
@@ -315,7 +320,7 @@ export function EditorDepoimentos() {
                   <div
                     className={cn(
                       'relative w-20 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted',
-                      formato.classeProporcao,
+                      proporcao,
                     )}
                   >
                     <Image

@@ -17,24 +17,28 @@ export const CHAVE_DEPOIMENTOS = 'vitrine_depoimentos'
 export const LIMITE_DEPOIMENTOS = 12
 
 /**
- * Larguras pensadas para o carrossel: o vertical é estreito de propósito para
- * um 9:16 não tomar a tela no desktop, e o horizontal é largo o bastante para
- * o texto do print continuar legível.
+ * Catálogo de formatos — só o que é semântico.
+ *
+ * As classes de Tailwind ficam no componente, não aqui. Este arquivo é `.mjs` em
+ * `src/lib/`, e o `content` do `tailwind.config` cobre apenas
+ * `pages|components|features|app` com extensão `{js,ts,jsx,tsx,mdx}`: classe
+ * escrita aqui **nunca é gerada**. Foi assim que os cards perderam largura e
+ * proporção e a seção virou uma fileira de nomes sem imagem.
+ *
+ * Além do bug, é a fronteira certa: domínio não conhece folha de estilo.
  */
 export const FORMATOS_DEPOIMENTO = [
   {
     id: 'vertical',
     rotulo: 'Vertical 9:16',
     ajuda: 'Print de celular, story, conversa',
-    classeProporcao: 'aspect-[9/16]',
-    classeLargura: 'w-[220px] sm:w-[240px] lg:w-[260px]',
+    proporcao: 9 / 16,
   },
   {
     id: 'horizontal',
     rotulo: 'Horizontal',
     ajuda: 'Print de tela larga, captura de comentário',
-    classeProporcao: 'aspect-[16/10]',
-    classeLargura: 'w-[300px] sm:w-[400px] lg:w-[460px]',
+    proporcao: 16 / 10,
   },
 ]
 
@@ -65,7 +69,7 @@ const formatoValido = (valor) =>
   FORMATOS_DEPOIMENTO.some((formato) => formato.id === valor) ? valor : FORMATO_PADRAO.id
 
 /** @param {string} id */
-export const proporcaoDoFormato = (id) =>
+export const formatoDepoimento = (id) =>
   FORMATOS_DEPOIMENTO.find((formato) => formato.id === id) || FORMATO_PADRAO
 
 /** @param {string|null|undefined} valor */

@@ -8,7 +8,7 @@ import {
   criarIdDepoimento,
   depoimentosVisiveis,
   normalizarConfiguracaoDepoimentos,
-  proporcaoDoFormato,
+  formatoDepoimento,
   reordenarDepoimentos,
 } from '../src/lib/vitrineDepoimentos.mjs'
 
@@ -94,23 +94,32 @@ test('formato desconhecido cai em vertical, que é o caso comum do print', () =>
   assert.equal(config.depoimentos[2].formato, 'horizontal')
 })
 
-test('todo formato do catálogo tem proporção e largura própria', () => {
+test('todo formato do catálogo é semântico, sem classe de CSS', () => {
   assert.ok(FORMATOS_DEPOIMENTO.length >= 2)
 
   for (const formato of FORMATOS_DEPOIMENTO) {
-    assert.ok(formato.id && formato.rotulo)
-    const proporcao = proporcaoDoFormato(formato.id)
-    assert.ok(proporcao.classeProporcao.includes('aspect-'))
-    assert.ok(proporcao.classeLargura.length > 0)
+    assert.ok(formato.id && formato.rotulo && formato.ajuda)
+    assert.equal(typeof formato.proporcao, 'number')
+    assert.ok(formato.proporcao > 0)
   }
 })
 
-test('vertical e horizontal têm larguras diferentes no carrossel', () => {
-  const vertical = proporcaoDoFormato('vertical')
-  const horizontal = proporcaoDoFormato('horizontal')
+/*
+ * Guarda contra a regressão que derrubou a seção: classe de Tailwind escrita em
+ * `src/lib/*.mjs` fica fora do `content` do config e nunca é gerada. O card
+ * perdeu largura e proporção, o `<Image fill>` colapsou e sobrou só o nome.
+ */
+test('o domínio não carrega classe de Tailwind', () => {
+  const serializado = JSON.stringify(FORMATOS_DEPOIMENTO)
 
-  assert.notEqual(vertical.classeLargura, horizontal.classeLargura)
-  assert.notEqual(vertical.classeProporcao, horizontal.classeProporcao)
+  assert.ok(!serializado.includes('aspect-'), 'proporção virou classe no domínio')
+  assert.ok(!/\bw-\[/.test(serializado), 'largura virou classe no domínio')
+})
+
+test('vertical é retrato e horizontal é paisagem', () => {
+  assert.ok(formatoDepoimento('vertical').proporcao < 1)
+  assert.ok(formatoDepoimento('horizontal').proporcao > 1)
+  assert.equal(formatoDepoimento('inexistente').id, 'vertical')
 })
 
 // 5. id duplicado quebraria a key do React

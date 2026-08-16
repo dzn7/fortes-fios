@@ -427,6 +427,16 @@ largura do card:
 | `vertical` | `aspect-[9/16]` | 220 → 260px |
 | `horizontal` | `aspect-[16/10]` | 300 → 460px |
 
+🔴 **Essas classes moram no componente, nunca no módulo de domínio.** O `content`
+do `tailwind.config` cobre `pages|components|features|app` com extensão
+`{js,ts,jsx,tsx,mdx}` — `src/lib/` não está na lista, e `.mjs` não casaria com o
+glob de qualquer forma. Classe declarada lá **não é gerada**: o card fica sem
+largura e sem proporção, o container do `<Image fill>` colapsa para altura zero,
+e a seção vira uma fileira de nomes sem imagem. Aconteceu.
+
+Domínio carrega `proporcao: 9/16` (número); a tradução para classe é do
+componente. `tests/depoimentos.test.mjs` falha se voltar a vazar CSS para lá.
+
 `object-contain`, nunca `cover`: o print é o conteúdo, cortar borda é cortar texto.
 Largura estreita no vertical impede que um 9:16 tome a tela no desktop.
 
@@ -680,6 +690,7 @@ O `AppToaster` posiciona notificações no **topo** (`top-center` no mobile, `to
 - Overlay mobile custom (`fixed inset-0` + `items-end`) — preferir `ModalSheet` / `Dialog` responsivo.
 - Adicionar item e abrir o carrinho automaticamente; isso interrompe a montagem do pedido e remove o controle do usuário.
 - Colocar um `DrawerContent` abaixo do próprio overlay ou reduzir localmente o z-index das primitivas compartilhadas.
+- Escrever classe de Tailwind fora do `content` do config (`src/lib/`, arquivos `.mjs`). Ela não é gerada e o elemento colapsa em silêncio — sem erro de build, sem aviso. Classe é assunto de componente.
 - `z-index` literal em primitivo de overlay. Empilhar dois overlays com o mesmo par fixo (overlay 1000 / conteúdo 1001) faz o backdrop do filho ficar **abaixo** do conteúdo do pai — o painel de trás continua aceso por cima do escurecimento. A camada vem de `overlay-layer.tsx`.
 - Overlay manual (`fixed inset-0` + backdrop próprio) em tela viva: fica sem focus trap, sem Escape, sem bloqueio de scroll e fora da escala de camadas. Use `ModalSheet` / `Dialog`.
 - Bloquear scroll escrevendo em `document.body.style` e limpar com `= ''`. O vaul e o `react-remove-scroll` do Radix já bloqueiam, e o `= ''` apaga o bloqueio de um overlay alheio que ainda esteja aberto.
