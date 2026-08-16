@@ -410,6 +410,48 @@ pressão de memória no WebKit.
 - **Busca por número de sequência:** cada consulta invalida a anterior. Sem isso a resposta lenta sobrescreve a rápida, e uma resposta atrasada repovoa modal já fechado.
 - `LimiteDeErro` embrulha carrinho e pedidos: erro contido na área, resto do site de pé.
 
+## Depoimentos
+
+Seção de prints de clientes. Espelha o Estúdio na persistência (uma linha JSON em
+`configuracoes_loja`, chave `vitrine_depoimentos`) e no ligar/desligar da seção.
+
+### Formato por item — o motivo da seção existir
+
+Um print 9:16 e um screenshot largo **não cabem na mesma moldura**. Forçar
+proporção única corta a conversa ou deixa faixa vazia. Cada depoimento carrega
+seu `formato`, e `proporcaoDoFormato` devolve a classe de proporção **e** a
+largura do card:
+
+| Formato | Proporção | Largura no carrossel |
+|---|---|---|
+| `vertical` | `aspect-[9/16]` | 220 → 260px |
+| `horizontal` | `aspect-[16/10]` | 300 → 460px |
+
+`object-contain`, nunca `cover`: o print é o conteúdo, cortar borda é cortar texto.
+Largura estreita no vertical impede que um 9:16 tome a tela no desktop.
+
+### Imagem com texto: pipeline próprio
+
+🔴 **O pipeline padrão do projeto destrói screenshot.** `servicoUploadImagem.ts`
+comprime no cliente por Canvas a **800px / JPEG 70%** — correto para miniatura
+de produto, ilegível para conversa de WhatsApp.
+
+Depoimentos usam `enviarImagemOriginalParaR2` (sem compactação no cliente) e a
+pasta `depoimentos/` é a única reprocessada por **Sharp** no servidor:
+`rotate()` pelo EXIF, 1080px no lado maior, WebP `quality: 90` com
+`smartSubsample`. Medido num print real: **1080×555 em 18 KB** contra
+**800×411 em 17 KB** do pipeline antigo — mesmo peso, 35% mais resolução.
+
+Comprimir duas vezes só degrada: o segundo passe não recupera o que o primeiro
+jogou fora. Por isso o original precisa chegar íntegro ao servidor.
+
+### Regras
+
+- Seção desligada faz `return null` **antes** de qualquer `<Image>` entrar na árvore: nem espaço vazio, nem download.
+- Primeiros 2 cards `eager`, resto `lazy` — só o que entra no viewport inicial pesa no LCP.
+- Escolher a imagem **já cria** o depoimento; nome e formato editam no card. Modal para uma informação que cabe numa linha é passo a mais.
+- O formato é sugerido pela proporção do arquivo e continua trocável.
+
 ## Padrões de layout
 
 ### Cardápio público

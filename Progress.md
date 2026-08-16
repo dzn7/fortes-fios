@@ -1,5 +1,43 @@
 # Progress
 
+## [2026-08-16] Nova seção de Depoimentos (Admin + site)
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Objetivo:** prints de clientes configuráveis, com formato por item e compressão que preserve o texto.
+**Arquivos criados:** `src/lib/vitrineDepoimentos.mjs|.d.mts`, `src/app/api/vitrine/depoimentos/route.ts`, `src/components/Depoimentos.tsx`, `src/components/admin/vitrine/EditorDepoimentos.tsx`, `tests/depoimentos.test.mjs`.
+**Arquivos alterados:** `src/app/api/upload/route.ts`, `src/lib/servicoUploadImagem.ts`, `src/app/admin/vitrine/page.tsx`, `src/app/page.tsx`, `UI.md`, `Progress.md`.
+
+**🔴 Achado da auditoria: Sharp estava no `package.json` e nenhum código importava.**
+A compressão real é Canvas no cliente, a **800px / JPEG 70%** — desenhada para
+miniatura de produto e destrutiva para screenshot com texto, que é exatamente o
+que a task proíbe. Sharp aqui não é estrutura paralela: é a ferramenta certa
+para um requisito que o pipeline atual não atende, com a dependência já instalada.
+
+**Segundo achado, durante a implementação:** `enviarImagemParaR2` compacta no
+cliente **antes** de enviar. Usá-la para depoimentos entregaria ao Sharp uma
+imagem já destruída em 800px — o segundo passe não recupera o que o primeiro
+jogou fora. Criei `enviarImagemOriginalParaR2`, e o limite de upload da pasta
+subiu para 15MB porque print de celular passa dos 5MB com facilidade.
+
+**O que foi feito:**
+- Domínio `vitrineDepoimentos.mjs` no molde do Estúdio: normalização defensiva, teto de 12, URL só `/` ou `https://`, id desambiguado, formato inválido cai em `vertical`.
+- Sharp só na pasta `depoimentos/`: `rotate()` pelo EXIF, 1080px no lado maior, WebP `quality: 90` + `smartSubsample`. Falha no processamento não custa o upload — segue com o original.
+- Site: carrossel `embla` onde **cada card tem a largura do seu formato**, `object-contain`, visualização ampliada com Escape/clique-fora/botão, `max-h-[88dvh]` para não estourar viewport.
+- Admin: aba própria em `/admin/vitrine`. Escolher a imagem já cria o item; nome e formato editam no card, sem modal. O formato é sugerido pela proporção do arquivo.
+
+**Decisões tomadas:** aba separada em vez de anexar à do Estúdio — a aba se chama "Studio" e misturar confundiria. Overlay próprio na ampliação em vez do `Dialog`: aqui o conteúdo é só a imagem, e a moldura do `Dialog` competiria com o print.
+
+**Verificação:** `node --test tests/*.test.mjs` **171/171** (16 novos) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · **Sharp medido em print real com texto: 2000×1027/188KB → 1080×555/18KB webp**, contra 800×411/17KB do pipeline antigo — mesmo peso, 35% mais resolução linear, e conferi visualmente que telefone, datas e valores continuam legíveis · ciclo completo no banco: admin grava vertical+horizontal+oculto → domínio devolve as proporções certas e descarta o oculto → seção desligada devolve zero itens. Fixture removida.
+
+**Pendências / próximos passos:**
+- 🔴 **Cleanup de arquivo órfão no B2 não foi implementado.** Remover um depoimento tira a referência do JSON mas deixa o `.webp` no bucket. `removerImagemDoR2` existe em `servicoUploadImagem.ts`; ligar isso exige decidir o comportamento quando a mesma URL é reusada, e preferi não apagar arquivo por conta própria.
+- Smoke visual do carrossel com prints reais em desktop e mobile.
+
+**Armadilhas descobertas:**
+- Dependência no `package.json` não significa dependência em uso. `grep "from 'sharp'"` devolveu zero — a auditoria do pipeline tinha que ser no código, não no manifesto.
+- `chromaSubsampling` é opção do JPEG; no WebP o equivalente é `smartSubsample`. O TypeScript pegou, mas a intenção (não borrar texto) exigia a API certa.
+- Compactar no cliente e reprocessar no servidor é pior que qualquer um dos dois sozinho.
+
 ## [2026-08-16] about:blank, Meus Pedidos repaginado e frete grátis configurável
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

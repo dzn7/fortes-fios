@@ -156,6 +156,41 @@ export async function compactarBlobImagem(blob: Blob): Promise<Blob> {
  * @param id - ID do item (usado para nomear o arquivo)
  * @returns Resultado do upload com URL ou erro
  */
+/**
+ * Envia a imagem SEM compactar no cliente.
+ *
+ * `enviarImagemParaR2` passa por `compactarBlobImagem`, que reduz para 800px e
+ * JPEG 70% — ótimo para miniatura de produto e destrutivo para screenshot com
+ * texto. Para as pastas que o servidor reprocessa com Sharp (hoje
+ * `depoimentos/`), o original precisa chegar íntegro: comprimir duas vezes só
+ * degrada, e o segundo passe não recupera o que o primeiro jogou fora.
+ */
+export async function enviarImagemOriginalParaR2(
+  blob: Blob,
+  pasta: string,
+  id: string,
+): Promise<ResultadoUpload> {
+  try {
+    const formData = new FormData()
+    const extensao = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'
+    formData.append('arquivo', blob, `${id}.${extensao}`)
+    formData.append('pasta', pasta)
+    formData.append('id', id)
+
+    const resposta = await fetch('/api/upload', { method: 'POST', body: formData })
+    const dados = await resposta.json()
+
+    if (!resposta.ok || !dados?.sucesso) {
+      return { sucesso: false, erro: dados?.erro || 'Falha ao enviar a imagem.' }
+    }
+
+    return { sucesso: true, url: dados.url }
+  } catch (erro) {
+    console.error('[Upload] Falha ao enviar original:', erro)
+    return { sucesso: false, erro: 'Erro de conexão ao enviar a imagem.' }
+  }
+}
+
 export async function enviarImagemParaR2(
   blob: Blob,
   pasta: string,

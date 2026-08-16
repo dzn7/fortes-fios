@@ -19,6 +19,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Quote,
   Sparkles,
   Smartphone,
   Trash2,
@@ -29,6 +30,7 @@ import ProtectedRoute from '@/components/admin/ProtectedRoute'
 import AdminLayout from '@/components/admin/AdminLayout'
 import ModalRecorteImagem from '@/components/admin/ModalRecorteImagem'
 import EditorResultadosStudio from '@/components/admin/vitrine/EditorResultadosStudio'
+import { EditorDepoimentos } from '@/components/admin/vitrine/EditorDepoimentos'
 import EditorOfertas from '@/components/admin/vitrine/EditorOfertas'
 import EditorFaixaRodape from '@/components/admin/vitrine/EditorFaixaRodape'
 import { supabase } from '@/lib/supabase'
@@ -102,6 +104,7 @@ type AreaVitrine =
   | 'mais_vendidos'
   | 'ofertas'
   | 'resultados'
+  | 'depoimentos'
   | 'faixa_rodape'
 
 type BannerVitrine = {
@@ -714,6 +717,7 @@ export default function VitrinePage() {
                 },
                 { id: 'ofertas', nome: 'Ofertas', Icone: BadgePercent },
                 { id: 'resultados', nome: 'Studio', Icone: Sparkles },
+                { id: 'depoimentos', nome: 'Depoimentos', Icone: Quote },
                 { id: 'faixa_rodape', nome: 'Cabeçalho', Icone: Megaphone },
               ] as const
             ).map(({ id, nome, Icone }) => {
@@ -1214,6 +1218,16 @@ export default function VitrinePage() {
               aria-labelledby="aba-vitrine-resultados"
             >
               <EditorResultadosStudio />
+            </div>
+          ) : null}
+
+          {areaAtiva === 'depoimentos' ? (
+            <div
+              id="painel-vitrine-depoimentos"
+              role="tabpanel"
+              aria-labelledby="aba-vitrine-depoimentos"
+            >
+              <EditorDepoimentos />
             </div>
           ) : null}
 

@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import sharp from 'sharp'
 
 // Tipos de arquivo permitidos
 const TIPOS_PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
 // Tamanho máximo: 5MB (já comprimido no cliente)
 const TAMANHO_MAXIMO = 5 * 1024 * 1024
+
+/**
+ * As pastas processadas por Sharp recebem o arquivo ORIGINAL, sem passar pela
+ * compactação do cliente — um print de celular passa dos 5MB com facilidade. O
+ * servidor reduz logo em seguida, então o que trafega é temporário.
+ */
+const TAMANHO_MAXIMO_COM_TEXTO = 15 * 1024 * 1024
 
 /**
  * Cria o cliente S3 para Backblaze B2 (lazy initialization)
@@ -46,7 +54,58 @@ function obterExtensao(tipoMime: string): string {
 }
 
 const CHAVE_IMAGEM_PERMITIDA =
-  /^(vitrine|geral|produtos|bebidas|combos|adicionais)\/[a-zA-Z0-9._/ -]+\.(jpe?g|png|webp|gif)$/i
+  /^(vitrine|geral|produtos|bebidas|combos|adicionais|depoimentos)\/[a-zA-Z0-9._/ -]+\.(jpe?g|png|webp|gif)$/i
+
+/**
+ * Pastas cujas imagens contêm TEXTO e são processadas por Sharp no servidor.
+ *
+ * O pipeline padrão do projeto comprime no cliente por Canvas
+ * (`servicoUploadImagem.ts`): 800px no lado maior e JPEG a 70%. Isso é adequado
+ * para miniatura de produto e destrutivo para print de conversa — 800px torna a
+ * letra ilegível, e o subsampling de croma do JPEG borra a borda do texto.
+ *
+ * Aqui a imagem chega íntegra e é reprocessada com parâmetros pensados para
+ * leitura, sem tocar no caminho já usado pelas outras pastas.
+ */
+const PASTAS_COM_TEXTO = new Set(['depoimentos'])
+
+/** Lado maior. Cobre a largura de um print de celular moderno sem exagero. */
+const DIMENSAO_MAXIMA_TEXTO = 1080
+
+/**
+ * Qualidade alta com `smartSubsample`: o subsampling de croma padrão descarta
+ * informação de cor e é justamente o que transforma texto pequeno em borrão.
+ * O modo esperto do WebP preserva a borda da letra, e a 90 o arquivo ainda sai
+ * bem menor que o PNG que o celular gera.
+ */
+const QUALIDADE_TEXTO = 90
+
+type ImagemProcessada = {
+  buffer: Uint8Array
+  tipoMime: string
+  extensao: string
+}
+
+/**
+ * Reprocessa a imagem preservando legibilidade. `rotate()` sem argumento aplica
+ * a orientação do EXIF — sem isso, print tirado com o aparelho deitado chega
+ * girado no site.
+ */
+async function processarImagemComTexto(entrada: Uint8Array): Promise<ImagemProcessada> {
+  const buffer = await sharp(entrada)
+    .rotate()
+    .resize({
+      width: DIMENSAO_MAXIMA_TEXTO,
+      height: DIMENSAO_MAXIMA_TEXTO,
+      fit: 'inside',
+      // Não amplia imagem pequena: aumentar não cria detalhe, só peso.
+      withoutEnlargement: true,
+    })
+    .webp({ quality: QUALIDADE_TEXTO, smartSubsample: true, effort: 5 })
+    .toBuffer()
+
+  return { buffer, tipoMime: 'image/webp', extensao: 'webp' }
+}
 
 /**
  * GET - Serve imagens públicas do B2 pela mesma origem para permitir recorte no Canvas.
@@ -131,19 +190,35 @@ export async function POST(requisicao: NextRequest) {
     }
 
     // Validação do tamanho
-    if (arquivo.size > TAMANHO_MAXIMO) {
+    const limiteTamanho = PASTAS_COM_TEXTO.has(pasta) ? TAMANHO_MAXIMO_COM_TEXTO : TAMANHO_MAXIMO
+    if (arquivo.size > limiteTamanho) {
+      const limiteMb = Math.round(limiteTamanho / (1024 * 1024))
       return NextResponse.json(
-        { erro: 'Arquivo muito grande. O tamanho máximo é 5MB.' },
+        { erro: `Arquivo muito grande. O tamanho máximo é ${limiteMb}MB.` },
         { status: 400 }
       )
     }
 
     // Converte o arquivo para buffer
     const arrayBuffer = await arquivo.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    let buffer: Uint8Array = Buffer.from(arrayBuffer)
+    let tipoConteudo = arquivo.type
+    let extensao = obterExtensao(arquivo.type)
+
+    if (PASTAS_COM_TEXTO.has(pasta) && arquivo.type !== 'image/gif') {
+      try {
+        const processada = await processarImagemComTexto(buffer)
+        buffer = processada.buffer
+        tipoConteudo = processada.tipoMime
+        extensao = processada.extensao
+      } catch (erroProcessamento) {
+        // Falhar o processamento não pode custar o upload: segue com o original,
+        // que é maior porém correto.
+        console.error('[Upload] Sharp falhou, seguindo com o arquivo original:', erroProcessamento)
+      }
+    }
 
     // Gera o nome do arquivo
-    const extensao = obterExtensao(arquivo.type)
     const nomeArquivo = gerarNomeArquivo(pasta, id, extensao)
 
     // Cria cliente B2 (lazy initialization)
@@ -154,7 +229,7 @@ export async function POST(requisicao: NextRequest) {
       Bucket: nomeBucket,
       Key: nomeArquivo,
       Body: buffer,
-      ContentType: arquivo.type,
+      ContentType: tipoConteudo,
       // Cache de 1 ano para imagens (são imutáveis pelo nome único)
       CacheControl: 'public, max-age=31536000, immutable',
     })

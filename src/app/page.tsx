@@ -31,6 +31,7 @@ import Footer from '@/components/Footer'
 import CartaoProduto from '@/components/CartaoProduto'
 import HeroVitrine from '@/components/HeroVitrine'
 import ResultadosStudio from '@/components/ResultadosStudio'
+import Depoimentos from '@/components/Depoimentos'
 import ModalCarrinho from '@/components/ModalCarrinho'
 import ModalComplementos from '@/components/ModalComplementos'
 import ModalLojaFechada from '@/components/ModalLojaFechada'
@@ -1051,6 +1052,10 @@ export default function Home() {
         </section>
 
         <ResultadosStudio />
+
+        <LimiteDeErro area="Depoimentos">
+          <Depoimentos />
+        </LimiteDeErro>
       </main>
 
       {navegacaoInferiorVisivel && (
