@@ -3,6 +3,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import { RefreshCw } from 'lucide-react'
+import {
+  ACOES_ATUALIZACAO,
+  decidirAcaoAoTrocarControlador,
+} from '@/lib/atualizacao-pwa.mjs'
 
 // Flag global para prevenir múltiplos reloads
 let isReloading = false
@@ -15,6 +19,11 @@ export default function PWAManager() {
   const controllerChangeHandledRef = useRef(false)
   const controllerChangeHandlerRef = useRef<(() => void) | null>(null)
   const updateCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Quem controlava a página quando ela abriu, e se a pessoa pediu a
+  // atualização. Juntos decidem o que fazer no `controllerchange` — recarregar
+  // sozinho durante o carregamento era o que derrubava a primeira visita.
+  const tinhaControladorRef = useRef(false)
+  const pediuAtualizacaoRef = useRef(false)
   const deveGerenciarPwaCliente =
     !(pathname?.startsWith('/admin') || pathname?.startsWith('/garcom') || pathname?.startsWith('/entregador'))
 
@@ -55,14 +64,6 @@ export default function PWAManager() {
       return
     }
 
-    // Verifica se já está recarregando
-    const reloadFlag = sessionStorage.getItem('pwa_client_reloading')
-    if (reloadFlag === 'true') {
-      console.log('[PWA] Reload em progresso, aguardando...')
-      sessionStorage.removeItem('pwa_client_reloading')
-      return
-    }
-
     registerServiceWorker()
 
     // Cleanup ao desmontar
@@ -91,13 +92,9 @@ export default function PWAManager() {
       console.log('[PWA] Service Worker registrado com sucesso')
       setRegistration(reg)
 
-      const ativarAtualizacaoImediata = () => {
-        if (!reg.waiting) return false
-        console.log('[PWA] Atualização pendente detectada, forçando ativação')
-        setIsUpdating(true)
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' })
-        return true
-      }
+      // O controlador atual define, mais tarde, se um `controllerchange` é a
+      // primeira instalação (ignorar) ou uma versão nova assumindo (oferecer).
+      tinhaControladorRef.current = Boolean(navigator.serviceWorker.controller)
 
       // Busca atualização logo após registrar (sem esperar intervalo)
       try {
@@ -106,13 +103,9 @@ export default function PWAManager() {
         console.warn('[PWA] Falha ao atualizar imediatamente:', erroUpdate)
       }
 
-      // Verifica se já existe uma atualização esperando
-      if (reg.waiting && navigator.serviceWorker.controller) {
-        const atualizou = ativarAtualizacaoImediata()
-        if (!atualizou) {
-          setUpdateAvailable(true)
-        }
-      } else if (reg.waiting) {
+      // Versão nova esperando: avisa e deixa a pessoa decidir. Assumir o
+      // controle sozinho troca o worker embaixo de uma página já carregada.
+      if (reg.waiting) {
         console.log('[PWA] Atualização já disponível')
         setUpdateAvailable(true)
       }
@@ -128,10 +121,7 @@ export default function PWAManager() {
             
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
               console.log('[PWA] Nova versão instalada e pronta')
-              const atualizou = ativarAtualizacaoImediata()
-              if (!atualizou) {
-                setUpdateAvailable(true)
-              }
+              setUpdateAvailable(true)
             }
           })
         }
@@ -140,10 +130,23 @@ export default function PWAManager() {
       // Listener único para mudança de controller
       const handleControllerChange = () => {
         console.log('[PWA] Controller mudou')
-        
+
         // Previne múltiplas execuções
         if (controllerChangeHandledRef.current || isReloading) {
           console.log('[PWA] Controller change já tratado, ignorando')
+          return
+        }
+
+        const acao = decidirAcaoAoTrocarControlador({
+          tinhaControlador: tinhaControladorRef.current,
+          pedidoPelaPessoa: pediuAtualizacaoRef.current,
+        })
+
+        // Primeira instalação: a página aberta já tem o HTML e os chunks certos.
+        if (acao === ACOES_ATUALIZACAO.IGNORAR) return
+
+        if (acao === ACOES_ATUALIZACAO.OFERECER) {
+          setUpdateAvailable(true)
           return
         }
 
@@ -151,16 +154,7 @@ export default function PWAManager() {
         isReloading = true
         setUpdateAvailable(false)
         setIsUpdating(true)
-        
-        // Marca no sessionStorage para prevenir loops
-        sessionStorage.setItem('pwa_client_reloading', 'true')
-        
-        console.log('[PWA] Recarregando página após atualização...')
-        
-        // Pequeno delay para garantir que o novo SW assumiu controle
-        setTimeout(() => {
-          window.location.reload()
-        }, 100)
+        window.location.reload()
       }
 
       if (controllerChangeHandlerRef.current) {
@@ -173,8 +167,8 @@ export default function PWAManager() {
       updateCheckIntervalRef.current = setInterval(() => {
         console.log('[PWA] Verificando atualizações...')
         reg.update().then(() => {
-          if (reg.waiting && navigator.serviceWorker.controller) {
-            ativarAtualizacaoImediata()
+          if (reg.waiting) {
+            setUpdateAvailable(true)
           }
         }).catch(err => {
           console.warn('[PWA] Erro ao verificar atualização:', err)
@@ -187,16 +181,23 @@ export default function PWAManager() {
   }
 
   const handleUpdate = async () => {
+    // Só aqui o reload passa a ser legítimo: foi a pessoa que pediu.
+    pediuAtualizacaoRef.current = true
+    setIsUpdating(true)
+
+    // Sem worker esperando, a versão nova já assumiu sozinha (o `skipWaiting`
+    // do install). Não há `controllerchange` por vir, então o botão precisa
+    // recarregar aqui mesmo — senão ele não faria nada.
     if (!registration?.waiting) {
-      console.warn('[PWA] Nenhum SW esperando')
-      setUpdateAvailable(false)
+      console.log('[PWA] Nenhum SW esperando; recarregando a pedido da pessoa')
+      isReloading = true
+      window.location.reload()
       return
     }
 
     try {
-      setIsUpdating(true)
       console.log('[PWA] Enviando SKIP_WAITING para o SW')
-      
+
       // Envia mensagem para o SW waiting pular a espera
       registration.waiting.postMessage({ type: 'SKIP_WAITING' })
       

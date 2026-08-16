@@ -1,5 +1,57 @@
 # Progress
 
+## [2026-08-16] Site não carregava na primeira entrada (tela de erro do Chrome)
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Arquivos criados:** `src/lib/atualizacao-pwa.mjs|.d.mts`, `tests/service-worker-cliente.test.mjs`, `tests/atualizacao-pwa.test.mjs`, `specs/service-worker-navegacao-cliente.md`.
+**Arquivos alterados:** `public/sw.js`, `src/components/PWAManager.tsx`, `UI.md`, `Progress.md`.
+
+**Sintoma:** ao entrar no site, recarregar, ou voltar ao navegador que ficou
+aberto, o Chrome no Android mostrava a **própria** tela de erro ("This page
+couldn't load"). Apertar *Reload* resolvia. Intermitente.
+
+**Como foi isolado:** build de produção servido e aberto por origem LAN — contexto
+inseguro, então `'serviceWorker' in navigator === false` e o `PWAManager` retorna
+cedo. **Sem service worker a página carrega íntegra, com zero erro de console.**
+Isso apontou o worker como o componente que diferenciava os dois cenários. Em
+seguida, `public/sw.js` foi avaliado de verdade num contexto `vm` (não simulado):
+com a rede caindo, o handler entrega **`Response.error()`** para o documento —
+que é exatamente o que o Chrome desenha como aquela tela.
+
+**Causa raiz (duas decisões somadas):**
+1. O worker interceptava **toda** navegação (`respondWith(networkNavigation(...))`)
+   sem ganho nenhum — ele nunca guarda HTML — e convertia qualquer soluço de rede
+   numa falha dura e sem recuperação.
+2. `clients.claim()` disparava `controllerchange` numa página que ainda estava
+   carregando, e o `PWAManager` respondia com `window.location.reload()`. A
+   primeira visita se recarregava sozinha, no meio do carregamento, atendida por
+   um worker recém-ativado. Daí "na entrada falha, no reload manual funciona".
+
+**Correção:** navegação nunca é interceptada (a checagem vem antes de todas as
+outras, inclusive `/api`); `clients.claim()` removido; nenhum reload automático —
+a troca de controlador apenas **oferece** a atualização no banner que já existia,
+e o reload só acontece no clique. `CACHE_VERSION` → `client-v3.0.0`.
+
+**Decisões que revertem escolhas registradas antes:**
+- "recarrega uma única vez na troca de controller" (entrada do SW admin `v4.3.5`)
+  está **revertida para o site**: era a corrida que derrubava a navegação.
+- "a navegação usa rede com fallback apenas para a página offline" — **o fallback
+  de navegação saiu**. Sem rede aparece a tela offline do próprio Chrome, não
+  `/offline.html`. O arquivo continua no repositório; ele hoje está com a
+  identidade de outro projeto ("Divina Pastelaria"), então não exibi-lo não é perda.
+
+**Armadilhas descobertas:** `Response.error()` entregue a `respondWith` **é** a
+tela de erro do Chrome — um worker que "trata" a falha de rede assim fica pior do
+que não interceptar. `clients.claim()` dispara `controllerchange` em página que
+nunca teve controlador, e é isso que torna a primeira visita o pior caso, não o
+melhor. E `skipWaiting()` no `install` faz `reg.waiting` já ser `null` quando o
+banner aparece — sem tratar isso, o botão "Atualizar" não faria nada.
+
+**Não coberto:** o mesmo defeito existe em `sw-admin.js`, `sw-garcom.js` e
+`sw-entregador.js` (e nos dois últimos há `respondWith(undefined)` possível, que
+também derruba a navegação). Mesma edição em ≥3 arquivos exige proposta antes
+(AGENTS §0.2.2) — **proposto, não alterado**. Falta também o teste em Android real.
+
 ## [2026-08-16] Login do Admin repaginado na identidade da loja
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

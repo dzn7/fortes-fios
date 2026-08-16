@@ -1,5 +1,5 @@
 // Service Worker EXCLUSIVO para Cliente (Cardápio)
-const CACHE_VERSION = 'client-v2.10.12'
+const CACHE_VERSION = 'client-v3.0.0'
 const CACHE_NAME = `fortes-fios-client-${CACHE_VERSION}`
 
 // Cache mínimo - apenas essenciais
@@ -53,8 +53,12 @@ self.addEventListener('activate', (event) => {
           })
         )
       })
-      .then(() => self.clients.claim())
   )
+
+  // Sem `clients.claim()`: uma aba que abriu sem controlador termina sem
+  // controlador. Reivindicá-la disparava `controllerchange` no meio do
+  // carregamento, e o gerenciador respondia recarregando a página — a corrida
+  // que fazia a primeira visita falhar e o reload manual "consertar".
 })
 
 // Interceptar requisições
@@ -72,6 +76,23 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  // O documento é assunto do navegador, não do worker.
+  //
+  // Interceptar navegação não trazia ganho nenhum — este worker nunca guarda
+  // HTML (UI.md §service worker) — e criava um caminho a mais para falhar:
+  // qualquer soluço de rede virava `Response.error()`, que o Chrome desenha
+  // como "This page couldn't load", sem recuperação automática.
+  //
+  // Sem `respondWith`, o navegador serve o documento pelo próprio cache
+  // HTTP/bfcache e, quando falha de verdade, mostra o erro dele — que o botão
+  // de recarregar resolve.
+  //
+  // A checagem vem antes de qualquer outra: nenhum caminho abaixo pode
+  // interceptar um documento, nem o de `/api`.
+  if (request.mode === 'navigate') {
+    return
+  }
+
   // Ignora requisições do Supabase e API (sempre rede)
   if (url.hostname.includes('supabase') || url.pathname.startsWith('/api')) {
     return event.respondWith(fetch(request))
@@ -81,11 +102,6 @@ self.addEventListener('fetch', (event) => {
     request.headers.get('RSC') === '1' ||
     url.searchParams.has('_rsc') ||
     url.pathname.startsWith('/_next/data')
-
-  // HTML e payloads RSC precisam pertencer à mesma versão dos chunks do Next.
-  if (request.mode === 'navigate') {
-    return event.respondWith(networkNavigation(request))
-  }
 
   if (requisicaoRsc) {
     return event.respondWith(fetch(request))
@@ -98,14 +114,6 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(networkFirstWithTimeout(request))
   }
 })
-
-async function networkNavigation(request) {
-  try {
-    return await fetch(request)
-  } catch {
-    return (await caches.match('/offline.html')) || Response.error()
-  }
-}
 
 // Network First com timeout
 async function networkFirstWithTimeout(request) {

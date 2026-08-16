@@ -587,6 +587,9 @@ próximo gravar.
 - O checkout usa `repositionInputs={false}` no `Drawer` e mede o teclado virtual por `useAjusteTecladoVirtual` (`src/hooks/`), aplicando `height`/`maxHeight`/`bottom` em px no `DrawerContent`. O reposicionamento nativo do Vaul não serve para painel alto com formulário: ele alterna um booleano a cada `visualViewport.resize` e Safari/Chromium emitem vários por animação de teclado, congelando o painel em uma altura curta.
 - Ajuda abre o `AjudaPedidoPublica` exclusivamente pela navbar; WhatsApp aparece dentro desse Drawer quando estiver configurado.
 - O service worker do cardápio não roda em desenvolvimento e nunca armazena HTML nem payload RSC; misturar documentos e chunks de versões diferentes provoca divergência de hidratação.
+- O service worker do cardápio **não intercepta navegação**: `request.mode === 'navigate'` retorna sem `respondWith`, e essa checagem vem antes de todas as outras (inclusive a de `/api`). O documento é servido pelo navegador, pelo cache HTTP/bfcache dele. Interceptar não trazia ganho — o worker nunca guarda HTML — e transformava soluço de rede em falha definitiva.
+- O worker do cardápio não chama `clients.claim()`: aba que abriu sem controlador termina sem controlador. Reivindicá-la dispara `controllerchange` durante o carregamento.
+- Atualização de versão **avisa, não age**: o `controllerchange` só acende o banner "Nova versão disponível". Recarregar a página é consequência de clique, nunca de evento do worker. A decisão mora em `src/lib/atualizacao-pwa.mjs`, separada do componente para ser testável sem browser.
 
 ### Administração desktop
 
@@ -780,6 +783,8 @@ O `AppToaster` posiciona notificações no **topo** (`top-center` no mobile, `to
 - Combinar altura fixa (`h-*dvh`) com o `repositionInputs` do Vaul em drawer com formulário; os dois escrevem a mesma propriedade e o inline do Vaul vence para sempre.
 - `max-h-[60vh]` / `80vh` dentro de bottom sheet mobile — `vh` ignora a barra do browser no iOS; use a cadeia flex (`min-h-0 flex-1 overflow-y-auto`) com `dvh` no container.
 - Cachear `/`, respostas HTML ou `text/x-component` no service worker do Next; uma versão antiga pode hidratar com chunks novos.
+- Atender navegação no service worker e "tratar" a falha devolvendo `Response.error()` — essa resposta **é** a tela "This page couldn't load" do Chrome, sem recuperação automática. Devolver `caches.match(...)` que pode ser `undefined` é pior ainda: `respondWith(undefined)` também derruba a navegação.
+- Recarregar a página sozinho no `controllerchange`. Com `clients.claim()`, o evento chega enquanto a página ainda carrega, e a recarga cai em cima do carregamento em curso — o sintoma é "na primeira entrada falha, no reload manual funciona".
 - Executar transições de scroll suave enquanto uma lista paginada troca cards por skeletons; a mudança simultânea de altura pode deixar o container em uma posição intermediária.
 
 ## Onboarding e Ajuda do Admin
