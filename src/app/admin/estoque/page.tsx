@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner'
 import AdminLayout from '@/components/admin/AdminLayout'
 import ProtectedRoute from '@/components/admin/ProtectedRoute'
+import { useAdminAuth } from '@/contexts/AdminAuthContext'
 import { ControleEstoqueProduto } from '@/components/admin/produtos/ControleEstoqueProduto'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

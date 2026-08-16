@@ -17,6 +17,7 @@ import {
   Search,
 } from 'lucide-react'
 import ProtectedRoute from '@/components/admin/ProtectedRoute'
+import { useAdminAuth } from '@/contexts/AdminAuthContext'
 import AdminLayout from '@/components/admin/AdminLayout'
 import { FiltrosAtivosChips, type ChipFiltroAtivo } from '@/components/admin/filtros/FiltrosAtivosChips'
 import { FiltroProdutosAdmin } from '@/components/admin/produtos/FiltroProdutosAdmin'
@@ -123,6 +124,10 @@ const LIMITE_INICIAL_PRODUTOS_CATEGORIA = 8
 const CHAVE_FILTROS_PRODUTOS_ADMIN = 'admin-produtos-filtros'
 
 export default function ProdutosPage() {
+  const { pode } = useAdminAuth()
+  const podeCriar = pode('produtos.criar')
+  const podeEditarProdutos = pode('produtos.editar')
+  const podeExcluirProdutos = pode('produtos.excluir')
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState<string | null>(null)
@@ -1682,10 +1687,12 @@ export default function ProdutosPage() {
                 <Tag className="mr-2 h-4 w-4" />
                 Nova categoria
               </Button>
-              <Button type="button" size="sm" className="h-9 shadow-none" onClick={abrirModalNovoProduto}>
-                <Plus className="mr-2 h-4 w-4" />
-                Novo
-              </Button>
+              {podeCriar ? (
+                <Button type="button" size="sm" className="h-9 shadow-none" onClick={abrirModalNovoProduto}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Novo
+                </Button>
+              ) : null}
             </div>
           </div>
 
@@ -2044,17 +2051,19 @@ export default function ProdutosPage() {
                               </div>
                             </div>
 
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setProdutoEmEdicaoId(produto.id)}
-                              className="h-9 shrink-0 gap-1.5 shadow-none"
-                              aria-label={`Editar ${produto.nome}`}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                              <span className="hidden sm:inline">Editar</span>
-                            </Button>
+                            {podeEditarProdutos ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setProdutoEmEdicaoId(produto.id)}
+                                className="h-9 shrink-0 gap-1.5 shadow-none"
+                                aria-label={`Editar ${produto.nome}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">Editar</span>
+                              </Button>
+                            ) : null}
                             {produto.tabela !== 'bebidas' ? (
                               <ControleEstoqueProduto
                                 produtoId={produto.id}
@@ -2238,14 +2247,18 @@ export default function ProdutosPage() {
             if (!produtoEmEdicao) return
             void removerImagem(produtoEmEdicao.id, produtoEmEdicao.tabela || 'produtos')
           }}
-          onExcluir={() => {
-            if (!produtoEmEdicao) return
-            const id = produtoEmEdicao.id
-            const tabela = produtoEmEdicao.tabela || 'produtos'
-            const nome = produtoEmEdicao.nome
-            setProdutoEmEdicaoId(null)
-            void excluirProduto(id, tabela, nome)
-          }}
+          onExcluir={
+            podeExcluirProdutos
+              ? () => {
+                  if (!produtoEmEdicao) return
+                  const id = produtoEmEdicao.id
+                  const tabela = produtoEmEdicao.tabela || 'produtos'
+                  const nome = produtoEmEdicao.nome
+                  setProdutoEmEdicaoId(null)
+                  void excluirProduto(id, tabela, nome)
+                }
+              : undefined
+          }
         />
 
         <Dialog open={modalRenomearCategoria.aberto} onOpenChange={(aberto) => {

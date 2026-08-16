@@ -22,6 +22,8 @@ import { GradeSkeleton, ListaVazia } from '@/components/admin/filtros/ListaEstad
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { supabase } from '@/lib/supabase'
+import { excluirPedidos } from '@/lib/acoes-admin'
+import { useAdminAuth } from '@/contexts/AdminAuthContext'
 import { gerarPDFPedido } from '@/lib/pdf-generator'
 import ModalEditarPedido from '@/components/admin/ModalEditarPedido'
 import ModalNotificacao from '@/components/ModalNotificacao'
@@ -125,6 +127,12 @@ function PedidosContent() {
     onConfirmar: () => {},
   })
   const router = useRouter()
+  const { pode } = useAdminAuth()
+  // Ação sem permissão não aparece: botão visível que responde 403 ensina que o
+  // sistema está quebrado, não que faltou autorização.
+  const podeExcluir = pode('pedidos.excluir')
+  const podeEditar = pode('pedidos.editar')
+  const podeMudarStatus = pode('pedidos.mudar_status')
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -455,8 +463,17 @@ function PedidosContent() {
       mensagem: 'Tem certeza que deseja excluir este pedido? Esta ação não pode ser desfeita.',
       onConfirmar: async () => {
         try {
-          const { error } = await supabase.from('pedidos').delete().eq('id', pedidoId)
-          if (error) throw error
+          const resultado = await excluirPedidos(pedidoId)
+          if (!resultado.sucesso) {
+            setModalNotificacao({
+              aberto: true,
+              tipo: 'erro',
+              titulo: 'Não foi possível excluir',
+              mensagem: resultado.erro || 'Tente novamente.',
+              onConfirmar: () => {},
+            })
+            return
+          }
 
           void carregarPedidos()
           setModalNotificacao({
@@ -765,8 +782,17 @@ function PedidosContent() {
         try {
           const ids = Array.from(idsSelecionados)
 
-          const { error } = await supabase.from('pedidos').delete().in('id', ids)
-          if (error) throw error
+          const resultado = await excluirPedidos(ids)
+          if (!resultado.sucesso) {
+            setModalNotificacao({
+              aberto: true,
+              tipo: 'erro',
+              titulo: 'Não foi possível excluir',
+              mensagem: resultado.erro || 'Tente novamente.',
+              onConfirmar: () => {},
+            })
+            return
+          }
 
           cancelarSelecao()
           void carregarPedidos()
@@ -1050,18 +1076,28 @@ function PedidosContent() {
                       setPedidoDetalhesId(p.id)
                       setModalDetalhesAberto(true)
                     }}
-                    onEditar={(p) => {
-                      setPedidoSelecionado(p)
-                      setModalEditarAberto(true)
-                    }}
-                    onConfirmarPagamento={(p) =>
-                      void executarAcaoPedido(p.id, 'pagamento', () => confirmarPagamento(p))
+                    onEditar={
+                      podeEditar
+                        ? (p) => {
+                            setPedidoSelecionado(p)
+                            setModalEditarAberto(true)
+                          }
+                        : undefined
                     }
-                    onConcluirPedido={(p) =>
-                      void executarAcaoPedido(p.id, 'concluir', () => concluirPedido(p))
+                    onConfirmarPagamento={
+                      podeMudarStatus
+                        ? (p) =>
+                            void executarAcaoPedido(p.id, 'pagamento', () => confirmarPagamento(p))
+                        : undefined
+                    }
+                    onConcluirPedido={
+                      podeMudarStatus
+                        ? (p) =>
+                            void executarAcaoPedido(p.id, 'concluir', () => concluirPedido(p))
+                        : undefined
                     }
                     onGerarPDF={(p) => handleGerarPDF(p.id)}
-                    onExcluir={(p) => handleExcluirPedido(p.id)}
+                    onExcluir={podeExcluir ? (p) => handleExcluirPedido(p.id) : undefined}
                     acoesEmAndamento={acoesPedido[pedido.id]}
                   />
                 ))}
@@ -1098,6 +1134,8 @@ function PedidosContent() {
                 <span className="text-sm font-medium text-foreground">
                   {idsSelecionados.size} selecionado{idsSelecionados.size > 1 ? 's' : ''}
                 </span>
+                {podeExcluir ? (
+                  <>
                 <div className="h-4 w-px bg-border/70" />
                 <button
                   onClick={handleExcluirSelecionados}
@@ -1111,6 +1149,8 @@ function PedidosContent() {
                   )}
                   Excluir
                 </button>
+                  </>
+                ) : null}
                 <button
                   onClick={cancelarSelecao}
                   className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"

@@ -1,5 +1,46 @@
 # Progress
 
+## [2026-08-15] Correção crítica — permissões que ninguém lia
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Objetivo:** fazer as caixas da tela de Acessos realmente valerem.
+**Spec:** `specs/rbac-admin.md` §12
+**Arquivos criados:** `src/app/api/admin/pedidos/route.ts`, `src/app/api/admin/estoque/route.ts`, `src/lib/acoes-admin.ts`, `tests/rbac-cobertura.test.mjs`.
+**Arquivos alterados:** `src/app/admin/pedidos/page.tsx`, `src/app/admin/dashboard/page.tsx`, `src/app/admin/produtos/page.tsx`, `src/components/admin/CardPedido.tsx`, `src/components/admin/produtos/ControleEstoqueProduto.tsx`, `specs/rbac-admin.md`, `UI.md`, `Progress.md`.
+
+**Defeito relatado pelo usuário:** atendente com `pedidos.excluir` desmarcado
+excluía pedido assim mesmo. Confirmado no banco — o usuário `derick` tem
+`"pedidos.excluir": false` e a exclusão funcionava.
+
+**Causa, encontrada na auditoria:** **nenhuma** tela do Admin lia permissão. Os
+únicos `pode()` do projeto estavam nos fluxos legados de garçom/entregador,
+usando o `controle-acesso.ts` que está morto. Eu havia entregue o catálogo, a
+tela de edição e a proteção de Finanças/Acessos/Dashboard, e deixei o resto do
+Admin escrevendo direto no Supabase com a anon key — que tem grant total em
+`pedidos`. Caixa que ninguém lê é pior que caixa ausente: promete um controle
+que não existe.
+
+**O que foi feito:**
+- `/api/admin/pedidos`: `DELETE` exige `pedidos.excluir`; `PATCH` exige `pedidos.cancelar` quando o destino é `cancelado` e `pedidos.mudar_status` no resto. Desfazer uma venda não é o mesmo que movê-la de "preparando" para "pronto".
+- `/api/admin/estoque`: ajuste por delta ou valor absoluto atrás de `estoque.ajustar`, devolvendo a quantidade confirmada para a UI otimista reconciliar.
+- `src/lib/acoes-admin.ts` centraliza as chamadas e traduz 403 em "Seu acesso não inclui esta operação" — não em "erro ao salvar".
+- Gating na UI: excluir, editar, mudar status (pedidos e dashboard), novo/editar/excluir produto, controles de estoque. Ação sem permissão **some** em vez de aparecer e falhar.
+- `pedidos.ver_valor` implementado no `CardPedido` reaproveitando o mecanismo de mascarar valores: um ponto cobre total, subtotal de item e barra de pagamento parcial.
+
+**Decisões tomadas:** as escritas de `pedidos` e `produtos` continuam existindo no cliente para os fluxos legados (pdv, painel, garçons) — migrei só os caminhos vivos. Não revoguei `pedidos` do `anon` porque o checkout público precisa de INSERT e do DELETE de rollback.
+
+**Verificação:** `node --test tests/*.test.mjs` **91/91** (4 arquivos novos de teste) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · smoke com admin e atendente descartáveis sobre um pedido real: atendente `DELETE` → **403**, `PATCH cancelado` → **403**, `PATCH preparando` → **200** (tem no preset), admin `DELETE` → **200**. Fixtures removidas; o usuário real `derick` foi preservado.
+
+**Pendências / próximos passos:**
+- 8 chaves ainda sem aplicação, declaradas em `SEM_APLICACAO_CONHECIDA`: `produtos.ver_custo` e os `.editar` de vitrine, cupons, bairros, entregas, pagamentos, clientes e equipe. Essas telas escrevem direto no Supabase; esconder o botão sem rota autorizada seria cosmético.
+- 🔴 `pedidos`, `produtos`, `itens_pedido` e `pagamentos_pedido` seguem com grant total para `anon`. O gating de UI ajuda o uso honesto; não impede requisição montada à mão.
+- Telas legadas (pdv, painel, garçons, caixa) continuam sem gating — estão fora do menu.
+
+**Armadilhas descobertas:**
+- Entregar catálogo de permissões sem ponto de aplicação é pior que não entregar: a interface passa a afirmar um controle que não existe, e ninguém desconfia até alguém testar.
+- O mecanismo de "ocultar valores" que a tela já tinha serviu de gancho para `pedidos.ver_valor`: uma linha em `formatarValor` cobriu todos os valores do cartão. Procurar o ponto que já existe rende mais que espalhar `if` por JSX.
+- `derick` (atendente real criado pelo usuário) não tinha `pedidos.ver_valor` marcado — depois desta correção ele passa a ver `••••••` no lugar dos totais. É o comportamento correto pela configuração, mas é mudança visível.
+
 ## [2026-08-15] RBAC fase 2 — tela de Acessos com permissões configuráveis
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

@@ -321,3 +321,48 @@ Regra: para fechar função, revogar de `PUBLIC`. Conferir sempre por
 | `ajustar_estoque_produto`, `definir_estoque_produto` | tela de Estoque consulta client-side | 🔴 pré-existente: com a anon key dá para zerar estoque |
 | `pedidos`, `itens_pedido`, `pagamentos_pedido` | a **loja pública** escreve neles pelo checkout | Relatórios e Análise derivam daí; fechar exige migrar o checkout |
 | `crediario_*` | telas de pedido ainda consultam | crediário não está em uso hoje |
+
+
+---
+
+## 12. Fase 6 — o defeito do `pedidos.excluir`
+
+**Relatado em uso:** atendente com `pedidos.excluir` **desmarcado** conseguia
+excluir pedido. Confirmado no banco: o usuário `derick` tinha
+`"pedidos.excluir": false` e a exclusão funcionava assim mesmo.
+
+**Causa:** as caixas da tela de Acessos não eram lidas por ninguém. A auditoria
+mostrou **zero** telas do Admin chamando `pode()` — os únicos `pode()` do
+projeto estavam nos fluxos legados de garçom/entregador, usando o
+`controle-acesso.ts` morto. E toda escrita ia direto ao Supabase com a anon key,
+que tem grant total em `pedidos`.
+
+Caixa que ninguém lê é pior que caixa ausente: promete um controle que não existe.
+
+### Corrigido
+
+| Ação | Rota (servidor) | UI |
+|---|---|---|
+| `pedidos.excluir` | `DELETE /api/admin/pedidos` | botão some do cartão e da barra de seleção |
+| `pedidos.cancelar` | `PATCH /api/admin/pedidos` (status `cancelado`) | — |
+| `pedidos.mudar_status` | `PATCH /api/admin/pedidos` | ações de pagamento/concluir somem |
+| `pedidos.editar` | — | botão Editar some |
+| `pedidos.ver_valor` | — | valores viram `••••••` no `CardPedido` |
+| `estoque.ajustar` | `PATCH /api/admin/estoque` | controles desabilitados |
+| `produtos.criar` / `.editar` / `.excluir` | — | botões Novo / Editar / Excluir somem |
+
+### Guarda contra regressão
+
+`tests/rbac-cobertura.test.mjs` varre o código e falha quando uma chave do
+catálogo não tem **nenhum** ponto de aplicação. A lista
+`SEM_APLICACAO_CONHECIDA` é dívida declarada — some conforme cada tela passa a
+checar, e o segundo teste falha se alguém deixar na lista algo que já é aplicado.
+
+### Dívida restante (8 chaves)
+
+`produtos.ver_custo`, `vitrine.editar`, `cupons.editar`, `bairros.editar`,
+`entregas.editar`, `pagamentos.editar`, `clientes.editar`, `equipe.editar`.
+
+São telas de configuração cujas escritas ainda vão direto ao Supabase. Enquanto
+não tiverem rota autorizada, esconder o botão seria só cosmético — a tabela
+continua aberta ao `anon`. Estão declaradas no teste para não sumirem de vista.

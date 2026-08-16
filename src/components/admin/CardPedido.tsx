@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { useAdminAuth } from '@/contexts/AdminAuthContext'
 import {
   BadgeCheck,
   CheckCircle2,
@@ -237,7 +238,12 @@ export default function CardPedido({
   const badge = obterBadgeStatus(pedido)
   const canal = obterCanal(pedido)
   const IconeCanal = canal.Icone
-  const formatarValor = (v: string) => (valoresOcultos ? '••••••' : v)
+  const { pode } = useAdminAuth()
+  // Um ponto só cobre todo valor do cartão: total, subtotal de item e barra de
+  // pagamento parcial. Sem `pedidos.ver_valor` a pessoa atende o pedido, mas
+  // não lê quanto ele custa — é a fronteira entre operar e saber o número.
+  const podeVerValor = pode('pedidos.ver_valor')
+  const formatarValor = (v: string) => (valoresOcultos || !podeVerValor ? '••••••' : v)
   const ehCrediario = String(pedido.forma_pagamento || '').toLowerCase().includes('credi')
   const crediarioEmAberto = pedidoEstaEmCrediarioAberto(pedido)
   const valorEmCrediarioExibido = crediarioEmAberto ? (pedido.valor_em_crediario ?? 0) : 0

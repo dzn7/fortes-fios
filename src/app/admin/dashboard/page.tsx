@@ -12,6 +12,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import ProtectedRoute from '@/components/admin/ProtectedRoute'
+import { excluirPedidos } from '@/lib/acoes-admin'
+import { useAdminAuth } from '@/contexts/AdminAuthContext'
 import AdminLayout from '@/components/admin/AdminLayout'
 import { supabase } from '@/lib/supabase'
 import { gerarPDFPedido } from '@/lib/pdf-generator'
@@ -82,6 +84,9 @@ const formatarMoeda = (valor: number): string => {
 }
 
 export default function Dashboard() {
+  const { pode } = useAdminAuth()
+  const podeExcluirPedido = pode('pedidos.excluir')
+  const podeEditarPedido = pode('pedidos.editar')
   const mesAtualSP = obterMesAtualSP()
   const [mesSelecionado, setMesSelecionado] = useState(mesAtualSP.mes)
   const [anoSelecionado, setAnoSelecionado] = useState(mesAtualSP.ano)
@@ -429,12 +434,17 @@ export default function Dashboard() {
       mensagem: 'Tem certeza que deseja excluir este pedido? Esta ação não pode ser desfeita.',
       onConfirmar: async () => {
         try {
-          const { error } = await supabase
-            .from('pedidos')
-            .delete()
-            .eq('id', pedidoId)
-
-          if (error) throw error
+          const resultado = await excluirPedidos(pedidoId)
+          if (!resultado.sucesso) {
+            setModalNotificacao({
+              aberto: true,
+              tipo: 'erro',
+              titulo: 'Não foi possível excluir',
+              mensagem: resultado.erro || 'Tente novamente.',
+              onConfirmar: () => {},
+            })
+            return
+          }
 
           carregarDados(mesSelecionado, anoSelecionado)
           setModalNotificacao({
@@ -625,16 +635,20 @@ export default function Dashboard() {
                       setPedidoDetalhesId(p.id)
                       setModalDetalhesAberto(true)
                     }}
-                    onEditar={(p) => {
-                      setPedidoSelecionado(p)
-                      setModalEditarAberto(true)
-                    }}
+                    onEditar={
+                      podeEditarPedido
+                        ? (p) => {
+                            setPedidoSelecionado(p)
+                            setModalEditarAberto(true)
+                          }
+                        : undefined
+                    }
                     onWhatsApp={(p) => {
                       setPedidoWhatsApp(p)
                       setModalWhatsAppAberto(true)
                     }}
                     onGerarPDF={(p) => void handleGerarPDF(p.id)}
-                    onExcluir={(p) => handleExcluirPedido(p.id)}
+                    onExcluir={podeExcluirPedido ? (p) => handleExcluirPedido(p.id) : undefined}
                   />
                 ))}
               </div>

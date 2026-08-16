@@ -291,6 +291,8 @@ continua a uma requisição de distância.
 ### Anti-padrões desta área
 
 - `if (role === 'atendente')` espalhado pela tela. A regra mora no catálogo, não no componente.
+- Adicionar chave ao catálogo sem nenhum ponto que a leia. Foi assim que `pedidos.excluir` virou caixa decorativa: desmarcada, e o atendente excluía do mesmo jeito. `tests/rbac-cobertura.test.mjs` falha quando isso acontece.
+- Botão visível que responde 403. Ação sem permissão **some**; erro de permissão em botão clicável ensina que o sistema está quebrado, não que faltou autorização.
 - Conceder permissão nova sem fechar o dado no servidor: vira teatro.
 - Devolver campo sensível zerado para quem não tem acesso. `receita: 0` inventa um faturamento de zero reais; o campo **ausente** diz a verdade. Ver `/api/admin/dashboard`.
 - Tratar valor de pedido e faturamento como a mesma permissão. `pedidos.ver_valor` é o R$ 85,00 que o atendente precisa cobrar; `dashboard.ver_receita` é o R$ 4.580 do dia.

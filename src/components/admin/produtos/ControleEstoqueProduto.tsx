@@ -6,7 +6,8 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { supabase } from '@/lib/supabase'
+import { ajustarEstoque } from '@/lib/acoes-admin'
+import { useAdminAuth } from '@/contexts/AdminAuthContext'
 import {
   ajustarQuantidadeEstoque,
   obterSituacaoEstoque,
@@ -39,6 +40,8 @@ export function ControleEstoqueProduto({
   compacto = false,
   className,
 }: ControleEstoqueProdutoProps) {
+  const { pode } = useAdminAuth()
+  const podeAjustar = pode('estoque.ajustar')
   const [salvando, setSalvando] = useState(false)
   const [valorDigitado, setValorDigitado] = useState(String(quantidade))
   const notificacoes = useNotificacoesOpcional()
@@ -52,25 +55,24 @@ export function ControleEstoqueProduto({
   }, [quantidade])
 
   const persistir = async (proximaQuantidade: number, modo: 'ajuste' | 'definir') => {
-    if (salvando || proximaQuantidade === quantidade) return
+    if (!podeAjustar || salvando || proximaQuantidade === quantidade) return
     const quantidadeAnterior = quantidade
     onQuantidadeAlterada(proximaQuantidade)
     setValorDigitado(String(proximaQuantidade))
     setSalvando(true)
 
     try {
-      const resposta = modo === 'ajuste'
-        ? await supabase.rpc('ajustar_estoque_produto', {
-            p_produto_id: produtoId,
-            p_delta: proximaQuantidade - quantidadeAnterior,
-          })
-        : await supabase.rpc('definir_estoque_produto', {
-            p_produto_id: produtoId,
-            p_quantidade: proximaQuantidade,
-          })
+      // Pela rota autorizada: a RPC de estoque é chamável por qualquer um com a
+      // anon key, então quem decide se este usuário pode ajustar é o servidor.
+      const resposta = await ajustarEstoque(
+        produtoId,
+        modo === 'ajuste'
+          ? { delta: proximaQuantidade - quantidadeAnterior }
+          : { quantidade: proximaQuantidade },
+      )
 
-      if (resposta.error) throw resposta.error
-      const quantidadeConfirmada = Number(resposta.data)
+      if (!resposta.sucesso) throw new Error(resposta.erro || 'Falha ao atualizar')
+      const quantidadeConfirmada = Number(resposta.quantidade)
       if (!Number.isInteger(quantidadeConfirmada) || quantidadeConfirmada < 0) {
         throw new Error('O banco retornou uma quantidade inválida.')
       }
@@ -127,7 +129,7 @@ export function ControleEstoqueProduto({
           size="icon"
           className="size-9 rounded-none"
           onClick={() => ajustar(-1)}
-          disabled={salvando || quantidade === 0}
+          disabled={!podeAjustar || salvando || quantidade === 0}
           aria-label={`Diminuir estoque de ${produtoNome}`}
         >
           <Minus className="size-3.5" />
@@ -145,7 +147,7 @@ export function ControleEstoqueProduto({
           }}
           inputMode="numeric"
           aria-label={`Quantidade em estoque de ${produtoNome}`}
-          disabled={salvando}
+          disabled={!podeAjustar || salvando}
           className="h-9 w-12 rounded-none border-0 px-1 text-center font-mono text-sm font-semibold tabular-nums shadow-none focus-visible:ring-1"
         />
         <Button
@@ -154,7 +156,7 @@ export function ControleEstoqueProduto({
           size="icon"
           className="size-9 rounded-none"
           onClick={() => ajustar(1)}
-          disabled={salvando}
+          disabled={!podeAjustar || salvando}
           aria-label={`Aumentar estoque de ${produtoNome}`}
         >
           {salvando ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
@@ -166,7 +168,7 @@ export function ControleEstoqueProduto({
         size="icon"
         className="size-9 shrink-0 text-muted-foreground"
         onClick={() => void persistir(0, 'definir')}
-        disabled={salvando || quantidade === 0}
+        disabled={!podeAjustar || salvando || quantidade === 0}
         aria-label={`Zerar estoque de ${produtoNome}`}
         title="Zerar estoque"
       >
