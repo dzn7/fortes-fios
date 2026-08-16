@@ -200,6 +200,7 @@ Central interna do Admin (não é push, e-mail ou WhatsApp). Spec: `specs/centra
 
 - **Vermelho = urgência**, e no estoque fica reservado ao caso terminal: `esgotado` (não vende mais).
 - **Âmbar = estoque baixo** — atenção, ainda vende.
+- **Azul = cliente sem comprar** — oportunidade, não problema. Prioridade `normal`, nunca escala: competir com estoque esgotado pelo vermelho tiraria a força dos dois.
 - A cor do **ícone** diz *qual* é o problema; o **fio vermelho na borda esquerda** e o agrupamento em **Precisa de atenção** dizem que é urgente. São eixos separados, então "urgente" não obriga tudo a ficar vermelho.
 - Não repetir o selo **Urgente** em todo cartão: com o estoque inteiro em alerta o selo vira ruído e apaga a diferença entre baixo e esgotado. A urgência já está no agrupamento e no fio da borda.
 - Nunca comunicar estado só por cor: sempre acompanha texto e ícone.
@@ -221,6 +222,18 @@ por usuário (leitura):  nova → visualizada → lida
 versão quebrou: a coluna era gravada e nenhuma das três leituras a consultava,
 então o botão parecia morto. `notificacaoVisivelNaCentral` (em
 `notificacoes.mjs`) é o espelho em JS desse mesmo `where`.
+
+**Cliente inativo não tem evento.** Ninguém escreve na tabela quando alguém
+deixa de comprar, então não há trigger: a regra vive em
+`reconciliar_notificacoes()`, que já roda a cada carregamento do painel e já é
+onde a passagem do tempo é reavaliada. A mensagem muda todo dia (`há 8` → `há 9`)
+e o `do update` cuida disso sem abrir linha nova; o alerta some quando o cliente
+volta a comprar.
+
+Toda notificação leva a algum lugar: estoque → `/admin/estoque?produto=`,
+pedido → `/admin/pedidos/`, cliente → `/admin/usuarios?cliente=`, que abre a
+ficha já com o seletor de follow-up. Alerta sem destino obriga a pessoa a
+procurar de novo o que o sistema já sabia.
 
 Uma condição contínua gera **um** alerta ativo — garantido por índice único parcial no banco, não por disciplina de código. Resolver e reincidir gera **ocorrência nova**, que volta a aparecer.
 
@@ -317,7 +330,10 @@ que mandava o cliente para uma conversa que não é da Fortes Fios.
 
 - **`api.whatsapp.com/send`, nunca `wa.me`.** No Safari do iOS o `wa.me` passa por um redirecionamento que perde o texto ou cai em "página não encontrada" quando aberto de dentro de handler. O endpoint direto resolve para o app e para o WhatsApp Web sem salto.
 - **Número inválido devolve `null`, não link torto.** Link torto abre uma conversa inexistente e o usuário acha que enviou.
+- Aviso de "faltam R$ X para o frete grátis" leva um botão **Adicionar mais itens**. Dizer quanto falta sem oferecer o caminho é frustrar — e como o carrinho preserva a etapa, voltar não custa nada.
+- **O carrinho não zera a etapa ao fechar.** Quem sai para pegar mais um produto volta no passo em que estava; os campos já viviam no estado, o que se perdia era o lugar, e refazer o stepper dava a impressão de ter perdido tudo. Só o carrinho vazio reabre no passo 1.
 - **Abrir no clique, síncrono.** `window.open` depois de um `await` é tratado como popup e bloqueado no iOS: monte o link no render, não dentro do handler assíncrono.
+- **Só reserve a aba quando já souber que há destino.** Abrir primeiro e montar a URL depois deixa `about:blank` órfão sempre que o número não resolve. O destino é calculado antes do `window.open`.
 - **Reservar aba: NUNCA com `noopener`.** A flag faz `window.open` devolver `null` por especificação — a aba abre e fica órfã em `about:blank`, sem ninguém para navegá-la ou fechá-la. Reserve sem a flag e zere `opener` depois de navegar.
 - Reserve a aba **depois** de todas as guardas de validação: pedido recusado com aba reservada deixa janela em branco aberta.
 - Número da loja vem de `configuracoes_loja.whatsapp_numero` via `useStatusLoja()`. Nunca fixo no código.
@@ -461,6 +477,19 @@ jogou fora. Por isso o original precisa chegar íntegro ao servidor.
 - Primeiros 2 cards `eager`, resto `lazy` — só o que entra no viewport inicial pesa no LCP.
 - Escolher a imagem **já cria** o depoimento; nome e formato editam no card. Modal para uma informação que cabe numa linha é passo a mais.
 - O formato é sugerido pela proporção do arquivo e continua trocável.
+
+## Categorias
+
+Categoria organiza a navegação da loja inteira — o formulário antigo pedia só o
+nome, num campo solto.
+
+- **Ícone por categoria** (`categorias_cardapio.icone`, com default `etiqueta`). Catálogo de 12 em `src/lib/categorias.mjs`, mapeado para componente em `SeletorIconeCategoria` — id e palavras no domínio, import de ícone no componente.
+- **Grade de ícones, tudo à vista.** `Select` esconderia atrás de um clique uma decisão que é visual por natureza.
+- **Sugestão enquanto digita:** "Cabelos cacheados" já marca o ícone de cachos. Para de sugerir assim que a pessoa escolhe — sobrescrever escolha consciente é hostil.
+- **Duplicata recusada ignorando acento e caixa.** Ninguém cria "Cachos" duas vezes igual; cria "cachos" achando que é outra coisa.
+- **Salvar com o nome inalterado ainda persiste o ícone.** Sair cedo por "nada mudou" descartaria a troca de ícone em silêncio.
+- Editar abre com o ícone atual, não com o padrão — senão salvar sem mexer trocaria o ícone sozinho.
+- O mesmo ícone aparece no menu da loja, que é onde ele serve: o cliente reconhece antes de ler.
 
 ## Padrões de layout
 

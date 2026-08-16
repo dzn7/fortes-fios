@@ -1,4 +1,4 @@
-import { AlertTriangle, PackageX, Receipt, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, PackageX, Receipt, UserRoundSearch, type LucideIcon } from 'lucide-react'
 import type { Notificacao, TipoNotificacao } from '@/lib/notificacoes.mjs'
 
 /**
@@ -32,6 +32,12 @@ const APARENCIAS: Record<TipoNotificacao, AparenciaNotificacao> = {
     Icone: Receipt,
     classeIcone: 'bg-primary/10 text-primary',
     rotulo: 'Pedido',
+  },
+  // Oportunidade, não problema: cor neutra-quente, longe do vermelho do estoque.
+  cliente_inativo: {
+    Icone: UserRoundSearch,
+    classeIcone: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+    rotulo: 'Cliente',
   },
 }
 

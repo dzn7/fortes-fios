@@ -13,6 +13,7 @@ export const TIPOS_NOTIFICACAO = {
   ESTOQUE_ESGOTADO: 'estoque_esgotado',
   ESTOQUE_BAIXO: 'estoque_baixo',
   PEDIDO_NOVO: 'pedido_novo',
+  CLIENTE_INATIVO: 'cliente_inativo',
 }
 
 export const PRIORIDADES = {
@@ -29,6 +30,16 @@ export const LIMITE_MODAL = 3
  * a madrugada e ainda sinalizam pedido esquecido no mesmo dia.
  */
 export const HORAS_PEDIDO_URGENTE = 12
+
+/**
+ * Dias sem comprar até o cliente virar oportunidade de reativação.
+ *
+ * Sete é o intervalo em que a loja ainda está fresca na memória e um "sentimos
+ * sua falta" soa atencioso — mais que isso vira cobrança, menos vira insistência.
+ */
+export const DIAS_CLIENTE_INATIVO = 7
+
+const MILISSEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000
 
 /** Status em que o pedido ainda depende de uma ação do administrador. */
 const STATUS_PEDIDO_AGUARDANDO = new Set(['pendente', 'aguardando_pagamento'])
@@ -113,6 +124,41 @@ export const descreverNotificacaoPedido = (pedido, agora = new Date()) => {
     entidade_id: pedido.id,
     dados: { numero_pedido: pedido.numero_pedido ?? null, horas_parado: horasParado },
     chave_dedupe: chaveDedupe(TIPOS_NOTIFICACAO.PEDIDO_NOVO, pedido.id),
+  }
+}
+
+/**
+ * Cliente que comprou e sumiu. Diferente de estoque e pedido, aqui não há
+ * problema a resolver — há oportunidade a aproveitar, então a prioridade é
+ * `normal` e o alerta nunca escala.
+ *
+ * Quem nunca comprou não entra: não é reativação, é prospecção, e o follow-up
+ * de "sentimos sua falta" não faria sentido.
+ *
+ * @param {{ id?: string, nome?: string, telefone?: string, ultimo_pedido_em?: string }} cliente
+ * @param {Date} agora
+ */
+export const descreverNotificacaoCliente = (cliente, agora = new Date()) => {
+  if (!cliente?.id) return null
+  if (!cliente.ultimo_pedido_em) return null
+
+  const ultimoPedido = new Date(cliente.ultimo_pedido_em)
+  if (Number.isNaN(ultimoPedido.getTime())) return null
+
+  const dias = Math.floor((agora.getTime() - ultimoPedido.getTime()) / MILISSEGUNDOS_POR_DIA)
+  if (dias < DIAS_CLIENTE_INATIVO) return null
+
+  const nome = (cliente.nome || '').trim() || 'Cliente'
+
+  return {
+    tipo: TIPOS_NOTIFICACAO.CLIENTE_INATIVO,
+    prioridade: PRIORIDADES.NORMAL,
+    titulo: 'Cliente sem comprar',
+    mensagem: `${nome} não compra há ${concordar(dias, 'dia', 'dias')}.`,
+    entidade_tipo: 'cliente',
+    entidade_id: cliente.id,
+    dados: { dias, telefone: cliente.telefone ?? null },
+    chave_dedupe: chaveDedupe(TIPOS_NOTIFICACAO.CLIENTE_INATIVO, cliente.id),
   }
 }
 
@@ -254,6 +300,10 @@ export const rotaDaNotificacao = (notificacao) => {
   }
   if (notificacao.entidade_tipo === 'pedido') {
     return `/admin/pedidos/${encodeURIComponent(String(id))}`
+  }
+  if (notificacao.entidade_tipo === 'cliente') {
+    // Abre a ficha já com o seletor de follow-up à mão.
+    return `/admin/usuarios?cliente=${encodeURIComponent(String(id))}`
   }
   return null
 }

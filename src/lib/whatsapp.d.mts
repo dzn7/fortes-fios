@@ -28,6 +28,7 @@ export type FollowUpCliente = {
   texto: (dados: { nome?: string }) => string
 }
 
+export const NUMERO_WHATSAPP_PADRAO: string
 export const FOLLOWUPS_CLIENTE: FollowUpCliente[]
 
 export function normalizarNumeroWhatsApp(valor: unknown): string | null

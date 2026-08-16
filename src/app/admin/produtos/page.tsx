@@ -18,6 +18,16 @@ import {
 } from 'lucide-react'
 import ProtectedRoute from '@/components/admin/ProtectedRoute'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
+import {
+  ICONE_CATEGORIA_PADRAO,
+  iconeValido,
+  sugerirIconePorNome,
+  validarCategoria,
+} from '@/lib/categorias.mjs'
+import {
+  IconeCategoria,
+  SeletorIconeCategoria,
+} from '@/components/admin/produtos/SeletorIconeCategoria'
 import AdminLayout from '@/components/admin/AdminLayout'
 import { FiltrosAtivosChips, type ChipFiltroAtivo } from '@/components/admin/filtros/FiltrosAtivosChips'
 import { FiltroProdutosAdmin } from '@/components/admin/produtos/FiltroProdutosAdmin'
@@ -177,6 +187,7 @@ export default function ProdutosPage() {
 
   const [modalNovoProduto, setModalNovoProduto] = useState(false)
   const [modalNovaCategoria, setModalNovaCategoria] = useState(false)
+  const [iconeNovaCategoria, setIconeNovaCategoria] = useState(ICONE_CATEGORIA_PADRAO)
   const [nomeNovaCategoria, setNomeNovaCategoria] = useState('')
   const [criandoNovaCategoria, setCriandoNovaCategoria] = useState(false)
   const [imagemNovoProduto, setImagemNovoProduto] = useState<string | null>(null)
@@ -213,11 +224,13 @@ export default function ProdutosPage() {
     tipo: 'categoria' | 'filtro_geral'
     categoriaAtual: string
     novoNome: string
+    icone: string
   }>({
     aberto: false,
     tipo: 'categoria',
     categoriaAtual: '',
-    novoNome: ''
+    novoNome: '',
+    icone: ICONE_CATEGORIA_PADRAO,
   })
 
   useEffect(() => {
@@ -479,7 +492,8 @@ export default function ProdutosPage() {
 
   const salvarCategoriaNoBanco = useCallback(async (
     nomeCategoria: string,
-    tipo: TipoCategoriaCardapio = 'produto'
+    tipo: TipoCategoriaCardapio = 'produto',
+    icone: string = ICONE_CATEGORIA_PADRAO,
   ) => {
     const nomeNormalizado = normalizarNomeCategoria(nomeCategoria)
     if (!nomeNormalizado) return
@@ -495,7 +509,8 @@ export default function ProdutosPage() {
           nome: nomeNormalizado,
           tipo,
           ativo: true,
-          ordem: maiorOrdem + 1
+          ordem: maiorOrdem + 1,
+          icone: iconeValido(icone),
         },
         { onConflict: 'nome,tipo' }
       )
@@ -507,20 +522,26 @@ export default function ProdutosPage() {
     categoria: string,
     tipo: 'categoria' | 'filtro_geral' = 'categoria',
   ) => {
+    // Abre já com o ícone que a categoria tem hoje, não com o padrão: senão
+    // salvar sem mexer no ícone o trocaria em silêncio.
+    const registro = categoriasCardapio.find((item) => item.nome === categoria)
+
     setModalRenomearCategoria({
       aberto: true,
       tipo,
       categoriaAtual: categoria,
-      novoNome: categoria
+      novoNome: categoria,
+      icone: iconeValido(registro?.icone),
     })
-  }, [])
+  }, [categoriasCardapio])
 
   const fecharModalRenomearCategoria = useCallback(() => {
     setModalRenomearCategoria({
       aberto: false,
       tipo: 'categoria',
       categoriaAtual: '',
-      novoNome: ''
+      novoNome: '',
+      icone: ICONE_CATEGORIA_PADRAO,
     })
   }, [])
 
@@ -542,6 +563,25 @@ export default function ProdutosPage() {
     }
 
     if (categoriasSaoIguais(categoriaAtual, novoNomeCategoria)) {
+      // Nome igual não significa nada a fazer: o ícone pode ter mudado.
+      if (!editandoFiltroGeral) {
+        const registro = categoriasCardapio.find((item) => item.nome === categoriaAtual)
+        const iconeEscolhido = iconeValido(modalRenomearCategoria.icone)
+
+        if (registro && iconeValido(registro.icone) !== iconeEscolhido) {
+          const { error } = await supabase
+            .from('categorias_cardapio')
+            .update({ icone: iconeEscolhido })
+            .eq('id', registro.id)
+
+          if (error) {
+            toast.error('Não foi possível salvar o ícone.')
+            return
+          }
+          await carregarProdutos(false)
+          toast.success('Ícone atualizado.')
+        }
+      }
       fecharModalRenomearCategoria()
       return
     }
@@ -615,7 +655,7 @@ export default function ProdutosPage() {
           .eq('categoria', categoriaAtual),
         supabase
           .from('categorias_cardapio')
-          .update({ nome: novoNomeCategoria })
+          .update({ nome: novoNomeCategoria, icone: iconeValido(modalRenomearCategoria.icone) })
           .eq('nome', categoriaAtual)
       ])
 
@@ -1145,12 +1185,15 @@ export default function ProdutosPage() {
     setModalNovoProduto(true)
   }
 
-  const criarCategoriaNoModal = async (nomeCategoria: string): Promise<string | null> => {
+  const criarCategoriaNoModal = async (
+    nomeCategoria: string,
+    icone: string = ICONE_CATEGORIA_PADRAO,
+  ): Promise<string | null> => {
     const categoriaNormalizada = normalizarNomeCategoria(nomeCategoria)
     if (!categoriaNormalizada) return null
 
     try {
-      await salvarCategoriaNoBanco(categoriaNormalizada, 'produto')
+      await salvarCategoriaNoBanco(categoriaNormalizada, 'produto', icone)
       setCategoriasReais((estadoAtual) =>
         Array.from(new Set([...estadoAtual, categoriaNormalizada])).sort((a, b) => a.localeCompare(b, 'pt-BR'))
       )
@@ -1169,17 +1212,24 @@ export default function ProdutosPage() {
   }
 
   const criarCategoriaRapida = async () => {
-    if (!nomeNovaCategoria.trim()) {
-      toast.warning('Informe o nome da categoria.')
+    // Duplicata ignorando acento e caixa: ninguém cria "Cachos" duas vezes
+    // igual — cria "cachos" achando que é outra coisa.
+    const erroCategoria = validarCategoria(
+      { nome: nomeNovaCategoria },
+      categoriasCardapio.map((item) => ({ id: item.id, nome: item.nome })),
+    )
+    if (erroCategoria) {
+      toast.warning(erroCategoria)
       return
     }
 
     setCriandoNovaCategoria(true)
     try {
-      const categoriaCriada = await criarCategoriaNoModal(nomeNovaCategoria)
+      const categoriaCriada = await criarCategoriaNoModal(nomeNovaCategoria, iconeNovaCategoria)
       if (!categoriaCriada) return
 
       setNomeNovaCategoria('')
+      setIconeNovaCategoria(ICONE_CATEGORIA_PADRAO)
       setModalNovaCategoria(false)
       toast.success(`Categoria “${categoriaCriada}” criada.`)
     } finally {
@@ -2153,7 +2203,10 @@ export default function ProdutosPage() {
           onOpenChange={(aberto) => {
             if (criandoNovaCategoria) return
             setModalNovaCategoria(aberto)
-            if (!aberto) setNomeNovaCategoria('')
+            if (!aberto) {
+              setNomeNovaCategoria('')
+              setIconeNovaCategoria(ICONE_CATEGORIA_PADRAO)
+            }
           }}
         >
           <DialogContent className="flex max-h-[92dvh] max-w-md flex-col gap-0 overflow-hidden p-0">
@@ -2163,13 +2216,21 @@ export default function ProdutosPage() {
                 Crie uma categoria antes de cadastrar os produtos que pertencem a ela.
               </DialogDescription>
             </DialogHeader>
-            <div className="min-h-0 flex-1 px-5 py-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
               <div className="space-y-1.5">
                 <Label htmlFor="nova-categoria-rapida">Nome da categoria</Label>
                 <Input
                   id="nova-categoria-rapida"
                   value={nomeNovaCategoria}
-                  onChange={(evento) => setNomeNovaCategoria(evento.target.value)}
+                  onChange={(evento) => {
+                    const nome = evento.target.value
+                    setNomeNovaCategoria(nome)
+                    // Sugere enquanto a pessoa digita, mas só até ela escolher:
+                    // sobrescrever uma escolha consciente é hostil.
+                    if (iconeNovaCategoria === ICONE_CATEGORIA_PADRAO) {
+                      setIconeNovaCategoria(sugerirIconePorNome(nome))
+                    }
+                  }}
                   onKeyDown={(evento) => {
                     if (evento.key === 'Enter') {
                       evento.preventDefault()
@@ -2180,6 +2241,22 @@ export default function ProdutosPage() {
                   className="h-11 border-border/70 shadow-none"
                   autoFocus
                 />
+              </div>
+
+              <SeletorIconeCategoria
+                valor={iconeNovaCategoria}
+                onChange={setIconeNovaCategoria}
+              />
+
+              {/* Como o cliente vai ver o filtro na loja. */}
+              <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                  Na loja
+                </p>
+                <span className="mt-2 inline-flex h-9 items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3.5 text-sm font-medium text-primary">
+                  <IconeCategoria icone={iconeNovaCategoria} className="size-4" />
+                  {normalizarNomeCategoria(nomeNovaCategoria) || 'Nome da categoria'}
+                </span>
               </div>
             </div>
             <DialogFooter className="gap-2 border-t border-border/60 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pb-4">
@@ -2307,6 +2384,28 @@ export default function ProdutosPage() {
                   autoFocus
                 />
               </div>
+
+              {modalRenomearCategoria.tipo === 'categoria' ? (
+                <>
+                  <SeletorIconeCategoria
+                    valor={modalRenomearCategoria.icone}
+                    onChange={(icone) =>
+                      setModalRenomearCategoria((estadoAtual) => ({ ...estadoAtual, icone }))
+                    }
+                  />
+
+                  <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                      Na loja
+                    </p>
+                    <span className="mt-2 inline-flex h-9 items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3.5 text-sm font-medium text-primary">
+                      <IconeCategoria icone={modalRenomearCategoria.icone} className="size-4" />
+                      {normalizarNomeCategoria(modalRenomearCategoria.novoNome) ||
+                        modalRenomearCategoria.categoriaAtual}
+                    </span>
+                  </div>
+                </>
+              ) : null}
             </div>
 
             <DialogFooter className="gap-2 border-t border-border/60 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pb-4">

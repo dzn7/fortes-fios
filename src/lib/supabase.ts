@@ -125,6 +125,8 @@ export type CategoriaCardapio = {
   tipo: TipoCategoriaCardapio
   ativo: boolean
   ordem: number
+  /** Id do catálogo em `src/lib/categorias.mjs`. Coluna com default, nunca nula. */
+  icone: string
   created_at: string
   updated_at: string
 }

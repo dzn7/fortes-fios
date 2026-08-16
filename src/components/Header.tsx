@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useStatusLoja } from '@/lib/useStatusLoja'
 import { linkWhatsApp } from '@/lib/whatsapp.mjs'
+import { IconeCategoria } from '@/components/admin/produtos/SeletorIconeCategoria'
 import Image from 'next/image'
 import { useTheme } from 'next-themes'
 import {
@@ -34,6 +35,8 @@ type HeaderProps = {
   onAbrirCarrinho: () => void
   onAbrirPedidos: () => void
   categorias: readonly string[]
+  /** Nome da categoria → id do ícone. Ausente cai no padrão. */
+  iconesCategoria?: Record<string, string>
   categoriaAtiva: string
   onSelecionarCategoria: (categoria: string) => void
   ofertasDisponiveis: boolean
@@ -45,6 +48,7 @@ export default function Header({
   onAbrirCarrinho,
   onAbrirPedidos,
   categorias,
+  iconesCategoria,
   categoriaAtiva,
   onSelecionarCategoria,
   ofertasDisponiveis,
@@ -52,8 +56,8 @@ export default function Header({
 }: HeaderProps) {
   const { theme, setTheme } = useTheme()
   const { quantidadeTotal } = useCarrinho()
-  // O número estava fixo no código, herdado do projeto anterior (DDD 86), e
-  // levava o cliente para uma conversa que não é da Fortes Fios.
+  // `linkWhatsApp` cai no número oficial quando a configuração está vazia, então
+  // o contato nunca depende de uma linha existir no banco.
   const { numeroWhatsApp } = useStatusLoja()
   const linkContatoWhatsApp = linkWhatsApp(
     numeroWhatsApp,
@@ -153,6 +157,10 @@ export default function Header({
                         )}
                         aria-current={ativo ? 'page' : undefined}
                       >
+                        <IconeCategoria
+                          icone={iconesCategoria?.[categoria]}
+                          className="size-6 shrink-0 text-primary/70"
+                        />
                         <span className="min-w-0 flex-1">{categoria}</span>
                         <ChevronRight
                           className="size-5 shrink-0 text-primary"
@@ -176,17 +184,15 @@ export default function Header({
                   >
                     <Instagram className="size-6" strokeWidth={1.8} aria-hidden />
                   </a>
-                  {linkContatoWhatsApp ? (
-                    <a
-                      href={linkContatoWhatsApp}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex size-11 items-center justify-center rounded-full text-foreground transition-colors duration-150 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      aria-label="Conversar com a Fortes Fios pelo WhatsApp"
-                    >
-                      <IconeWhatsApp className="size-6" />
-                    </a>
-                  ) : null}
+                  <a
+                    href={linkContatoWhatsApp ?? undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex size-11 items-center justify-center rounded-full text-foreground transition-colors duration-150 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Conversar com a Fortes Fios pelo WhatsApp"
+                  >
+                    <IconeWhatsApp className="size-6" />
+                  </a>
                 </div>
 
                 <div className="mt-3 grid grid-cols-2 border-t border-border/60 pt-3">

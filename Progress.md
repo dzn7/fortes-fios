@@ -1,5 +1,81 @@
 # Progress
 
+## [2026-08-16] WhatsApp do cabeçalho, about:blank e fluxo de categorias
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Arquivos criados:** `src/lib/categorias.mjs`, `src/components/admin/produtos/SeletorIconeCategoria.tsx`, `supabase/migrations/202608160002_categoria_icone.sql`, `tests/categorias.test.mjs`.
+**Arquivos alterados:** `src/lib/whatsapp.mjs|.d.mts`, `src/components/Header.tsx`, `src/components/ModalCarrinho.tsx`, `src/app/admin/produtos/page.tsx`, `src/app/page.tsx`, `src/app/api/vitrine/categorias/route.ts`, `src/lib/supabase.ts`, `tests/whatsapp.test.mjs`, `UI.md`, `Progress.md`.
+
+**🔴 Erro meu, corrigido:** na task do WhatsApp afirmei que `5586981428538` era
+"número hardcoded herdado do projeto anterior, DDD do Piauí" e troquei por
+leitura de `configuracoes_loja`. **É o número real da loja.** E a chave
+`whatsapp_numero` nunca existiu no banco, então o link virou `null` e o botão
+sumiu do menu. Gravei a chave e criei `NUMERO_WHATSAPP_PADRAO`: a configuração
+continua vencendo, mas a ausência dela não pode mais apagar o canal de contato.
+
+**about:blank, de novo — a correção anterior era incompleta.** Eu tinha tirado o
+`noopener` (que fazia `window.open` devolver `null`), mas a aba continuava sendo
+reservada **antes** de montar a URL. Com o número ausente, `urlWhatsApp` saía
+`null`, caía no `else` e sobrava a aba em branco. Agora o destino é resolvido
+**antes** do `window.open` — sem destino, aba nenhuma é aberta. O `opener = null`
+também passou para depois do `location.replace`.
+
+**Categorias:** ganharam ícone. Migration com default `etiqueta` e backfill que
+deu às 7 categorias existentes o palpite que a tela daria (Kits→kit,
+Pós-química→tratamento, Cacheados→cachos, Mary Kay→maquiagem). O modal de criação
+tem grade de 12 ícones, sugestão automática pelo nome, preview de como o filtro
+aparece na loja, e validação de duplicata que ignora acento e caixa. A edição
+abre com o ícone atual e salva mesmo quando só o ícone muda — o `return` antecipado
+por "nome igual" descartava a troca em silêncio. O ícone aparece no menu da loja.
+
+**Verificação:** `node --test tests/*.test.mjs` **188/188** (13 novos) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · link conferido com configuração vazia → `phone=5586981428538` · API pública devolvendo `{"nome":"Cacheados","icone":"cachos"}` · duplicata `"pos-quimica"` recusada contra `"Pós-química"` existente.
+
+**Pendências / próximos passos:**
+- Smoke do envio real: a reserva de aba é o mecanismo que só o navegador confirma. Se ainda abrir `about:blank`, o log do console dirá se `destinoWhatsApp` resolveu.
+- O ícone aparece no menu hamburguer da loja; o filtro do catálogo em si ainda mostra só texto.
+
+**Armadilhas descobertas:**
+- Afirmar que um valor é "legado do projeto anterior" sem confirmar com quem conhece a loja: o DDD 86 parecia fora de contexto e era o número real.
+- Configuração ausente virando `null` que apaga UI é pior que valor padrão. Canal de contato precisa de chão.
+- Reservar aba antes de saber o destino recria o `about:blank` mesmo sem `noopener` — as duas correções eram necessárias, não alternativas.
+
+## [2026-08-16] Carrinho preserva etapa · notificação de cliente inativo
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Arquivos criados:** `supabase/migrations/202608160001_notificacao_cliente_inativo.sql`.
+**Arquivos alterados:** `src/components/ModalCarrinho.tsx`, `src/lib/notificacoes.mjs|.d.mts`, `src/components/admin/notificacoes/aparencia.ts`, `src/components/admin/GerenciadorUsuariosClientes.tsx`, `tests/notificacoes.test.mjs`, `UI.md`, `Progress.md`.
+
+**Carrinho:** ao fechar, o efeito fazia `setEtapaAtual(1)`. Os campos persistiam
+no estado, mas a pessoa voltava ao passo 1 e precisava percorrer o stepper de
+novo — daí a sensação de ter perdido tudo. Agora a etapa é preservada, e só o
+carrinho vazio reabre no passo 1. O aviso de frete grátis ganhou **Adicionar
+mais itens**, que fecha o modal e devolve ao catálogo.
+
+**Notificação de cliente inativo:** condição sem evento — ninguém escreve na
+tabela quando alguém deixa de comprar. Por isso não há trigger: entra em
+`reconciliar_notificacoes()`, que já roda a cada carregamento do painel e já é
+onde a passagem do tempo é reavaliada (é lá que pedido parado escala). Sete dias
+como gatilho, prioridade `normal` que nunca escala, ícone azul — é oportunidade,
+não problema, e competir com estoque esgotado pelo vermelho tiraria a força dos
+dois.
+
+Clicar leva a `/admin/usuarios?cliente=<id>`, que abre a ficha direto no
+follow-up de WhatsApp. Um `ref` garante que isso aconteça uma vez: sem ele, cada
+recarga da lista reabriria a ficha que o usuário acabou de fechar.
+
+**Cliente de teste criado, como pedido:** `Marly Marques` · `63992104477` ·
+primeira compra há 40 dias, última há 12.
+
+**Verificação:** `node --test tests/*.test.mjs` **176/176** (5 novos, RED antes) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · notificação nasceu sozinha na reconciliação (`Marly Marques não compra há 12 dias.`) e apareceu na rota do admin com o destino `/admin/usuarios?cliente=…` · em transação com rollback: cliente volta a comprar → alerta resolve para **0 ativas**. Marcação de leitura de teste removida.
+
+**Pendências / próximos passos:**
+- Smoke visual: clicar na notificação do cliente e confirmar que a ficha abre com o follow-up à mão.
+- O clique da notificação de estoque já existia (`/admin/estoque?produto=`) e foi conferido na resposta da API — mas o destaque do produto na tela merece o olho.
+
+**Armadilhas descobertas:**
+- Condição sem evento não pode virar trigger. Estoque e pedido têm escrita que dispara; "parou de comprar" é ausência de escrita, e só a reconciliação enxerga isso.
+- Abrir detalhe por parâmetro de URL sem guarda reabre a ficha a cada recarga da lista — o usuário fecha, a lista atualiza, e a ficha volta sozinha.
+
 ## [2026-08-16] Correção: seção de Depoimentos renderizava sem imagem
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

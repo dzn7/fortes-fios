@@ -1,8 +1,12 @@
-export type TipoNotificacao = 'estoque_esgotado' | 'estoque_baixo' | 'pedido_novo'
+export type TipoNotificacao =
+  | 'estoque_esgotado'
+  | 'estoque_baixo'
+  | 'pedido_novo'
+  | 'cliente_inativo'
 export type PrioridadeNotificacao = 'urgente' | 'normal'
 export type EstadoNotificacao = 'ativa' | 'resolvida'
 export type EstadoLeituraNotificacao = 'nova' | 'visualizada' | 'lida'
-export type EntidadeNotificacao = 'produto' | 'pedido'
+export type EntidadeNotificacao = 'produto' | 'pedido' | 'cliente'
 
 /** Linha devolvida por `listar_notificacoes`, já com o estado do usuário. */
 export type Notificacao = {
@@ -54,6 +58,17 @@ export const PRIORIDADES: {
 
 export const LIMITE_MODAL: number
 export const HORAS_PEDIDO_URGENTE: number
+export const DIAS_CLIENTE_INATIVO: number
+
+export function descreverNotificacaoCliente(
+  cliente: {
+    id?: string
+    nome?: string
+    telefone?: string | null
+    ultimo_pedido_em?: string | null
+  },
+  agora?: Date,
+): DescritorNotificacao | null
 
 export function chaveDedupe(tipo: TipoNotificacao, entidadeId: string): string
 

@@ -19,7 +19,13 @@ import { Button } from '@/components/ui/button'
 import { Drawer, DrawerContent, DrawerDescription, DrawerNested, DrawerTitle } from '@/components/ui/drawer'
 import { Separator } from '@/components/ui/separator'
 import { useAjusteTecladoVirtual } from '@/hooks/useAjusteTecladoVirtual'
-import { linkWhatsApp, mensagemPedidoParaLoja, type PedidoWhatsApp } from '@/lib/whatsapp.mjs'
+import {
+  NUMERO_WHATSAPP_PADRAO,
+  linkWhatsApp,
+  mensagemPedidoParaLoja,
+  normalizarNumeroWhatsApp,
+  type PedidoWhatsApp,
+} from '@/lib/whatsapp.mjs'
 import { calcularTroco, sugerirValoresTroco, validarValorPago } from '@/lib/troco.mjs'
 import {
   CONFIG_FRETE_GRATIS_PADRAO,
@@ -581,12 +587,24 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
 
   useEffect(() => {
     if (!aberto) {
-      setEtapaAtual(1)
+      /*
+       * A etapa NÃO é zerada aqui de propósito. Quem fecha o carrinho para pegar
+       * mais um produto volta no mesmo passo em que estava — os campos já
+       * viviam no estado, o que se perdia era só o lugar, e refazer o stepper
+       * dava a impressão de ter perdido tudo.
+       *
+       * O cupom sai porque ele é revalidado contra o carrinho, que pode mudar
+       * enquanto o modal está fechado.
+       */
       setPedidoEnviado(null)
       removerCupomAplicado({ silencioso: true })
     } else {
       carregarBairros()
       carregarFormasPagamento()
+
+      // Carrinho esvaziado enquanto estava fechado: não faz sentido reabrir no
+      // pagamento de um pedido que não existe mais.
+      if (itens.length === 0) setEtapaAtual(1)
 
       if (typeof window === 'undefined') return
 
@@ -1298,13 +1316,18 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
      * Depois do `await` que grava o pedido o navegador já não reconhece a ação
      * como iniciada pelo usuário e trata `window.open` como popup.
      *
+     * Só reserva quando JÁ SE SABE que haverá destino. A versão anterior abria a
+     * aba primeiro e só depois montava a URL: com a configuração do número
+     * ausente a URL saía `null`, e sobrava exatamente a aba `about:blank` que
+     * esta técnica existia para evitar.
+     *
      * SEM `noopener`: a flag faz `window.open` devolver `null` por especificação
-     * — é o que ela existe para fazer, cortar o vínculo com a aba criada. A aba
-     * abria mesmo assim e ficava órfã em `about:blank`, sem ninguém para
-     * navegá-la ou fechá-la. O desacoplamento é feito depois, zerando `opener`.
+     * — a aba abre mesmo assim e fica órfã, sem ninguém para navegá-la. O
+     * desacoplamento é feito depois, zerando `opener`.
      */
+    const destinoWhatsApp = normalizarNumeroWhatsApp(numeroWhatsApp) || NUMERO_WHATSAPP_PADRAO
     const janelaWhatsApp =
-      typeof window !== 'undefined' ? window.open('', '_blank') : null
+      typeof window !== 'undefined' && destinoWhatsApp ? window.open('', '_blank') : null
 
     let cupomConfirmado: CupomAplicadoCheckout | null = cupomAplicado
     if (cupomAplicado) {
@@ -1580,19 +1603,20 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         })),
       }
 
-      const urlWhatsApp = numeroWhatsApp
-        ? linkWhatsApp(numeroWhatsApp, mensagemPedidoParaLoja(resumoParaEnvio))
-        : null
+      const urlWhatsApp = linkWhatsApp(
+        destinoWhatsApp,
+        mensagemPedidoParaLoja(resumoParaEnvio),
+      )
 
       if (janelaWhatsApp && !janelaWhatsApp.closed && urlWhatsApp) {
-        // `opener = null` recupera a proteção que o `noopener` daria, agora que
-        // já usamos a referência para navegar.
+        janelaWhatsApp.location.replace(urlWhatsApp)
+        // `opener = null` só DEPOIS de navegar: zerar antes cortaria a
+        // referência de que a própria navegação depende em alguns navegadores.
         try {
           janelaWhatsApp.opener = null
         } catch {
-          // Alguns navegadores recusam a atribuição; não impede a navegação.
+          // Navegador que recusa a atribuição não impede a navegação já feita.
         }
-        janelaWhatsApp.location.replace(urlWhatsApp)
         setEnvioWhatsAppAutomatico(true)
       } else {
         // Sem aba utilizável não dá para abrir depois do await; a tela de
@@ -1750,10 +1774,12 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
    * "quente". Qualquer trabalho assíncrono entre o toque e a abertura faz o
    * navegador tratar como popup e bloquear.
    */
-  const linkPedidoWhatsApp =
-    pedidoEnviado?.resumoWhatsApp && numeroWhatsApp
-      ? linkWhatsApp(numeroWhatsApp, mensagemPedidoParaLoja(pedidoEnviado.resumoWhatsApp))
-      : null
+  // Sem `&& numeroWhatsApp`: `linkWhatsApp` já cai no número oficial da loja, e
+  // a condição extra fazia o botão de reenvio sumir quando a configuração
+  // estava vazia — justamente na tela em que o pedido não foi enviado.
+  const linkPedidoWhatsApp = pedidoEnviado?.resumoWhatsApp
+    ? linkWhatsApp(numeroWhatsApp, mensagemPedidoParaLoja(pedidoEnviado.resumoWhatsApp))
+    : null
 
   const enviarPedidoNoWhatsApp = () => {
     if (!linkPedidoWhatsApp) return
@@ -2660,6 +2686,22 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                           style={{ width: `${progressoFrete.percentual}%` }}
                         />
                       </div>
+
+                      {/*
+                        Dizer quanto falta sem oferecer o caminho é frustrar: o
+                        catálogo fica atrás deste modal. Fechar preserva a etapa
+                        e os campos, então voltar não custa nada.
+                      */}
+                      {!progressoFrete.atingiu && (
+                        <button
+                          type="button"
+                          onClick={onFechar}
+                          className="mt-2.5 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-[13px] font-medium text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                        >
+                          <Plus className="size-4" strokeWidth={2} />
+                          Adicionar mais itens
+                        </button>
+                      )}
                     </div>
                   )}
 

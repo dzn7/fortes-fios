@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   FOLLOWUPS_CLIENTE,
+  NUMERO_WHATSAPP_PADRAO,
   linkWhatsApp,
   mensagemPedidoParaLoja,
   montarFollowUp,
@@ -38,7 +39,21 @@ test('número inválido devolve null em vez de link torto', () => {
   assert.equal(normalizarNumeroWhatsApp('123'), null)
   assert.equal(normalizarNumeroWhatsApp(null), null)
   assert.equal(normalizarNumeroWhatsApp('abc'), null)
-  assert.equal(linkWhatsApp('123', 'oi'), null)
+})
+
+// 2.1 o botão de contato não some por falta de configuração
+test('número ausente ou inválido cai no WhatsApp oficial da loja', () => {
+  for (const entrada of ['', '123', null, undefined]) {
+    const url = linkWhatsApp(entrada, 'oi')
+    assert.ok(url, `entrada ${JSON.stringify(entrada)} deveria cair no padrão`)
+    assert.ok(url.includes(NUMERO_WHATSAPP_PADRAO))
+  }
+})
+
+test('número configurado vence o padrão', () => {
+  const url = linkWhatsApp('(63) 98105-3014', 'oi')
+  assert.ok(url.includes('5563981053014'))
+  assert.ok(!url.includes(NUMERO_WHATSAPP_PADRAO))
 })
 
 // 3. o link usa api.whatsapp.com — o que sobrevive ao Safari iOS

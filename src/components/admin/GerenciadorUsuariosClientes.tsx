@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   AlertTriangle,
   Check,
@@ -168,6 +168,7 @@ export default function GerenciadorUsuariosClientes() {
   const [pagina, setPagina] = useState(1)
   const [itensPorPagina, setItensPorPagina] = useState(LIMITE_PADRAO)
   const [usuarioDetalhe, setUsuarioDetalhe] = useState<UsuarioClienteMetrica | null>(null)
+  const abertoPelaUrlRef = useRef(false)
   const [pedidosDetalhe, setPedidosDetalhe] = useState<PedidoCliente[]>([])
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false)
   const [editando, setEditando] = useState(false)
@@ -229,6 +230,28 @@ export default function GerenciadorUsuariosClientes() {
   useEffect(() => {
     void carregarUsuarios()
   }, [carregarUsuarios])
+
+  /*
+   * Abre a ficha do cliente quando a URL traz `?cliente=<id>`.
+   *
+   * É o destino da notificação "não compra há N dias": clicar no alerta precisa
+   * cair direto no follow-up, não numa lista onde a pessoa procura o nome de
+   * novo. `abertoPelaUrlRef` garante que isso aconteça uma vez — sem ele, cada
+   * recarga da lista reabriria a ficha que o usuário acabou de fechar.
+   */
+  useEffect(() => {
+    if (abertoPelaUrlRef.current) return
+    if (usuarios.length === 0) return
+
+    const idCliente = new URLSearchParams(window.location.search).get('cliente')
+    if (!idCliente) return
+
+    const alvo = usuarios.find((usuario) => usuario.id === idCliente)
+    if (!alvo) return
+
+    abertoPelaUrlRef.current = true
+    void abrirDetalhes(alvo)
+  }, [usuarios])
 
   const abrirDetalhes = async (usuario: UsuarioClienteMetrica) => {
     setUsuarioDetalhe(usuario)

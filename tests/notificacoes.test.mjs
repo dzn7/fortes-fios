@@ -9,6 +9,7 @@ import {
   agruparPorPrioridade,
   chaveDedupe,
   deltaResumo,
+  descreverNotificacaoCliente,
   descreverNotificacaoEstoque,
   descreverNotificacaoPedido,
   estadoLeitura,
@@ -326,6 +327,58 @@ test('reincidência não herda o silêncio da ocorrência anterior', () => {
   assert.equal(dispensada.chave_dedupe, reincidencia.chave_dedupe)
   assert.equal(notificacaoVisivelNaCentral(reincidencia), true)
   assert.equal(notificacaoAbreModal(reincidencia), true)
+})
+
+// 13.5 cliente parado há dias — o alerta que gera reativação
+test('cliente sem comprar além do limite vira notificação normal', () => {
+  const cliente = {
+    id: 'cliente-1',
+    nome: 'Marly Marques',
+    telefone: '63981053014',
+    ultimo_pedido_em: '2026-08-01T12:00:00.000Z',
+  }
+
+  const descritor = descreverNotificacaoCliente(cliente, new Date('2026-08-15T12:00:00.000Z'))
+
+  assert.equal(descritor.tipo, TIPOS_NOTIFICACAO.CLIENTE_INATIVO)
+  assert.equal(descritor.prioridade, PRIORIDADES.NORMAL)
+  assert.match(descritor.mensagem, /Marly/)
+  assert.match(descritor.mensagem, /14 dias/)
+  assert.equal(descritor.entidade_tipo, 'cliente')
+  assert.equal(descritor.chave_dedupe, 'cliente_inativo:cliente-1')
+})
+
+test('cliente que comprou há pouco não gera alerta', () => {
+  const agora = new Date('2026-08-15T12:00:00.000Z')
+
+  assert.equal(
+    descreverNotificacaoCliente(
+      { id: 'c', nome: 'Ana', ultimo_pedido_em: '2026-08-14T12:00:00.000Z' },
+      agora,
+    ),
+    null,
+  )
+
+  // Exatamente no limite já conta: 7 dias parado é o gatilho.
+  assert.ok(
+    descreverNotificacaoCliente(
+      { id: 'c', nome: 'Ana', ultimo_pedido_em: '2026-08-08T12:00:00.000Z' },
+      agora,
+    ),
+  )
+})
+
+test('cliente sem histórico de compra não vira alerta de reativação', () => {
+  assert.equal(descreverNotificacaoCliente({ id: 'c', nome: 'Ana' }), null)
+  assert.equal(descreverNotificacaoCliente({ id: 'c', ultimo_pedido_em: null }), null)
+  assert.equal(descreverNotificacaoCliente(null), null)
+})
+
+test('rota do cliente leva à ficha com o follow-up', () => {
+  assert.equal(
+    rotaDaNotificacao({ entidade_tipo: 'cliente', entidade_id: 'cliente-1' }),
+    '/admin/usuarios?cliente=cliente-1',
+  )
 })
 
 // 14. rota de contexto

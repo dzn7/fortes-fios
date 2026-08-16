@@ -1,9 +1,8 @@
 /**
  * WhatsApp: número, link e mensagens.
  *
- * Existia em quatro lugares com quatro regras diferentes — inclusive um número
- * hardcoded do projeto anterior no cabeçalho da loja. Aqui fica a regra única,
- * testável sem browser, como `notificacoes.mjs` e `rbac.mjs`.
+ * Existia em quatro lugares com quatro regras diferentes. Aqui fica a regra
+ * única, testável sem browser, como `notificacoes.mjs` e `rbac.mjs`.
  *
  * **Por que `api.whatsapp.com/send` e não `wa.me`:** no Safari do iOS o `wa.me`
  * passa por um redirecionamento que, aberto de dentro de um handler assíncrono,
@@ -11,6 +10,16 @@
  * `api.whatsapp.com/send` resolve direto para o app instalado e para o WhatsApp
  * Web no desktop, sem salto intermediário.
  */
+
+/**
+ * WhatsApp oficial da loja.
+ *
+ * Existe como padrão porque o canal de contato **não pode depender de uma linha
+ * de configuração existir**: sem isso, apagar a chave `whatsapp_numero` faz o
+ * botão do cabeçalho desaparecer em silêncio — foi o que aconteceu. A
+ * configuração continua vencendo quando está preenchida; este valor é o chão.
+ */
+export const NUMERO_WHATSAPP_PADRAO = '5586981428538'
 
 /** Menor comprimento plausível: DDD + 8 dígitos. Abaixo disso é dado sujo. */
 const MINIMO_DIGITOS = 10
@@ -37,11 +46,15 @@ export const normalizarNumeroWhatsApp = (valor) => {
 }
 
 /**
+ * Link da conversa. Número inválido ou ausente cai no oficial da loja, em vez de
+ * devolver `null` e sumir com o botão.
+ *
  * @param {unknown} numero
  * @param {string} mensagem
  */
 export const linkWhatsApp = (numero, mensagem = '') => {
-  const normalizado = normalizarNumeroWhatsApp(numero)
+  const normalizado =
+    normalizarNumeroWhatsApp(numero) || normalizarNumeroWhatsApp(NUMERO_WHATSAPP_PADRAO)
   if (!normalizado) return null
 
   // `encodeURIComponent` preserva `\n` como %0A, que o WhatsApp lê como quebra.

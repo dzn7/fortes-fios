@@ -17,7 +17,7 @@ export async function GET() {
     const [categorias, configuracaoRotulo] = await Promise.all([
       supabase
         .from('categorias_cardapio')
-        .select('id, nome, ordem')
+        .select('id, nome, ordem, icone')
         .eq('tipo', 'produto')
         .eq('ativo', true)
         .order('ordem', { ascending: true })

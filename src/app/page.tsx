@@ -38,6 +38,7 @@ import ModalLojaFechada from '@/components/ModalLojaFechada'
 import ModalNotificacao from '@/components/ModalNotificacao'
 import ModalPedidosCliente from '@/components/ModalPedidosCliente'
 import { LimiteDeErro } from '@/components/LimiteDeErro'
+import { ICONE_CATEGORIA_PADRAO } from '@/lib/categorias.mjs'
 import { AjudaPedidoPublica } from '@/components/AjudaPedidoPublica'
 import { Produto, supabase } from '@/lib/supabase'
 import { useStatusLoja } from '@/lib/useStatusLoja'
@@ -95,6 +96,8 @@ type CategoriaPublica = {
   id: string
   nome: string
   ordem: number
+  /** Id do ícone escolhido no Admin; ausente cai no padrão. */
+  icone?: string
 }
 
 type RespostaCategorias = {
@@ -511,6 +514,18 @@ export default function Home() {
     [categoriasBanco, rotuloCategoriaTodos],
   )
 
+  /** Nome → ícone, para o menu mostrar o mesmo símbolo escolhido no Admin. */
+  const iconesCategoria = useMemo(
+    () =>
+      Object.fromEntries(
+        categoriasBanco.map((categoria) => [
+          categoria.nome,
+          categoria.icone ?? ICONE_CATEGORIA_PADRAO,
+        ]),
+      ),
+    [categoriasBanco],
+  )
+
   const selecionarCategoria = useCallback((categoria: string) => {
     setCategoriaAtiva(categoria)
     window.requestAnimationFrame(() => {
@@ -638,6 +653,7 @@ export default function Home() {
         onAbrirCarrinho={abrirCarrinho}
         onAbrirPedidos={() => setModalPedidosClienteAberto(true)}
         categorias={categorias}
+        iconesCategoria={iconesCategoria}
         categoriaAtiva={categoriaAtiva}
         onSelecionarCategoria={selecionarCategoria}
         ofertasDisponiveis={produtosEmOferta.length > 0}
