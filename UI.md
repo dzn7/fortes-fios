@@ -515,6 +515,35 @@ e prometer hoje é promessa que a operação não controla. Era o caso do Porto:
 O valor em minutos permanece só para **retirada**. A única tela que o configura
 (`/admin/whatsapp`) é rota legada e oculta.
 
+## Login do Admin
+
+**Direção: a identidade da loja num ambiente noturno.** Oliva sobre fundo
+escuro, display em Quiche Sans, texto em Raleway — o mesmo vocabulário do
+catálogo. A versão anterior era preto/`zinc` com acento **laranja**, herdado do
+projeto de restaurante: sem relação com a marca, e era isso que a fazia parecer
+template.
+
+**Âncora visual:** uma única luz oliva atrás da marca — o verde do catálogo
+virando fonte de luz. Um efeito só; o resto em silêncio.
+
+- O tema vem de `.fortes-fios-site dark` no container, então **toda cor é token**. A única exceção é o scrim do overlay (`bg-black/85`), que segue o `Dialog` do projeto.
+- Título com `.fortes-display`, não `font-bold` genérico. A tela de entrada é o primeiro contato com a marca.
+- Campos e botões usam `Input`, `Label`, `Button` e `Checkbox` do design system, com altura 48px — alvo confortável no mobile.
+
+### "Lembrar de mim" guarda o usuário e nunca a senha
+
+A versão antiga gravava `admin_saved_password` em **texto claro** no
+`localStorage` — qualquer script, extensão ou pessoa com o aparelho lia a senha
+do administrador.
+
+O que a pessoa quer de "lembrar" — não redigitar, não relogar — é entregue sem
+guardar segredo: o **nome de usuário** fica salvo (`preferencias-login.mjs`) e a
+sessão em si é o **cookie assinado de 8 horas**. Quem tem preferência salva já
+abre no formulário de credencial, com o campo preenchido.
+
+`lerLoginLembrado` descarta a senha de preferências antigas ao ler, e ela some no
+próximo gravar.
+
 ## Padrões de layout
 
 ### Cardápio público

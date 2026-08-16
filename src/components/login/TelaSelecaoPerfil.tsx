@@ -1,12 +1,21 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Loader2, Lock } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Loader2, Lock, UserRound } from 'lucide-react'
 import CardPerfilUsuario from './CardPerfilUsuario'
 import ModalSenhaLogin from './ModalSenhaLogin'
 import TransicaoLogin from './TransicaoLogin'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  CHAVE_LOGIN_LEMBRADO,
+  lerLoginLembrado,
+  montarLoginLembrado,
+} from '@/lib/preferencias-login.mjs'
 import {
   listarUsuariosPorPapel,
   loginUsuarioSistema,
@@ -38,14 +47,33 @@ type TelaSelecaoPerfilProps = {
 }
 
 const TITULOS_PAPEL: Record<PapelUsuario, string> = {
-  admin: 'Painel Administrativo',
+  admin: 'Painel administrativo',
   // Atendente entra pela mesma tela do administrador: no `/admin`, o que muda
   // é a permissão, não a porta.
-  atendente: 'Painel Administrativo',
+  atendente: 'Painel administrativo',
   garcom: 'Área indisponível',
-  entregador: 'Painel de Entregas',
+  entregador: 'Painel de entregas',
 }
 
+/**
+ * Login do Admin.
+ *
+ * **Direção:** a identidade da loja aplicada a um ambiente noturno — oliva sobre
+ * fundo escuro, display em Quiche Sans, texto em Raleway. A versão anterior era
+ * preto/zinc com acento **laranja**, herdado do projeto de restaurante: não
+ * tinha relação nenhuma com a marca, e era isso que a fazia parecer template.
+ *
+ * A âncora visual é a **luz oliva atrás da marca** — o mesmo verde do catálogo,
+ * agora como fonte de luz. Um efeito só, e o resto em silêncio.
+ *
+ * O tema escuro vem de `.fortes-fios-site` (globals.css), então cada cor aqui é
+ * token: nada de `bg-black`, `zinc-*` ou `laranja-*`.
+ *
+ * **"Lembrar de mim" guarda o usuário e nunca a senha.** A versão antiga
+ * gravava `admin_saved_password` em texto claro no `localStorage`. O que o
+ * usuário quer — não redigitar, não relogar — é entregue pelo nome salvo mais o
+ * cookie de sessão de 8 horas. Ver `preferencias-login.mjs`.
+ */
 export default function TelaSelecaoPerfil({
   papel,
   aoAutenticar,
@@ -63,6 +91,8 @@ export default function TelaSelecaoPerfil({
   const [modoClassico, setModoClassico] = useState(false)
   const [usuarioClassico, setUsuarioClassico] = useState('')
   const [senhaClassica, setSenhaClassica] = useState('')
+  const [mostrarSenha, setMostrarSenha] = useState(false)
+  const [lembrarUsuario, setLembrarUsuario] = useState(false)
   const [transicaoAtiva, setTransicaoAtiva] = useState(false)
   const [usuarioAutenticado, setUsuarioAutenticado] = useState<UsuarioSistema | null>(null)
 
@@ -78,6 +108,36 @@ export default function TelaSelecaoPerfil({
     void carregarUsuarios()
   }, [chavePapeis])
 
+  useEffect(() => {
+    try {
+      const lembrado = lerLoginLembrado(window.localStorage.getItem(CHAVE_LOGIN_LEMBRADO))
+      if (!lembrado.lembrar) return
+
+      setUsuarioClassico(lembrado.nomeUsuario)
+      setLembrarUsuario(true)
+      // Quem já entrou por credencial volta direto no formulário: o campo vem
+      // preenchido, e a lista de perfis seria um desvio.
+      setModoClassico(true)
+    } catch {
+      // Storage bloqueado (navegação privada): segue sem preferência.
+    }
+  }, [])
+
+  const guardarPreferencia = useCallback((nomeUsuario: string, lembrar: boolean) => {
+    try {
+      window.localStorage.setItem(
+        CHAVE_LOGIN_LEMBRADO,
+        JSON.stringify(montarLoginLembrado({ nomeUsuario, lembrar })),
+      )
+      // Resíduo do modelo antigo, que guardava a senha em texto claro.
+      window.localStorage.removeItem('admin_saved_username')
+      window.localStorage.removeItem('admin_saved_password')
+      window.localStorage.removeItem('admin_remember_me')
+    } catch {
+      // Sem storage a preferência não persiste, e tudo bem.
+    }
+  }, [])
+
   const handleSelecionarPerfil = (usuario: UsuarioSistema) => {
     setUsuarioSelecionado(usuario)
     setErroLogin('')
@@ -91,9 +151,7 @@ export default function TelaSelecaoPerfil({
   }, [])
 
   const finalizarTransicao = useCallback(() => {
-    if (usuarioAutenticado) {
-      aoAutenticar(usuarioAutenticado)
-    }
+    if (usuarioAutenticado) aoAutenticar(usuarioAutenticado)
   }, [usuarioAutenticado, aoAutenticar])
 
   const handleLoginPerfil = async (senha: string) => {
@@ -103,6 +161,7 @@ export default function TelaSelecaoPerfil({
 
     const entrar = autenticarNoServidor ?? loginUsuarioSistema
     const resultado = await entrar(usuarioSelecionado.nome_usuario, senha)
+
     if (resultado.sucesso && resultado.usuario) {
       iniciarTransicao(resultado.usuario)
     } else {
@@ -111,97 +170,98 @@ export default function TelaSelecaoPerfil({
     setLoginEmAndamento(false)
   }
 
-  const handleLoginClassico = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleLoginClassico = async (evento: React.FormEvent) => {
+    evento.preventDefault()
     if (!usuarioClassico.trim() || !senhaClassica.trim()) return
+
     setLoginEmAndamento(true)
     setErroLogin('')
 
-    if (loginHardcoded) {
-      const sucesso = loginHardcoded(usuarioClassico, senhaClassica)
-      if (sucesso) {
-        setLoginEmAndamento(false)
-        return
-      }
+    if (loginHardcoded && loginHardcoded(usuarioClassico, senhaClassica)) {
+      guardarPreferencia(usuarioClassico, lembrarUsuario)
+      setLoginEmAndamento(false)
+      return
     }
 
     const entrar = autenticarNoServidor ?? loginUsuarioSistema
     const resultado = await entrar(usuarioClassico, senhaClassica)
+
     if (resultado.sucesso && resultado.usuario) {
+      guardarPreferencia(usuarioClassico, lembrarUsuario)
       iniciarTransicao(resultado.usuario)
     } else {
-      setErroLogin(resultado.erro || 'Credenciais invalidas')
+      setErroLogin(resultado.erro || 'Usuário ou senha incorretos')
     }
     setLoginEmAndamento(false)
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col relative overflow-hidden">
-      {/* Background cinematografico */}
-      <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-gradient-to-b from-black via-zinc-950 to-black" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-laranja-600/[0.04] rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 left-1/4 w-[400px] h-[300px] bg-laranja-700/[0.03] rounded-full blur-[100px]" />
+    // `fortes-fios-site` traz a paleta oliva da loja; `dark` fixa o ambiente
+    // noturno independentemente do tema do sistema — a tela de entrada é a
+    // mesma para todo mundo.
+    <div className="fortes-fios-site dark relative flex min-h-[100dvh] flex-col overflow-hidden bg-background">
+      {/*
+        A âncora: uma única luz oliva atrás da marca. É o verde do catálogo
+        virando fonte de luz — e é o que faz a tela ser reconhecível como Fortes
+        Fios mesmo sem a logo.
+      */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute left-1/2 top-[-18%] size-[min(46rem,120vw)] -translate-x-1/2 rounded-full bg-primary/[0.14] blur-[130px]" />
+        <div className="absolute bottom-[-10%] left-[8%] size-[min(26rem,70vw)] rounded-full bg-primary/[0.06] blur-[100px]" />
       </div>
 
-      {/* Header com logo */}
-      <header className="relative z-10 pt-12 sm:pt-16 pb-6 px-4">
+      <header className="relative z-10 px-5 pb-8 pt-14 sm:pt-20">
         <motion.div
-          initial={{ opacity: 0, y: -30 }}
+          initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          className="flex flex-col items-center gap-6"
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          className="flex flex-col items-center gap-5"
         >
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.1, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div className="relative size-[72px] overflow-hidden rounded-2xl border border-white/10 shadow-2xl shadow-black/50">
-              <Image src="/logo.webp" alt="Fortes Fios" fill sizes="72px" className="object-cover" priority />
-            </div>
-          </motion.div>
+          <div className="relative size-[68px] overflow-hidden rounded-2xl border border-border/60 shadow-2xl shadow-background/60">
+            <Image
+              src="/logo.webp"
+              alt="Fortes Fios"
+              fill
+              sizes="68px"
+              className="object-cover"
+              priority
+            />
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3, duration: 0.6 }}
-            className="text-center space-y-2"
-          >
-            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+          <div className="space-y-1.5 text-center">
+            <h1 className="fortes-display text-[28px] leading-tight text-foreground sm:text-[34px]">
               {TITULOS_PAPEL[papel]}
             </h1>
-            <p className="text-sm text-zinc-500">
-              {!modoClassico ? 'Quem esta acessando?' : 'Entre com suas credenciais'}
+            <p className="text-sm text-muted-foreground">
+              {modoClassico ? 'Entre com suas credenciais' : 'Quem está acessando?'}
             </p>
-          </motion.div>
+          </div>
         </motion.div>
       </header>
 
-      {/* Conteudo principal */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 pb-12">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-5 pb-12">
         <AnimatePresence mode="wait">
           {carregando ? (
             <motion.div
-              key="loading"
+              key="carregando"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center gap-4 py-16"
+              className="flex flex-col items-center gap-3 py-16"
             >
-              <div className="w-12 h-12 rounded-full border-2 border-zinc-800 border-t-laranja-500 animate-spin" />
-              <p className="text-sm text-zinc-600">Carregando perfis...</p>
+              <Loader2 className="size-6 animate-spin text-primary" strokeWidth={1.8} />
+              <p className="text-sm text-muted-foreground">Carregando perfis…</p>
             </motion.div>
           ) : !modoClassico && usuarios.length > 0 ? (
             <motion.div
-              key="profiles"
+              key="perfis"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.35 }}
               className="w-full max-w-2xl"
             >
-              <div className="flex flex-wrap justify-center gap-3 sm:gap-6">
+              <div className="flex flex-wrap justify-center gap-2 sm:gap-5">
                 {usuarios.map((usuario, indice) => (
                   <CardPerfilUsuario
                     key={usuario.id}
@@ -215,154 +275,171 @@ export default function TelaSelecaoPerfil({
                 ))}
               </div>
 
-              {(loginHardcoded || rotaLoginClassico) && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.6 }}
-                  className="mt-12 flex justify-center"
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="mt-12 flex justify-center"
+              >
+                <button
+                  type="button"
+                  onClick={() => setModoClassico(true)}
+                  className="inline-flex h-11 items-center gap-2 rounded-full border border-border/60 px-5 text-sm text-muted-foreground transition-colors hover:border-border hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                 >
-                  <button
-                    onClick={() => setModoClassico(true)}
-                    className="flex items-center gap-2.5 px-5 py-2.5 text-sm text-zinc-600 hover:text-zinc-300
-                             border border-zinc-800/60 hover:border-zinc-700 rounded-lg transition-all duration-300 cursor-pointer"
-                  >
-                    <Lock className="w-3.5 h-3.5" />
-                    Entrar com usuario e senha
-                  </button>
-                </motion.div>
-              )}
+                  <Lock className="size-3.5" strokeWidth={1.8} />
+                  Entrar com usuário e senha
+                </button>
+              </motion.div>
             </motion.div>
-          ) : !modoClassico && usuarios.length === 0 ? (
+          ) : !modoClassico ? (
             <motion.div
-              key="empty"
-              initial={{ opacity: 0, y: 20 }}
+              key="vazio"
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="text-center py-12 max-w-sm"
+              className="max-w-sm py-10 text-center"
             >
-              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-zinc-900/80 border border-zinc-800/50 flex items-center justify-center">
-                <Lock className="w-8 h-8 text-zinc-700" />
-              </div>
-              <h2 className="text-lg font-semibold text-white mb-2">Nenhum perfil cadastrado</h2>
-              <p className="text-sm text-zinc-500 mb-8">
-                Cadastre usuarios no painel administrativo ou entre com usuario e senha.
+              <span className="mx-auto mb-5 flex size-16 items-center justify-center rounded-2xl border border-border/60 bg-card">
+                <UserRound className="size-7 text-muted-foreground" strokeWidth={1.6} />
+              </span>
+              <h2 className="fortes-display text-xl text-foreground">Nenhum perfil cadastrado</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Cadastre acessos no painel, ou entre com usuário e senha.
               </p>
-              {(loginHardcoded || rotaLoginClassico) && (
-                <button
-                  onClick={() => setModoClassico(true)}
-                  className="px-6 py-3 text-sm font-semibold text-white bg-laranja-600 hover:bg-laranja-700
-                           rounded-lg transition-colors duration-300 cursor-pointer"
-                >
-                  Entrar com usuario e senha
-                </button>
-              )}
+              <Button
+                type="button"
+                className="mt-7 h-11 w-full"
+                onClick={() => setModoClassico(true)}
+              >
+                Entrar com usuário e senha
+              </Button>
             </motion.div>
           ) : (
             <motion.div
-              key="classic"
-              initial={{ opacity: 0, y: 20 }}
+              key="credenciais"
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.35 }}
               className="w-full max-w-sm"
             >
-              <form onSubmit={handleLoginClassico} className="space-y-5">
-                <div className="bg-zinc-900/70 backdrop-blur-sm border border-zinc-800/60 rounded-2xl p-7 space-y-5">
-                  <h2 className="text-lg font-bold text-white text-center mb-1">
-                    Entrar com credenciais
-                  </h2>
-
+              <form onSubmit={handleLoginClassico} className="space-y-4">
+                <div className="space-y-4 rounded-2xl border border-border/60 bg-card/80 p-6 backdrop-blur-sm">
                   <AnimatePresence>
-                    {erroLogin && (
+                    {erroLogin ? (
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
                         className="overflow-hidden"
                       >
-                        <div className="flex items-center gap-2 p-3 rounded-xl bg-red-950/30 border border-red-900/40">
-                          <p className="text-sm text-red-400">{erroLogin}</p>
-                        </div>
+                        <p
+                          role="alert"
+                          className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-[13px] text-destructive"
+                        >
+                          {erroLogin}
+                        </p>
                       </motion.div>
-                    )}
+                    ) : null}
                   </AnimatePresence>
 
-                  <input
-                    type="text"
-                    value={usuarioClassico}
-                    onChange={(e) => setUsuarioClassico(e.target.value)}
-                    placeholder="Usuario"
-                    autoComplete="username"
-                    className="w-full px-4 py-3.5 bg-zinc-800/80 border border-zinc-700/50 rounded-xl
-                             text-white placeholder-zinc-500 text-sm
-                             focus:outline-none focus:ring-2 focus:ring-laranja-500/70 focus:border-transparent
-                             transition-all duration-300"
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="login-usuario">Usuário</Label>
+                    <Input
+                      id="login-usuario"
+                      value={usuarioClassico}
+                      onChange={(evento) => setUsuarioClassico(evento.target.value)}
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      placeholder="seu.usuario"
+                      className="h-12 border-border/60 bg-background/60 shadow-none"
+                    />
+                  </div>
 
-                  <input
-                    type="password"
-                    value={senhaClassica}
-                    onChange={(e) => setSenhaClassica(e.target.value)}
-                    placeholder="Senha"
-                    autoComplete="current-password"
-                    className="w-full px-4 py-3.5 bg-zinc-800/80 border border-zinc-700/50 rounded-xl
-                             text-white placeholder-zinc-500 text-sm
-                             focus:outline-none focus:ring-2 focus:ring-laranja-500/70 focus:border-transparent
-                             transition-all duration-300"
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="login-senha">Senha</Label>
+                    <div className="relative">
+                      <Input
+                        id="login-senha"
+                        type={mostrarSenha ? 'text' : 'password'}
+                        value={senhaClassica}
+                        onChange={(evento) => setSenhaClassica(evento.target.value)}
+                        autoComplete="current-password"
+                        placeholder="••••••••"
+                        className="h-12 border-border/60 bg-background/60 pr-12 shadow-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setMostrarSenha((atual) => !atual)}
+                        aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                        className="absolute right-1 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                      >
+                        {mostrarSenha ? (
+                          <EyeOff className="size-4" strokeWidth={1.8} />
+                        ) : (
+                          <Eye className="size-4" strokeWidth={1.8} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
 
-                  <button
+                  <label className="flex cursor-pointer items-start gap-2.5 pt-0.5">
+                    <Checkbox
+                      checked={lembrarUsuario}
+                      onCheckedChange={(valor) => setLembrarUsuario(valor === true)}
+                      className="mt-0.5"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm text-foreground">Lembrar meu usuário</span>
+                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                        Guarda só o nome de acesso neste aparelho. A senha nunca é salva.
+                      </span>
+                    </span>
+                  </label>
+
+                  <Button
                     type="submit"
-                    disabled={loginEmAndamento || !usuarioClassico.trim() || !senhaClassica.trim()}
-                    className="w-full py-3.5 rounded-xl font-semibold text-sm text-white cursor-pointer
-                             bg-laranja-600 hover:bg-laranja-700
-                             disabled:opacity-40 disabled:cursor-not-allowed
-                             transition-all duration-300 shadow-lg shadow-laranja-900/20"
+                    disabled={
+                      loginEmAndamento || !usuarioClassico.trim() || !senhaClassica.trim()
+                    }
+                    className="h-12 w-full text-[15px]"
                   >
                     {loginEmAndamento ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Entrando...
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="size-4 animate-spin" />
+                        Entrando…
                       </span>
                     ) : (
                       'Entrar'
                     )}
-                  </button>
+                  </Button>
                 </div>
 
-                {usuarios.length > 0 && (
+                {usuarios.length > 0 ? (
                   <button
                     type="button"
                     onClick={() => {
                       setModoClassico(false)
                       setErroLogin('')
                     }}
-                    className="w-full text-center text-sm text-zinc-600 hover:text-zinc-300 transition-colors duration-300 py-2 cursor-pointer"
+                    className="flex w-full items-center justify-center gap-1.5 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                   >
-                    Voltar para selecao de perfis
+                    <ArrowLeft className="size-3.5" strokeWidth={1.8} />
+                    Escolher um perfil
                   </button>
-                )}
+                ) : null}
               </form>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
-      {/* Footer */}
       <footer className="relative z-10 pb-8 text-center">
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-          className="text-xs text-zinc-800"
-        >
-          Fortes Fios &copy; 2026
-        </motion.p>
+        <p className="text-xs text-muted-foreground/60">Fortes Fios © 2026</p>
       </footer>
 
-      {/* Modal de senha */}
-      {usuarioSelecionado && (
+      {usuarioSelecionado ? (
         <ModalSenhaLogin
           usuario={usuarioSelecionado}
           aberto={modalAberto}
@@ -374,10 +451,9 @@ export default function TelaSelecaoPerfil({
           }}
           aoSubmeter={handleLoginPerfil}
         />
-      )}
+      ) : null}
 
-      {/* Transicao de login */}
-      {usuarioAutenticado && (
+      {usuarioAutenticado ? (
         <TransicaoLogin
           ativo={transicaoAtiva}
           nome={usuarioAutenticado.nome}
@@ -385,7 +461,7 @@ export default function TelaSelecaoPerfil({
           avatarUrl={usuarioAutenticado.avatar_url}
           aoFinalizar={finalizarTransicao}
         />
-      )}
+      ) : null}
     </div>
   )
 }

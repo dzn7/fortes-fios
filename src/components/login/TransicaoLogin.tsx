@@ -50,7 +50,7 @@ export default function TransicaoLogin({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.4 }}
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black"
+          className="fortes-fios-site dark fixed inset-0 z-[9999] flex items-center justify-center bg-background"
         >
           {/* Glow de fundo pulsante */}
           <div className="absolute inset-0 overflow-hidden">
@@ -110,7 +110,7 @@ export default function TransicaoLogin({
                     transition={{ type: 'spring', damping: 12, stiffness: 300 }}
                     className="absolute -bottom-2 -right-2 w-11 h-11 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/30"
                   >
-                    <Check className="w-6 h-6 text-white" strokeWidth={3} />
+                    <Check className="size-6 text-primary-foreground" strokeWidth={3} />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -131,7 +131,7 @@ export default function TransicaoLogin({
               }}
               className="text-center space-y-1.5"
             >
-              <h2 className="text-2xl font-bold text-white tracking-tight">{nome}</h2>
+              <h2 className="fortes-display text-[26px] text-foreground">{nome}</h2>
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: fase === 'sucesso' ? 1 : 0 }}
@@ -144,7 +144,7 @@ export default function TransicaoLogin({
 
             {/* Barra de progresso */}
             <motion.div
-              className="w-28 h-0.5 rounded-full overflow-hidden bg-zinc-800"
+              className="h-0.5 w-28 overflow-hidden rounded-full bg-border"
             >
               <motion.div
                 initial={{ scaleX: 0 }}

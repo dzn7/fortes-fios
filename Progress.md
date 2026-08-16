@@ -1,5 +1,46 @@
 # Progress
 
+## [2026-08-16] Login do Admin repaginado na identidade da loja
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Arquivos criados:** `src/lib/preferencias-login.mjs|.d.mts`, `tests/preferencias-login.test.mjs`.
+**Arquivos alterados:** `src/components/login/TelaSelecaoPerfil.tsx` (reescrito), `CardPerfilUsuario.tsx`, `ModalSenhaLogin.tsx`, `TransicaoLogin.tsx`, `UI.md`, `Progress.md`.
+
+**Diagnóstico:** a tela era preto + `zinc-*` + acento **laranja** — herança do
+projeto de restaurante. A loja é oliva sobre creme, display em Quiche Sans. Não
+era "feia" por acaso: não tinha relação nenhuma com a marca. 45 ocorrências de
+cor hardcoded nos quatro arquivos.
+
+**Skill `frontend-design` foi lida e aplicada parcialmente, de propósito.** Ela
+pede fontes expressivas próprias, quebra de grid e "evitar shadcn/Tailwind
+default". O `AGENTS.md` §6.1 diz que ele e o `SKILLS.md` vencem quando uma skill
+os contradiz, e o `UI.md` proíbe design system paralelo. Peguei da skill o que é
+compatível — direção estética nomeada, uma âncora memorável, ritmo tipográfico —
+expresso pelos tokens e fontes que o projeto já tem.
+
+**O que foi feito:**
+- Container com `fortes-fios-site dark`: a paleta oliva da loja passa a valer, e cada cor virou token. Sobrou só o scrim `bg-black/85` do overlay, igual ao `Dialog` do projeto.
+- Âncora: uma luz oliva atrás da marca, `bg-primary/[0.14]` com blur. Um efeito, não três.
+- Títulos em `.fortes-display` (Quiche Sans) no lugar de `font-bold`.
+- Campos e botões passaram a `Input`/`Label`/`Button`/`Checkbox` do design system, altura 48px, com mostrar/ocultar senha.
+- **"Lembrar meu usuário"**: guarda o nome, nunca a senha. Quem tem preferência salva abre direto no formulário com o campo preenchido.
+
+**Decisão que você deve revisar:** você pediu "lembrar usuário/senha". Implementei
+só o usuário. A versão que existia antes gravava `admin_saved_password` em texto
+claro no `localStorage`, e foi por isso que a removi. O efeito prático de
+"lembrar" — não redigitar e não relogar — vem do nome salvo mais o cookie de
+sessão de 8 horas, sem nenhum segredo no navegador. Se quiser mesmo a senha
+salva, dá para fazer, mas é uma decisão de risco que precisa ser sua.
+
+**Verificação:** `node --test tests/*.test.mjs` **202/202** (8 novos) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · `.fortes-display` conferida no CSS emitido · zero `zinc-*`, `laranja-*` ou `text-white` restantes nos quatro arquivos.
+
+**Pendências / próximos passos:**
+- Smoke visual em desktop e mobile, e no fluxo de perfil (modal de senha + transição).
+
+**Armadilhas descobertas:**
+- Skill de design genérica empurra para "não use seu design system". Quando o projeto já tem identidade e tokens, o valor da skill está no método (direção nomeada, âncora, restrição), não nas prescrições visuais.
+- `text-white` sobre fundo escuro parece inofensivo e trava o componente em um único tema — `text-foreground` faz a mesma coisa e continua verdadeiro se o ambiente mudar.
+
 ## [2026-08-16] Prazo de entrega: 24 horas no lugar dos minutos do restaurante
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)
