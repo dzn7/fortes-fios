@@ -2,34 +2,34 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, BellOff, CheckCheck, Loader2 } from 'lucide-react'
+import { Bell, BellOff, CheckCheck, History, Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { agruparPorPrioridade } from '@/lib/notificacoes.mjs'
+import {
+  agruparPorPrioridade,
+  notificacaoNoHistorico,
+  notificacaoVisivelNaCentral,
+  rotaDaNotificacao,
+  type Notificacao,
+} from '@/lib/notificacoes.mjs'
 import { useNotificacoes } from '@/contexts/NotificacoesContext'
 import { ItemNotificacao } from './ItemNotificacao'
 
 /**
- * Central de notificações.
+ * Conteúdo da central de notificações.
  *
- * Superfície: `Dialog` compartilhado, que já vira `Drawer` vaul abaixo de
- * 768 px com handle, swipe, botão de 44 px e ajuste de teclado virtual. Mesmo
- * padrão do atalho ⌘K que o header já usa. A cadeia `min-h-0 flex-1
- * overflow-y-auto` mantém o rodapé fora da área que rola — sem `max-h-[80vh]`,
- * proibido pelo UI.md no bottom sheet.
+ * Não carrega superfície própria: o `SinoNotificacoes` o coloca dentro de um
+ * `Popover` ancorado no sino (desktop) ou de um `Drawer` (mobile). Era um
+ * `Dialog` centrado — modal no meio da tela para consultar aviso é peso demais
+ * e tira o vínculo visual com o sino que o usuário acabou de clicar.
+ *
+ * A cadeia `min-h-0 flex-1 overflow-y-auto` mantém cabeçalho e rodapé fixos com
+ * apenas a lista rolando, nas duas superfícies.
  */
-export function PainelNotificacoes() {
+export function PainelNotificacoes({ onFechar }: { onFechar: () => void }) {
   const router = useRouter()
-  const [mostrarResolvidas, setMostrarResolvidas] = useState(false)
+  const [mostrarHistorico, setMostrarHistorico] = useState(false)
   const {
-    painelAberto,
-    fecharPainel,
     notificacoes,
     carregando,
     resumo,
@@ -38,161 +38,160 @@ export function PainelNotificacoes() {
     marcarTodasComoLidas,
     dispensar,
     reativarModalDeEntrada,
-    carregarResolvidas,
+    carregarHistorico,
   } = useNotificacoes()
 
-  const ativas = notificacoes.filter((item) => item.estado === 'ativa')
-  const resolvidas = notificacoes.filter((item) => item.estado === 'resolvida')
+  const ativas = notificacoes.filter(notificacaoVisivelNaCentral)
+  const historico = notificacoes.filter(notificacaoNoHistorico)
   const { urgentes, normais } = agruparPorPrioridade(ativas)
 
-  const irParaContexto = (rota: string) => {
-    fecharPainel()
+  const abrirContexto = (notificacao: Notificacao) => {
+    const rota = rotaDaNotificacao(notificacao)
+    if (!rota) return
+    // Ir até o contexto é atender o aviso: não faz sentido continuar não lido.
+    if (!notificacao.lida_em) marcarComoLida(notificacao.id)
+    onFechar()
     router.push(rota)
   }
 
-  return (
-    <Dialog open={painelAberto} onOpenChange={(aberto) => { if (!aberto) fecharPainel() }}>
-      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
-        <DialogTitle className="sr-only">Notificações</DialogTitle>
-        <DialogDescription className="sr-only">
-          Alertas de estoque e pedidos que precisam de atenção.
-        </DialogDescription>
+  const alternarHistorico = () => {
+    // O efeito colateral fica FORA do updater: atualizador de estado precisa ser
+    // puro e o StrictMode o invoca duas vezes — ali dentro, `carregarHistorico`
+    // dispararia duas buscas.
+    if (!mostrarHistorico) carregarHistorico()
+    setMostrarHistorico((atual) => !atual)
+  }
 
-        <header className="flex shrink-0 items-center gap-3 border-b border-border/70 px-4 py-3.5 pr-14">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Bell strokeWidth={1.7} className="size-[18px]" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold tracking-tight text-foreground">Notificações</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {resumo.total === 0
-                ? 'Nada precisa de atenção agora'
-                : `${resumo.naoLidas} não ${resumo.naoLidas === 1 ? 'lida' : 'lidas'} de ${resumo.total} ${resumo.total === 1 ? 'ativa' : 'ativas'}`}
+  const secao = (titulo: string, itens: Notificacao[], destaque = false) => (
+    <section className="flex flex-col gap-1.5">
+      <h3
+        className={cn(
+          'px-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.08em]',
+          destaque ? 'text-destructive' : 'text-muted-foreground',
+        )}
+      >
+        {titulo}
+      </h3>
+      {itens.map((item) => (
+        <ItemNotificacao
+          key={item.id}
+          notificacao={item}
+          onAbrir={abrirContexto}
+          onMarcarComoLida={marcarComoLida}
+          onDispensar={dispensar}
+        />
+      ))}
+    </section>
+  )
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border/70 px-4 py-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Bell strokeWidth={1.7} className="size-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold leading-tight tracking-tight text-foreground">
+            Notificações
+          </p>
+          <p className="truncate text-xs text-muted-foreground">
+            {resumo.total === 0
+              ? 'Nada precisa de atenção agora'
+              : resumo.naoLidas === 0
+                ? `${resumo.total} ${resumo.total === 1 ? 'alerta ativo' : 'alertas ativos'}`
+                : `${resumo.naoLidas} não ${resumo.naoLidas === 1 ? 'lida' : 'lidas'} de ${resumo.total}`}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onFechar}
+          aria-label="Fechar notificações"
+          className="-mr-1 flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+        >
+          <X strokeWidth={1.8} className="size-4" />
+        </button>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 py-2.5 [-webkit-overflow-scrolling:touch]">
+        {carregando && notificacoes.length === 0 ? (
+          <div className="flex min-h-44 items-center justify-center">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : ativas.length === 0 && !mostrarHistorico ? (
+          <div className="flex min-h-44 flex-col items-center justify-center px-6 text-center">
+            <span className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted">
+              <Bell strokeWidth={1.5} className="size-6 text-muted-foreground" />
+            </span>
+            <p className="text-sm font-medium text-foreground">Tudo em dia</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Nenhum alerta de estoque ou pedido aguardando você.
             </p>
           </div>
-        </header>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {urgentes.length > 0 ? secao('Precisa de atenção', urgentes, true) : null}
+            {normais.length > 0 ? secao('Informações', normais) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2">
-          {carregando && notificacoes.length === 0 ? (
-            <div className="flex min-h-40 items-center justify-center">
-              <Loader2 className="size-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : ativas.length === 0 ? (
-            <div className="flex min-h-40 flex-col items-center justify-center px-6 text-center">
-              <span className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted">
-                <Bell strokeWidth={1.5} className="size-6 text-muted-foreground" />
-              </span>
-              <p className="text-sm font-medium text-foreground">Tudo em dia</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Nenhum alerta de estoque ou pedido aguardando você.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {urgentes.length > 0 ? (
-                <section>
-                  <h3 className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-destructive">
-                    Precisa de atenção
-                  </h3>
-                  <div className="flex flex-col">
-                    {urgentes.map((item) => (
-                      <ItemNotificacao
-                        key={item.id}
-                        notificacao={item}
-                        onIrParaContexto={irParaContexto}
-                        onMarcarComoLida={marcarComoLida}
-                        onDispensar={dispensar}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-
-              {normais.length > 0 ? (
-                <section>
-                  <h3 className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    Informações
-                  </h3>
-                  <div className="flex flex-col">
-                    {normais.map((item) => (
-                      <ItemNotificacao
-                        key={item.id}
-                        notificacao={item}
-                        onIrParaContexto={irParaContexto}
-                        onMarcarComoLida={marcarComoLida}
-                        onDispensar={dispensar}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-
-              {mostrarResolvidas && resolvidas.length > 0 ? (
-                <section>
-                  <h3 className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    Resolvidas
-                  </h3>
-                  <div className="flex flex-col">
-                    {resolvidas.map((item) => (
-                      <ItemNotificacao key={item.id} notificacao={item} compacto />
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-            </div>
-          )}
-        </div>
-
-        <footer
-          className={cn(
-            'flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/70 px-3 py-2.5',
-            'pb-[max(0.625rem,env(safe-area-inset-bottom))]',
-          )}
-        >
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-9 gap-1.5 text-xs"
-            onClick={marcarTodasComoLidas}
-            disabled={resumo.naoLidas === 0}
-          >
-            <CheckCheck strokeWidth={1.7} className="size-4" />
-            Marcar todas como lidas
-          </Button>
-
-          <div className="flex items-center gap-1">
-            {!modalAtivo ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-9 gap-1.5 text-xs text-muted-foreground"
-                onClick={reativarModalDeEntrada}
-              >
-                <BellOff strokeWidth={1.7} className="size-4" />
-                Reativar alertas ao entrar
-              </Button>
+            {mostrarHistorico ? (
+              <section className="flex flex-col gap-1.5">
+                <h3 className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Histórico
+                </h3>
+                {historico.length === 0 ? (
+                  <p className="px-1 pb-1 text-xs text-muted-foreground">
+                    Nada resolvido ou dispensado por aqui ainda.
+                  </p>
+                ) : (
+                  historico.map((item) => (
+                    <ItemNotificacao key={item.id} notificacao={item} arquivado />
+                  ))
+                )}
+              </section>
             ) : null}
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-9 text-xs text-muted-foreground"
-              onClick={() => {
-                // O efeito colateral fica FORA do updater: atualizador de
-                // estado precisa ser puro, e o StrictMode o invoca duas vezes
-                // — dentro dele, `carregarResolvidas` dispararia duas buscas.
-                if (!mostrarResolvidas) carregarResolvidas()
-                setMostrarResolvidas((atual) => !atual)
-              }}
-            >
-              {mostrarResolvidas ? 'Ocultar resolvidas' : 'Mostrar resolvidas'}
-            </Button>
           </div>
-        </footer>
-      </DialogContent>
-    </Dialog>
+        )}
+
+        {!modalAtivo ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2">
+            <span className="flex items-center gap-2 text-xs text-muted-foreground">
+              <BellOff strokeWidth={1.7} className="size-3.5 shrink-0" aria-hidden />
+              Aviso ao entrar está desligado
+            </span>
+            <button
+              type="button"
+              onClick={reativarModalDeEntrada}
+              className="text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            >
+              Reativar
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-border/70 px-2.5 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-9 gap-1.5 text-xs"
+          onClick={marcarTodasComoLidas}
+          disabled={resumo.naoLidas === 0}
+        >
+          <CheckCheck strokeWidth={1.7} className="size-4" />
+          Marcar todas como lidas
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-9 gap-1.5 text-xs text-muted-foreground"
+          onClick={alternarHistorico}
+        >
+          <History strokeWidth={1.7} className="size-4" />
+          {mostrarHistorico ? 'Ocultar' : 'Histórico'}
+        </Button>
+      </footer>
+    </div>
   )
 }

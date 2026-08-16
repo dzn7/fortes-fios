@@ -1,18 +1,15 @@
 'use client'
 
-import { PainelNotificacoes } from './PainelNotificacoes'
 import { ModalAlertasEntrada } from './ModalAlertasEntrada'
 
 /**
- * Superfícies globais da central, montadas uma única vez no layout do Admin —
- * mesmo padrão do `OnboardingRoot`. Ficam fora da árvore das páginas para que
- * navegar entre telas não desmonte o painel nem reabra o modal.
+ * Superfície global da central, montada uma única vez no layout do Admin —
+ * mesmo padrão do `OnboardingRoot`. Fica fora da árvore das páginas para que
+ * navegar entre telas não reabra o modal.
+ *
+ * O painel não está aqui: ele é ancorado no sino do header (ver
+ * `SinoNotificacoes`), que é quem tem o gatilho do `Popover`.
  */
 export function NotificacoesRoot() {
-  return (
-    <>
-      <PainelNotificacoes />
-      <ModalAlertasEntrada />
-    </>
-  )
+  return <ModalAlertasEntrada />
 }

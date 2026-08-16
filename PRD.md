@@ -1,14 +1,10 @@
 # PRD — Fortes Fios
 
-> **Identidade Fortes Fios (2026-08-13):** o catálogo público e a página de contato usam o slogan e a paleta oliva/branco. Admin, login e entregas exibem a marca e a logo Fortes Fios, preservando os tokens e a paleta azul administrativa.
+> **Estado confirmado em 2026-08-15** por leitura do repositório e consulta ao banco pela Supabase Management API (projeto `fortes-fios`, ref `tjljhspczbaxtpbxlyjd`). Versões anteriores deste documento descreviam o projeto **Edienai Lanches** (ref `bawysvqqeqwxasmggfcn`, restaurante/delivery), do qual este código foi derivado. Onde o texto antigo divergia do banco e do repositório reais, ele foi corrigido — ver §Legado.
 
-> **Estado atual (2026-08-13):** o catálogo público é da **Fortes Fios**, uma loja de produtos capilares. Banco, migrations, tabelas, tipos internos e integrações herdadas não foram alterados durante a adaptação visual; a vitrine usa apenas um registro JSON na configuração já existente.
+> **Identidade:** o catálogo público e a página de contato usam o slogan e a paleta oliva/branco da Fortes Fios. Admin, login e entregas exibem a marca e a logo Fortes Fios, preservando os tokens e a paleta azul administrativa.
 
-> **Regra de domínio ativa (2026-08-13):** a Fortes Fios opera como e-commerce/catálogo de produtos capilares. Os únicos canais comerciais apresentados e contabilizados nas novas interfaces são **entrega** e **retirada na loja**. Mesa, salão, comanda, garçom, cozinha, consumo no local e impressão de cozinha são legado técnico fora da experiência Fortes Fios e não podem ser reintroduzidos em UI, relatórios ou novas regras.
-
-> **Limite da etapa:** módulos administrativos e operacionais herdados do projeto-base permanecem preservados fora das rotas do cliente. Sua revisão e adaptação são tarefas próprias.
-
-> Estado confirmado por leitura do repositório e da Supabase Management API em 2026-07-12.
+> **Regra de domínio ativa:** a Fortes Fios opera como e-commerce/catálogo de **produtos capilares**. Os únicos canais comerciais apresentados e contabilizados são **entrega** e **retirada na loja**. Mesa, salão, comanda, garçom, cozinha, consumo no local e impressão de cozinha são legado técnico fora da experiência Fortes Fios e não podem ser reintroduzidos em UI, relatórios ou novas regras.
 
 ## Problema
 
@@ -18,193 +14,186 @@ Oferecer um catálogo digital de produtos capilares, com navegação por categor
 
 | Perfil | Entrada | Uso principal |
 |---|---|---|
-| Cliente | `/` | Navegar pelos produtos capilares, montar carrinho, aplicar cupom, escolher entrega ou retirada, pagar e consultar pedidos pelo telefone |
-| Administrador/operador | `/admin/*` | Operar pedidos, catálogo, entregas, caixa, finanças, clientes, análise diária, relatórios e configurações da loja |
-| Garçom | `/garcom/*` | Abrir e editar pedidos de mesa/comanda, acompanhar seus pedidos e registrar atividade |
-| Entregador | `/entregador/*` | Ver entregas atribuídas, iniciar rota, concluir/cancelar entrega e abrir navegação/contato |
-| Atendimento WhatsApp | Electron e Evolution API | Criar pedido manualmente pelo chat ou atender automaticamente com contexto, rascunho e fila de envio |
-| Cozinha/expedição | Electron de impressão | Consumir a fila, imprimir pedido completo ou somente itens novos e permitir reimpressão |
+| Cliente | `/` | Navegar pelos produtos capilares, montar carrinho, aplicar cupom, escolher entrega ou retirada e consultar pedidos pelo telefone |
+| Administrador/operador | `/admin/*` | Operar pedidos, catálogo, estoque, entregas, finanças, clientes, análise diária, relatórios e configurações da loja |
+| Superusuário | `/dzn` | Ocultar/exibir globalmente telas dos menus |
+
+Os perfis **garçom** (`/garcom/*`) e **entregador** (`/entregador/*`) têm rotas e PWAs no repositório, mas pertencem ao legado do restaurante e não fazem parte da operação Fortes Fios (ver §Legado).
 
 ## Escopo (o que o produto é)
 
 - Catálogo público responsivo com produtos capilares, categorias reais ordenadas em `categorias_cardapio`, busca, carrinho persistido, status da loja, vitrine configurável com artes independentes por tela, seção de mais vendidos em modo automático ou curadoria manual, ofertas selecionadas pelo administrador e prova social do studio parceiro com logo e resultados configuráveis.
-- Checkout para entrega ou retirada na loja, com cidades atendidas, compra mínima por cidade, taxa de entrega, bairro/endereço livres, cupons, troco e formas de pagamento registradas no pedido. Pagamento online/Mercado Pago não faz parte da operação Fortes Fios.
-- Painel administrativo com dashboard, Kanban de produção, PDV, histórico/listagem de pedidos e edição detalhada.
-- Central de Notificações interna do Admin: alertas de estoque baixo, produto esgotado e pedido aguardando atendimento, com sino no header, painel, modal de entrada e preferência de "não mostrar novamente" persistida por usuário. Não é push do navegador, e-mail nem WhatsApp.
-- Gestão de salão: mesas, comandas, locais externos, ocupação, tempo limite e liberação.
-- Gestão de entregas, entregadores e repasses.
-- Catálogo: produtos, bebidas, combos, adicionais, categorias, ordenação, imagens, disponibilidade, controle de estoque e condições comerciais por produto (desconto e parcelamento meramente informativo configurável entre 2x e 12x).
-- Caixa, movimentações, categorias financeiras, saldos, salários, crediário, relatórios e fechamento anual.
-- Gestão de usuários de sistema (`admin`, `garcom`, `entregador`) e cadastro derivado de clientes.
-- Controle global de visibilidade dos menus do admin e garçom pelo superusuário em `/dzn`.
-- Controle visual de ações por cargo e usuário para garçons e entregadores, administrável em Usuários e no `/dzn`.
-- Modo manutenção por módulo operacional, exclusivo do `/dzn`.
-- Produtividade dos garçons: pontuação por pedido criado, entregue, editado e bem cadastrado, com desconto por cadastro incompleto, ranking, metas e lista de ocorrências.
-- Fila de impressão compartilhada entre web e aplicativo Electron.
-- Canais WhatsApp manual e automatizado, com integração Evolution API.
-- PWA separada por perfil público, admin, garçom e entregador.
+- Checkout para entrega ou retirada na loja, com cidades atendidas, compra mínima por cidade, taxa de entrega, bairro/endereço livres, cupons, troco e formas de pagamento registradas no pedido. **Pagamento online não faz parte da operação** (ver §Legado).
+- Painel administrativo com visão geral, listagem/histórico de pedidos, edição detalhada e criação manual de pedido.
+- Catálogo: produtos, categorias, ordenação, imagens, disponibilidade, **controle de estoque** e condições comerciais por produto (desconto e parcelamento meramente informativo, configurável entre 2x e 12x).
+- **Central de Notificações interna do Admin:** alertas de estoque baixo, produto esgotado e pedido aguardando atendimento, com sino no header, painel, modal de entrada e preferência de "não mostrar novamente" persistida por usuário. Não é push do navegador, e-mail nem WhatsApp.
+- Gestão de entregas e cidades atendidas.
+- Finanças: lançamentos, diárias e lucro bruto de produtos; análise diária e relatórios.
+- Gestão de usuários de sistema e cadastro derivado de clientes.
+- Controle global de visibilidade dos menus pelo superusuário em `/dzn`.
+- PWA separada por perfil (arquivos `manifest*.json` e `sw*.js` em `public/`).
 
 ## Fora de escopo
 
-Não há uma lista formal de exclusões de produto no repositório. Para cada nova tarefa, o solicitante deve definir explicitamente o que não será alterado, sobretudo quando a mudança tocar pedido, caixa, impressão, crediário ou WhatsApp ao mesmo tempo.
+- Mesa, salão, comanda, garçom, cozinha, consumo no local e impressão de cozinha.
+- Pagamento online (Mercado Pago/PIX online).
+- Atendimento por WhatsApp, manual ou automatizado.
+- Produtividade de garçons e fechamento de anos anteriores.
 
-## 🔴 Segurança (crítico — verificado 2026-07-19 via Management API)
+Não existe lista formal de exclusões por tarefa. Para cada nova task, o solicitante deve definir explicitamente o que não será alterado, sobretudo quando a mudança tocar pedido, estoque ou finanças ao mesmo tempo.
 
-O modelo de acesso atual é uma **exposição de dados explorável**, não apenas uma decisão de arquitetura. Registrado aqui como risco de produto, não como característica:
+## 🔴 Legado: código presente, banco ausente
 
-- **Nenhuma das 50 tabelas tem RLS habilitado** (zero policies).
-- Os roles **`anon` e `authenticated` têm grant total** (SELECT/INSERT/UPDATE/DELETE/`TRUNCATE`) nas tabelas sensíveis, incluindo `usuarios_cliente` (667), `pedidos` (7.776), `pagamentos_pedido` (6.772), `crediario_contas` (480), `funcionarios` e **`usuarios_sistema`** (11 registros, com coluna `senha_hash` e `papel`).
-- A **anon key é pública** (`NEXT_PUBLIC_SUPABASE_ANON_KEY`, embutida no bundle por `src/lib/supabase.ts`) e **69 componentes client** consultam tabelas diretamente.
+Esta é a característica mais importante do estado atual e a que mais gera erro de premissa.
 
-**Impacto:** qualquer pessoa com a anon key (extraível do site) pode, via PostgREST, **ler todos os clientes, pedidos, pagamentos e os hashes de senha do sistema**, e **apagar ou `TRUNCATE` qualquer tabela**. O login (`autenticacao.ts`, RPC `verificar_senha_usuario` + `localStorage`) é confiança no cliente: o banco já está aberto antes de qualquer autenticação.
+O banco deste projeto **não é** o banco do Edienai. Ele nasceu em 2026-08-13 de um dump estrutural de outro projeto (`supa-mk/00_public_schema.sql`, "MK Soluções", 27 tabelas), aplicado como a **única** migration do histórico remoto (`20260813210000 mk_public_schema`). O código do frontend, porém, veio do Edienai inteiro.
 
-**Remediação (tarefa própria, com autorização — migração coordenada web/Electron/bot):** habilitar RLS + policies por tabela, revogar os grants amplos do `anon`, mover as consultas sensíveis para route handlers server-side com service role, e rotacionar a service role. Também: remover `.env.local` do rastreio do git (contém `MERCADO_PAGO_ACCESS_TOKEN`, `EVOLUTION_API_KEY`, `VERCEL_OIDC_TOKEN`) e rotacionar essas chaves. Ver `AGENTS.md §3.9/§3.10` e `SKILLS.md §Segurança`.
+Resultado: **muitas telas existem em `src/app/admin/`, mas as tabelas e funções que elas consultam não existem no banco.**
+
+`ROTAS_ADMIN_OCULTAS`, em `src/components/admin/AdminLayout.tsx`, redireciona essas rotas para o dashboard. Isso não é apenas uma preferência de menu: é o que impede a aplicação de quebrar.
+
+| Módulo legado | Rota no repo | Tabelas ausentes | RPCs ausentes |
+|---|---|---|---|
+| Salão / mesas | `/admin/mesas`, `/admin/salao` | `mesas` | `limpar_mesas_expiradas` |
+| PDV | `/admin/pdv` | depende de `mesas` | — |
+| Painel Kanban | `/admin/painel` | `anotacoes_painel` | — |
+| Impressão | `/admin/impressora` | `fila_impressao` | `configurar_fila_impressao` |
+| Garçons | `/admin/garcons` | `atividade_garcom` | — |
+| Produtividade | `/admin/produtividade` | `produtividade_config` | `produtividade_garcons`, `produtividade_serie_diaria`, `produtividade_ocorrencias`, `produtividade_ler_config`, `produtividade_salvar_config` |
+| WhatsApp | `/admin/whatsapp`, `/admin/whatsapp-web` | todas as `whatsapp_*` | — |
+| Anos anteriores | `/admin/anos-anteriores` | `historico_*`, `resumo_anual` | — |
+| Crediário | `/admin/crediario` | *(tabelas existem)* | `quitar_crediario`, `registrar_pagamento_crediario`, `registrar_pagamento_item_crediario`, `cancelar_movimento_crediario`, `apagar_item_movimento_crediario`, `enviar_pedido_crediario` |
+| Caixa | `/admin/caixa` | `caixa_automacao_config`, `pagamentos_entregadores` | — |
+| Combos / adicionais | `/admin/combos`, `/admin/adicionais` | `categorias_adicionais` | — |
+| Permissões `/dzn` | `/api/controle-acesso` | `permissoes_papel`, `permissoes_usuario`, `manutencao_modulos` | `obter_controle_acesso`, `salvar_controle_acesso`, `carregar_painel_controle_acesso` |
+| Pagamento online | `/api/pagamentos/mercado-pago/*` | `pagamentos_online` | — |
+
+Ao todo, o código chama **17 RPCs que não existem** no banco. `pedidos` mantém colunas `pagamento_online*` e `mesa_id`/`mesa`/`comanda`/`garcom_id` herdadas, mas sem as tabelas de apoio.
+
+**Consequências práticas:**
+
+1. Reativar uma dessas telas **não é** tirar a rota de `ROTAS_ADMIN_OCULTAS` — exige migration própria, com autorização.
+2. `supabase/migrations/` **não é espelho do banco**. Vários arquivos ali foram transcritos do projeto antigo e nunca aplicados aqui (o caso mais relevante é `202607280016_realtime.sql`, ver §Realtime). Confirme sempre pelo banco, nunca pelo arquivo.
+3. Ao ler código legado, não assuma que a estrutura que ele consulta existe.
+
+Os subprojetos `edienai-lanches-impressora/`, `edienai-lanches-zap/`, `edienai-evolution-bot/` e a pasta `docs/`, citados em versões anteriores deste PRD, **não existem neste repositório**. As rotas `src/app/api/bot/*` continuam presentes e apontam para um serviço Evolution externo.
+
+## 🔴 Segurança (verificado 2026-08-15 via Management API)
+
+O modelo de acesso é uma **exposição de dados explorável**, não uma decisão de arquitetura. Registrado como risco de produto:
+
+- **Nenhuma das 30 tabelas tem RLS habilitado** (zero policies).
+- Os roles **`anon` e `authenticated` têm grant total** (SELECT/INSERT/UPDATE/DELETE/`TRUNCATE`) em 27 das 30 tabelas, incluindo `usuarios_sistema` (com `senha_hash` e `papel`), `usuarios_cliente`, `pedidos`, `pagamentos_pedido` e `crediario_contas`.
+- A **anon key é pública** (`NEXT_PUBLIC_SUPABASE_ANON_KEY`, embutida no bundle por `src/lib/supabase.ts`) e **63 componentes client** consultam tabelas diretamente.
+- As três exceções são `notificacoes`, `notificacoes_leitura` e `notificacoes_preferencias`, criadas em 2026-08-15 já **fechadas** para `anon`/`authenticated`. São o padrão a seguir daqui em diante, não a exceção a normalizar.
+
+**Impacto:** qualquer pessoa com a anon key (extraível do site) pode, via PostgREST, ler todos os clientes, pedidos, pagamentos e os hashes de senha do sistema, e apagar ou `TRUNCATE` qualquer tabela. O login (`autenticacao.ts`, RPC `verificar_senha_usuario` + `localStorage`) é confiança no cliente: o banco já está aberto antes de qualquer autenticação.
+
+**Atenuante real:** a loja ainda não operou (0 pedidos, 0 pagamentos, 1 cliente, 1 usuário de sistema). A remediação é muito mais barata agora do que depois.
+
+**Remediação (tarefa própria, com autorização):** habilitar RLS + policies por tabela, revogar os grants amplos do `anon`, mover as consultas sensíveis para route handlers server-side com service role e rotacionar a service role. Ver `AGENTS.md §3.9` e `SKILLS.md §Segurança`.
+
+> **Correção sobre `.env.local`:** neste repositório o arquivo **não está rastreado no git** e contém apenas quatro variáveis do Supabase (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`). Não há `MERCADO_PAGO_ACCESS_TOKEN`, `EVOLUTION_API_KEY` nem `VERCEL_OIDC_TOKEN`. O alerta do `AGENTS.md §3.10` descreve o repositório antigo e não se aplica aqui. `SUPABASE_SERVICE_ROLE_KEY` **está** configurada, ao contrário do que o PRD anterior afirmava.
 
 ## Arquitetura do repositório
 
 | Parte | Caminho | Responsabilidade | Stack |
 |---|---|---|---|
-| Aplicação principal | `src/` | Site, PWAs por perfil, admin, APIs de pagamento/upload e integração direta com Supabase | Next.js 16, React 18, TypeScript, Tailwind CSS, Supabase JS |
-| Impressora desktop | `edienai-lanches-impressora/` | Impressão automática/local e reimpressão a partir de `fila_impressao` | Electron 31, React, TypeScript, Vite, Supabase JS |
-| WhatsApp desktop | `edienai-lanches-zap/` | WhatsApp Web embutido e criação manual de pedido no chat aberto | Electron 31, React, TypeScript, Vite, Supabase JS |
-| Serviço WhatsApp | `edienai-evolution-bot/` | Webhooks, conversa da Carol, memória, rascunho, outbox e notificação de pedidos | Node.js, Express, Evolution API, Supabase JS |
-| Scripts operacionais | `scripts/` | Inventário, migração e manutenção de bancos via Management API | Node.js ESM |
-| Documentação específica | `docs/` | Cupons e backlog visual de produtos | Markdown |
+| Aplicação | `src/` | Site público, PWAs por perfil, admin, route handlers e integração com Supabase | Next.js 16 (App Router), React 18, TypeScript `strict`, Tailwind v3, shadcn/Radix, Supabase JS |
+| Migrations | `supabase/migrations/` | SQL versionado. **Não é espelho do banco** — ver §Legado | SQL |
+| Dump de origem | `supa-mk/` | Dump estrutural que originou o schema atual | SQL |
+| Especificações | `specs/` | Spec por funcionalidade, escrita antes do código (`AGENTS.md §0.5`) | Markdown |
+| Testes | `tests/` | `node:test` sobre módulos `.mjs` + testes SQL transacionais | JS ESM / SQL |
+| Scripts operacionais | `scripts/` | Inventário e manutenção via Management API | Node.js ESM |
 
-## Rotas e módulos da aplicação principal
+## Rotas e módulos
 
 ### Público
 
-- `/`: cardápio e checkout.
+- `/`: catálogo e checkout.
 - `/contato`: informações de contato.
-- `/preview-mobile-frame`: renderização do cardápio dentro do preview administrativo.
+- `/preview-mobile-frame`: renderização do catálogo dentro do preview administrativo.
 
 ### Administração
 
-O menu de `src/components/admin/AdminLayout.tsx` organiza o produto em quatro grupos:
+O menu de `src/lib/admin-sidebar-routes.ts` organiza o produto em quatro grupos:
 
-- **Operações:** dashboard, painel Kanban, PDV, pedidos e novo pedido.
-- **Operação:** mesas, salão, caixa, formas de pagamento, crediário, entregas, funcionários, garçons, usuários e bairros.
-- **Catálogo e canais:** produtos, combos, adicionais, cupons, WhatsApp e impressora.
-- **Análise:** finanças, produtividade, análise diária, relatórios e anos anteriores.
+- **Pedidos:** visão geral (`/admin/dashboard`), pedidos, novo pedido.
+- **Loja:** pagamentos, entregas, equipe, clientes e acessos, cidades de entrega.
+- **Catálogo:** produtos e categorias, estoque, vitrine, cupons.
+- **Gestão:** finanças, análise diária, relatórios.
 
-Há ainda páginas de detalhes/edição de pedido, relatórios e saldos de caixa, pedidos por garçom e uma página técnica `/admin/dev`.
+Há ainda detalhes/edição de pedido (`/admin/pedidos/[id]`, `/admin/pedidos/[id]/editar`), o login (`/admin/login`) e uma página técnica `/admin/dev`. Todas as demais rotas sob `src/app/admin/` estão em `ROTAS_ADMIN_OCULTAS` (§Legado).
 
 ### Superusuário
 
-- `/dzn`: login exclusivo do usuário de sistema `dzn`; ativa ou oculta globalmente telas dos menus do admin e garçom.
-- A configuração reutiliza `admin_sidebar_config`; itens ocultos globalmente não aparecem na sidebar, em Mais, na busca, nos atalhos nem no personalizador do admin.
-- A seção Acessos gerencia permissões visuais por cargo e usuário, além do modo manutenção.
-- As permissões não são uma barreira de segurança: não substituem RLS, sessão server-side ou autorização das mutações.
+- `/dzn`: login exclusivo do usuário de sistema `dzn`; ativa ou oculta globalmente telas dos menus.
+- A configuração reutiliza `admin_sidebar_config`; itens ocultos não aparecem na sidebar, em Mais, na busca, nos atalhos nem no personalizador.
+- A aba de permissões por cargo/usuário **não funciona** neste banco (§Legado).
+- Visibilidade não é barreira de segurança: não substitui RLS, sessão server-side ou autorização de mutação.
 
-### Permissões operacionais visuais
+### Route handlers
 
-- O admin Edienai configura garçons e entregadores em `/admin/usuarios`, aba Permissões.
-- Cada usuário herda o cargo e pode receber override individual para permitir ou bloquear uma ação.
-- Garçom: ver, criar, editar e excluir itens de pedidos; ver, criar e editar operações de mesas.
-- Entregador: ver entregas e editar o status operacional.
-- Configurações ficam em `permissoes_papel`, `permissoes_usuario` e `manutencao_modulos`; tabelas não aceitam `anon`, e as RPCs específicas validam credenciais administrativas antes de gravar.
-
-### Garçom
-
-- `/garcom`: pedidos criados pelo garçom.
-- `/garcom/mesas`: visão de mesas e salão.
-- `/garcom/novo`: novo pedido.
-- `/garcom/editar/[id]`: edição do pedido.
-
-### Entregador
-
-- `/entregador`: painel de entregas atribuídas.
-- `/entregador/login`: seleção/autenticação do perfil.
+25 handlers em `src/app/api/`. Ativos e com suporte no banco: `admin/notificacoes`, `admin/sidebar-config`, `dzn/visibilidade`, `upload`, `vitrine/*` (categorias, faixa-rodape, mais-vendidos, ofertas, resultados-studio). Presentes sem suporte no banco: `admin/produtividade/*`, `controle-acesso`, `crediario/cobranca`, `pagamentos/mercado-pago/*`, `bot/*`.
 
 ## Fluxos centrais
 
-### 1. Cardápio e checkout do cliente
+### 1. Catálogo e checkout do cliente
 
-1. `src/app/page.tsx` carrega produtos e configurações de ordenação/merchandising; as categorias públicas ativas vêm do route handler `/api/vitrine/categorias`, que expõe somente `id`, `nome` e `ordem` de `categorias_cardapio`. “Todos” é filtro universal da interface, nunca categoria atribuível a produto.
-2. A seção Mais vendidos usa a ordem manual salva pelo administrador ou um ranking server-side por quantidade vendida; entram somente itens com `produto_id` em pedidos válidos de entrega/retirada, sem cancelados ou aguardando pagamento.
-3. Ofertas usa a curadoria manual `vitrine_produtos_ofertas`, aparece imediatamente depois de Mais vendidos somente quando está ativa e possui produtos disponíveis; o mesmo estado controla sua entrada no menu móvel.
-4. Desconto pertence ao produto: `preco_original` guarda o valor de referência, `desconto` o percentual e `preco` o valor final efetivamente usado no carrinho. A Vitrine oferece um atalho para atualizar esses mesmos campos, sem criar uma segunda fonte de preço.
-5. `produtos.parcelamento_ativo` controla a visibilidade do parcelamento e `parcelas_sem_juros` define a quantidade entre 2 e 12; o valor é derivado de `preco / parcelas_sem_juros` e nunca é enviado ao checkout, pedido ou integração de pagamento. Registros legados sem quantidade usam 3x.
-6. Depois da grade do catálogo, a seção de resultados do studio lê a configuração JSON `vitrine_resultados_studio`, exibe somente fotos publicadas e permanece ausente até o administrador ativar ao menos um resultado.
-7. As alterações do catálogo são acompanhadas por canais Realtime.
-8. `CarrinhoContext` mantém o carrinho no `localStorage`.
-9. Produtos possuem quantidade física, limite de estoque baixo e regra opcional de bloqueio no zero. O estado é sempre derivado; o carrinho reconcilia alterações e o banco reserva atomicamente ao criar `itens_pedido`, restaurando ao remover ou cancelar.
-9.1. Cruzar o limite de estoque, esgotar ou criar um pedido pendente abre uma notificação no Admin, gerada por trigger no banco — nunca pela leitura de uma tela. Uma condição contínua mantém **um** alerta ativo (índice único parcial sobre `chave_dedupe where estado = 'ativa'`); resolver e reincidir gera ocorrência nova. Pedido nasce `normal` e escala para `urgente` após 12 h parado, na mesma linha.
-10. `ModalCarrinho` revalida cupom, estoque e itens e calcula frete/taxa de pagamento. Em entrega, o cliente seleciona uma cidade ativa, informa bairro e endereço em campos livres e pode acrescentar uma referência; a compra mínima é validada sobre o subtotal de produtos após descontos de item, antes de frete e cupom. Cada cidade possui dias semanais e compra mínima configuráveis: Porto opera diariamente, enquanto Nossa Senhora dos Remédios e Campo Largo iniciam, respectivamente, com segunda e terça-feira. Checkout e confirmação informam a próxima data habilitada, que é persistida no pedido e na entrega. Os prazos em minutos de retirada e entrega são configurações independentes da loja e aparecem na escolha do cliente.
-11. Para pagamento comum, cria `pedidos`, grava `itens_pedido` e `item_adicionais`, registra cupom e cria a entrega quando necessário.
-12. Se uma etapa crítica falhar, o frontend remove uso do cupom e exclui o pedido criado, restaurando a reserva de estoque pela própria transação de itens.
+1. `src/app/page.tsx` carrega produtos e configurações de ordenação/merchandising; as categorias públicas ativas vêm de `/api/vitrine/categorias`, que expõe somente `id`, `nome` e `ordem` de `categorias_cardapio`. "Todos" é filtro universal da interface, com rótulo configurável, nunca categoria atribuível a produto.
+2. Mais vendidos usa a ordem manual salva pelo administrador ou um ranking server-side por quantidade vendida; entram somente itens com `produto_id` em pedidos válidos de entrega/retirada, sem cancelados.
+3. Ofertas usa a curadoria manual `vitrine_produtos_ofertas`, aparece logo depois de Mais vendidos somente quando está ativa e tem produtos disponíveis.
+4. Desconto pertence ao produto: `preco_original` guarda a referência, `desconto` o percentual e `preco` o valor final usado no carrinho. A Vitrine é atalho para os mesmos campos, sem criar segunda fonte de preço.
+5. `produtos.parcelamento_ativo` controla a visibilidade do parcelamento e `parcelas_sem_juros` define a quantidade entre 2 e 12; o valor é derivado de `preco / parcelas_sem_juros` e **nunca** é enviado ao checkout ou ao pedido. Registros legados sem quantidade usam 3x.
+6. A seção de resultados do studio lê `vitrine_resultados_studio`, exibe somente fotos publicadas e some enquanto nenhum resultado estiver ativo.
+7. `CarrinhoContext` mantém o carrinho no `localStorage`.
+8. Produtos possuem quantidade física, limite de estoque baixo e regra opcional de bloqueio no zero. O estado é sempre derivado; o carrinho reconcilia alterações e o banco reserva atomicamente ao criar `itens_pedido`, restaurando ao remover ou cancelar.
+9. `ModalCarrinho` revalida cupom, estoque e itens e calcula frete. Em entrega, o cliente seleciona uma cidade ativa, informa bairro e endereço em campos livres e pode acrescentar referência; a compra mínima é validada sobre o subtotal de produtos após descontos de item, antes de frete e cupom. Cada cidade tem dias semanais e compra mínima configuráveis. Checkout e confirmação informam a próxima data habilitada, persistida no pedido e na entrega. Os prazos de retirada e entrega são configurações independentes da loja.
+10. Cria `pedidos`, grava `itens_pedido` e `item_adicionais`, registra cupom e cria a entrega quando necessário.
+11. Se uma etapa crítica falhar, o frontend remove o uso do cupom e exclui o pedido criado, restaurando a reserva de estoque pela própria transação de itens.
 
-### 2. Pedido interno (PDV, admin e garçom)
+### 2. Pedido interno (admin)
 
-1. O operador escolhe catálogo, cliente/local, pagamento e responsável.
-2. O pedido nasce em `preparando` para permitir gravar itens sem impressão prematura.
-3. Itens, adicionais, pagamento, entrega e mesa são persistidos.
-4. A mudança final para `confirmado` permite que os triggers de impressão processem um pedido completo.
-5. Pedidos de garçom registram ações em `atividade_garcom` e vinculam `garcom_id`/`adicionado_por_garcom_id`.
+1. O operador escolhe catálogo, cliente, pagamento e tipo de entrega em `/admin/pedidos/novo`.
+2. Itens, adicionais, pagamento e entrega são persistidos com `produto_id` preservado — sem esse vínculo, a regra de estoque do banco seria contornada.
 
-### 3. Produção e ciclo do pedido
+### 3. Ciclo do pedido
 
-- Estados observados em `pedidos`: `pendente`, `confirmado`, `preparando`, `pronto`, `entregue` e `cancelado`.
-- O dia operacional de pedidos usa `America/Sao_Paulo` com corte às **03:00**: começa às 03:00 do dia de referência e termina imediatamente antes das 03:00 do dia seguinte.
-- O Kanban em `/admin/painel` move pedidos entre colunas e persiste `status`/`status_atualizado_em`.
-- Concluir um pedido local libera a mesa; concluir entrega sincroniza também `entregas`.
-- Pagamentos parciais ficam em `pagamentos_pedido`; crediário é sincronizado por funções/triggers dedicados.
+- Estados usados pelo Admin: `aguardando_pagamento`, `pendente`, `confirmado`, `preparando`, `pronto`, `saiu_para_entrega`, `entregue` e `cancelado` (`STATUS_PEDIDO_ADMIN`).
+- O dia operacional usa `America/Sao_Paulo` com corte às **03:00**.
+- Concluir uma entrega sincroniza também `entregas`.
+- Pagamentos parciais ficam em `pagamentos_pedido`.
 
-### 4. Salão
+### 4. Estoque
 
-- `mesas` representa mesa, comanda ou local externo por meio do campo `tipo`.
-- Mesa real alterna entre `livre` e `ocupada`, guarda pedido/cliente e possui janela de liberação.
-- Local externo/parceiro pode receber pedido local sem bloquear uma mesa física.
-- Admin e garçom compartilham `PainelSalaoAtual` e regras de dia operacional.
+- `produtos` guarda `estoque_quantidade`, `estoque_minimo` e `bloquear_venda_sem_estoque`. O estado (`em_estoque` / `baixo` / `esgotado`) é **derivado**, nunca persistido — regra única em `src/lib/estoque-produto.mjs`, repetida no banco como autoridade.
+- A reserva acontece na inserção de `itens_pedido` (trigger `trg_sincronizar_estoque_item_pedido`) e é restaurada ao remover o item ou cancelar o pedido (`trg_reconciliar_estoque_status_pedido`).
+- Ajustes do Admin usam as RPCs atômicas `ajustar_estoque_produto` e `definir_estoque_produto`.
+- Somente `produtos` tem estoque. `bebidas`, `combos` e `adicionais` não têm colunas de estoque.
+- Spec: `specs/controle-estoque.md`.
 
-### 5. Entregas
+### 5. Notificações do Admin
+
+- Cruzar o limite de estoque, esgotar ou criar um pedido pendente abre uma notificação, gerada por **trigger no banco** — nunca pela leitura de uma tela. Abrir a página não cria nada.
+- Uma condição contínua mantém **um** alerta ativo, garantido por índice único parcial (`chave_dedupe where estado = 'ativa'`). Resolver e reincidir gera **ocorrência nova**.
+- Prioridade: estoque baixo e esgotado nascem `urgente`; pedido aguardando nasce `normal` e escala para `urgente` após 12 h parado, na mesma linha.
+- Estado por usuário (`nova → visualizada → lida`, mais `silenciada`) e preferência do modal ficam no banco, então sobrevivem a refresh, logout/login e troca de dispositivo.
+- Sem Realtime: uma busca ao montar, invalidação após mutação na própria aba e revalidação por foco com throttle. Sem polling por intervalo.
+- Spec: `specs/central-notificacoes-admin.md`.
+
+### 6. Entregas
 
 - Pedido do tipo entrega gera ou atualiza `entregas`.
 - Estados observados: `pendente`, `em_rota`, `entregue` e `cancelada`.
-- Atribuição liga a entrega a um `funcionarios` do tipo entregador.
-- A conclusão atualiza entrega e pedido; repasses são consolidados em `pagamentos_entregadores`.
+- Taxa, compra mínima e agenda derivam da cidade ativa cadastrada em `bairros`; bairro do endereço nunca é opção tarifada.
 
-### 6. Impressão
+### 7. Finanças
 
-1. Web ou trigger cria evento em `fila_impressao` com tipo, escopo, snapshots, origem e hash de deduplicação.
-2. Escopos: `pedido_completo` e `itens_novos`.
-3. A impressora Electron escuta `fila_impressao` e `pedidos` por Realtime, com polling de segurança.
-4. A fila percorre `pendente` → `processando` → `impresso`; falhas terminam em `erro` com tentativas e mensagem.
-5. Snapshots preservam o conteúdo a imprimir mesmo se o pedido for editado depois.
-6. Eventos são classificados como automáticos ou manuais. A janela configurável afeta apenas os automáticos; ações explícitas de imprimir/reimprimir continuam disponíveis.
-7. As chaves `fila_impressao_automatica_ativa`, `fila_impressao_horario_inicio` e `fila_impressao_horario_fim` controlam a janela diária em `America/Fortaleza`; início igual ao fim significa 24 horas.
-8. `impressao_itens_editados_ativa` controla separadamente o envio automático de `itens_novos` criado por `ModalEditarPedido`.
-9. Ao pausar ou restringir a janela, pendências automáticas incompatíveis passam a `cancelado`; novas solicitações automáticas fora da regra não são inseridas. Isso impede impressão tardia em lote quando o Electron é ligado.
-
-### 6.1 Produtividade dos garçons
-
-- Pontuação **derivada sob demanda** de `pedidos`, `itens_pedido` e `atividade_garcom` por funções SQL (`produtividade_garcons`, `produtividade_serie_diaria`, `produtividade_ocorrencias`); não há tabela de eventos nem trigger novo, e o cálculo é retroativo.
-- Ganhos: pedido criado (qualquer status, menos cancelado), pedido `entregue`, item adicionado, pedido editado (uma vez por dia operacional) e bônus de cadastro completo.
-- Descontos: nome de cliente genérico (`cliente`, `mesa 7`, vazio, só dígitos, até 2 letras) e retirada/entrega sem telefone utilizável ou entrega sem endereço. Pedido cancelado é neutro por padrão.
-- Pesos e metas ficam em `produtividade_config`; alterar um peso recalcula todo o histórico.
-- A tabela não é acessível pelo `anon`: as funções são `security definer` e a escrita passa por `produtividade_salvar_config`, que valida chave e intervalo. Isso existe porque `SUPABASE_SERVICE_ROLE_KEY` não está configurada e o cliente "admin" do servidor cai na anon key.
-
-### 7. Caixa, finanças e crediário
-
-- **Caixa operacional (gaveta):** sessão em `caixas` (abrir/fechar); saldo físico e diferença do fechamento são sobre **Dinheiro**; PIX/cartão no resumo informativo; sangria/suprimento via categorias dedicadas; `fechamento_formas` (jsonb) guarda o snapshot da conferência.
-- `movimentacoes_caixa` registra entrada/saída ligada a categoria, funcionário, pedido e opcionalmente `caixa_id` da sessão.
-- `useCaixa.ts` + `caixa-gaveta.ts` concentram regras de gaveta, sync de pedidos e automação.
-- **Finanças** (gerencial) reusa `movimentacoes_caixa` e pedidos/crediário; UI independente — despesas sem `caixa_id` não entram no saldo da gaveta.
-- `crediario_contas` mantém saldo por cliente; `crediario_movimentos` guarda consumo, pagamento, cancelamento e snapshot de itens.
-- Contas abertas podem receber, por ação explícita do operador, um lembrete individual via WhatsApp. Quando falta telefone, o admin solicita, valida e salva o contato antes da confirmação. A mensagem é montada no servidor com o ciclo ainda em aberto, datas, snapshots dos itens e `saldo_atual`; o envio passa pelo bot/Evolution para preservar registro e proteção de eco. Não existe disparo em massa ou automático.
-- A transição futura de um pedido crediário para `entregue` quita atomicamente apenas o consumo daquele pedido, registra o pagamento vinculado e troca `forma_pagamento` para `Concluído`; pagamentos integrais da conta ou do último item fazem a mesma conversão. Pedidos históricos já entregues antes desse contrato não são baixados automaticamente.
-- Pagamento manual livre nunca pode exceder `saldo_atual`; saldos negativos históricos permanecem uma reconciliação separada.
-- Views `vw_crediario_contas_resumo` e `vw_usuarios_cliente_metricas` suportam telas de consulta.
-- Dados de anos encerrados são movidos para tabelas `historico_*` e `resumo_anual`.
-
-### 8. WhatsApp
-
-- O Electron `edienai-lanches-zap` oferece atendimento manual: detecta o contato aberto, monta um pedido e envia o resumo no chat.
-- O serviço `edienai-evolution-bot` recebe webhooks da Evolution API e trabalha com fila por conversa, contexto da loja, catálogo, memória do cliente, rascunho de pedido e outbox resiliente.
-- Tabelas `whatsapp_*` guardam conversas, mensagens, memória, rascunhos, notificações, outbox, aliases e falhas de resolução de produto.
-- O bot usa Supabase JS normalmente e tem fallback de consulta pela Management API; configurações e catálogo usam Realtime com polling de cinco minutos como segurança.
-- `/admin/whatsapp` separa conexão, pausa total da Carol e pausa somente dos modelos conversacionais. A pausa de IA preserva o fluxo determinístico; o painel mostra períodos explícitos para métricas persistidas e identifica telemetria de provedor como acumulada desde o último boot. DeepSeek e OpenAI possuem detalhes expansíveis com chamadas, tokens por classe, cache, falhas, latência e custo estimado em USD pelas tarifas cadastradas do modelo, sem consulta adicional aos provedores.
+- `movimentacoes_caixa` registra entrada/saída ligada a categoria, funcionário e pedido.
+- Finanças concentra Lançamentos, Diárias (`financas_diarias`) e Lucro bruto de produtos.
+- O custo de compra é opcional; quando informado, é copiado para o item no momento da venda (`trg_preencher_custo_unitario_item_pedido`). Mudar o custo no catálogo não altera o lucro de pedidos já realizados.
+- Lucro bruto = venda líquida dos itens menos custo de compra. Itens antigos ou sem custo não entram e deixam o período explicitamente parcial.
+- As tabelas de crediário (`crediario_contas`, `crediario_movimentos`) existem, mas as RPCs que as operam não (§Legado).
 
 ## Supabase/PostgreSQL
 
@@ -212,115 +201,125 @@ Há ainda páginas de detalhes/edição de pedido, relatórios e saldos de caixa
 
 | Campo | Valor |
 |---|---|
-| Nome | `edienai` |
-| Project ref | `bawysvqqeqwxasmggfcn` |
+| Nome | `fortes-fios` |
+| Project ref | `tjljhspczbaxtpbxlyjd` |
 | Região | `sa-east-1` |
-| Estado em 2026-07-12 | `ACTIVE_HEALTHY` |
-| PostgreSQL | `17.6.1.110` |
+| Criado em | 2026-08-13 |
+| Estado em 2026-08-15 | `ACTIVE_HEALTHY` |
+| PostgreSQL | `17.6.1.155` |
 
-O `.env.local` da aplicação principal aponta para esse projeto. Alguns scripts antigos ainda usam refs históricas; nunca assumir que a ref default de um script é o banco atual.
+O `.env.local` aponta para esse projeto. Scripts antigos ainda carregam refs históricas (o Edienai era `bawysvqqeqwxasmggfcn`); nunca assumir que a ref default de um script é o banco atual.
 
-### Inventário estrutural
+### Inventário estrutural (2026-08-15)
 
-- 52 relações públicas: 50 tabelas e 2 views.
-- 647 colunas, 160 constraints, 199 índices, 82 funções públicas e 36 triggers.
-- A Management API lista apenas duas migrations no histórico remoto, embora o schema seja muito maior. O histórico de migrations, sozinho, não reconstrói o banco atual.
+- 31 relações públicas: **30 tabelas e 1 view**.
+- 365 colunas, 98 índices, 20 funções públicas e 5 triggers.
+- O histórico remoto tem **uma** migration (`20260813210000 mk_public_schema`). O diretório `supabase/migrations/` local tem 20 arquivos, e a maior parte nunca foi aplicada aqui.
 
 ### Domínios de dados
 
 | Domínio | Tabelas/views |
 |---|---|
-| Catálogo | `produtos`, `bebidas`, `combos`, `combo_itens`, `adicionais`, `categorias_adicionais`, `produto_adicionais`, `categorias_cardapio` |
-| Pedido e pagamento | `pedidos`, `itens_pedido`, `item_adicionais`, `formas_pagamento`, `pagamentos_pedido`, `pagamentos_online`, `cupons`, `cupons_usos` |
-| Operação e identidade | `configuracoes_loja`, `bairros`, `mesas`, `entregas`, `fila_impressao`, `atividade_garcom`, `funcionarios`, `usuarios_sistema`, `usuarios_cliente`, `notification_preferences`, `anotacoes_painel` |
-| Financeiro | `caixas`, `caixa_automacao_config`, `categorias_caixa`, `movimentacoes_caixa`, `pagamentos_entregadores`, `crediario_contas`, `crediario_movimentos` |
-| Produtividade | `produtividade_config` (pesos/metas; fechada para `anon`) + funções `produtividade_*` |
-| Histórico | `historico_caixas`, `historico_entregas`, `historico_item_adicionais`, `historico_itens_pedido`, `historico_movimentacoes_caixa`, `historico_pedidos`, `resumo_anual` |
-| WhatsApp | `whatsapp_conversations`, `whatsapp_customer_memory`, `whatsapp_messages`, `whatsapp_order_drafts`, `whatsapp_order_notifications`, `whatsapp_outbox`, `whatsapp_product_aliases`, `whatsapp_product_lookup_misses`, `whatsapp_session` |
-| Notificações do Admin | `notificacoes` (condição ativa/resolvida + `chave_dedupe`), `notificacoes_leitura` (visualizada/lida/silenciada por usuário), `notificacoes_preferencias` (modal de entrada por usuário). Fechadas para `anon`/`authenticated`: o acesso é por route handler com `service_role`, e os triggers funcionam porque as funções são `SECURITY DEFINER` |
-| Views | `vw_crediario_contas_resumo`, `vw_usuarios_cliente_metricas` |
+| Catálogo | `produtos`, `bebidas`, `combos`, `combo_itens`, `adicionais`, `produto_adicionais`, `categorias_cardapio` |
+| Pedido e pagamento | `pedidos`, `itens_pedido`, `item_adicionais`, `formas_pagamento`, `pagamentos_pedido`, `cupons`, `cupons_usos` |
+| Operação e identidade | `configuracoes_loja`, `bairros`, `entregas`, `funcionarios`, `usuarios_sistema`, `usuarios_cliente`, `admin_sidebar_config` |
+| Financeiro | `caixas`, `categorias_caixa`, `movimentacoes_caixa`, `financas_diarias`, `crediario_contas`, `crediario_movimentos` |
+| Notificações do Admin | `notificacoes`, `notificacoes_leitura`, `notificacoes_preferencias` — as únicas fechadas para `anon`/`authenticated`; o acesso é por route handler com `service_role` e os triggers funcionam por serem `SECURITY DEFINER` |
+| Views | `vw_usuarios_cliente_metricas` |
 
-### Acoplamentos por trigger
+Volume atual: 5 produtos, 7 categorias, 3 cidades, 1 cliente, 1 funcionário, 1 usuário de sistema e **0 pedidos** — a loja ainda não operou.
 
-`pedidos` é o principal agregado do sistema. Seus triggers cuidam de:
+### Triggers
 
-- número do pedido;
-- timestamps e limpeza após exclusão;
-- vínculo/cadastro de cliente;
-- sincronização com caixa e crediário;
-- criação/manutenção da fila de impressão e comportamento específico do Electron.
+Cinco triggers, todos ligados a estoque e notificação:
 
-Outros triggers importantes atualizam snapshots de itens/fila, saldo do crediário, total de usos do cupom e `updated_at` de entidades.
+| Tabela | Trigger | Evento | Papel |
+|---|---|---|---|
+| `itens_pedido` | `trg_preencher_custo_unitario_item_pedido` | INSERT | copia o custo do catálogo para o item |
+| `itens_pedido` | `trg_sincronizar_estoque_item_pedido` | INSERT/UPDATE/DELETE | reserva e restaura estoque atomicamente |
+| `pedidos` | `trg_reconciliar_estoque_status_pedido` | UPDATE | restaura/refaz reserva ao cancelar ou reabrir |
+| `pedidos` | `trg_notificacoes_pedido` | INSERT/UPDATE/DELETE | abre/resolve notificação de pedido aguardando |
+| `produtos` | `trg_notificacoes_produto` | INSERT/UPDATE/DELETE | abre/resolve notificação de estoque |
+
+Os triggers que o PRD anterior descrevia em `pedidos` (número do pedido, cliente, caixa, crediário, fila de impressão) **não existem** neste banco.
 
 ### Realtime
 
-- Catálogo, pedidos, mesas, caixa, entregas e fila de impressão continuam publicados em `supabase_realtime`.
-- Tabelas de WhatsApp, histórico e resumo anual foram retiradas da publication em 2026-06-22 para reduzir egress/WAL.
-- Os clientes que precisam dessas tabelas usam consulta/polling, não eventos Realtime.
+🔴 **A publication `supabase_realtime` está vazia** — zero tabelas publicadas (`pg_publication_rel` só contém `realtime.messages_*`). A migration `202607280016_realtime.sql`, que publicaria 34 tabelas, veio do projeto antigo e **nunca foi aplicada aqui**.
+
+Consequência verificada: **32 arquivos assinam `postgres_changes` e nenhum recebe evento**. Isso inclui o catálogo público (`src/app/page.tsx`), o Hero da vitrine, o carrinho, `/admin/estoque`, `/admin/produtos`, `/admin/pedidos`, o dashboard e o status de loja aberta/fechada (`src/lib/useStatusLoja.ts`). Telas que parecem "reagir em tempo real" dependem, na prática, de refetch — e o status da loja só muda para o cliente quando a página recarrega.
+
+A Central de Notificações foi desenhada sem Realtime de propósito, para não consumir egress do plano free. Publicar tabelas é decisão consciente com custo de egress, e é tarefa própria.
 
 ## Integrações externas
 
-| Integração | Uso | Código principal |
+| Integração | Situação | Código principal |
 |---|---|---|
-| Supabase | Banco, RPC e Realtime | `src/lib/supabase.ts`, `src/lib/server/supabase-admin.ts` |
-| Mercado Pago | PIX, webhook e conciliação | `src/app/api/pagamentos/mercado-pago/`, `src/lib/server/mercado-pago.ts`, `src/lib/server/pagamento-online.ts` |
-| Backblaze B2 | Imagens de catálogo/avatar | `src/app/api/upload/route.ts`, `src/lib/servicoUploadImagem.ts`, `src/lib/backblaze.ts` |
-| Evolution API | WhatsApp automatizado | `edienai-evolution-bot/`, `src/app/api/bot/` |
-| Impressoras locais | Ticket cozinha/cliente | `src/lib/impressora/`, `edienai-lanches-impressora/` |
+| Supabase | **Ativa** — banco, RPC | `src/lib/supabase.ts` (anon, browser), `src/lib/server/supabase-admin.ts` (service role) |
+| Backblaze B2 | **Ativa** — imagens de catálogo/vitrine/avatar, via API compatível com S3 e rota same-origin com retentativas | `src/app/api/upload/route.ts`, `src/lib/backblaze.ts`, `src/lib/servicoUploadImagem.ts` |
+| Mercado Pago | **Legado** — código presente, sem `pagamentos_online` no banco; fora do escopo comercial | `src/app/api/pagamentos/mercado-pago/`, `src/lib/server/mercado-pago.ts` |
+| Evolution API | **Legado** — rotas de controle presentes, sem serviço nem chave configurada | `src/app/api/bot/` |
+| Impressoras locais | **Legado** — sem `fila_impressao` no banco | `src/lib/impressora/` |
 
 ## Stack e decisões arquiteturais
 
-| Decisão | Escolha atual | Consequência | Data confirmada |
+| Decisão | Escolha atual | Consequência | Data |
 |---|---|---|---|
-| Renderização web | Next.js App Router, com telas operacionais majoritariamente client components | Estado e acesso ao Supabase ficam próximos da UI | 2026-07-12 |
-| Persistência | Supabase/PostgreSQL acessado diretamente por vários clientes | Banco e triggers funcionam como núcleo de integração | 2026-07-12 |
-| Atualização operacional | Realtime com polling de fallback em serviços críticos | Baixa latência sem depender apenas do canal WebSocket | 2026-07-12 |
-| Impressão | Outbox persistente em `fila_impressao` com snapshots/deduplicação | Web não precisa acessar a impressora diretamente | 2026-07-12 |
-| Temas | Variáveis CSS semânticas + Tailwind; `next-themes` | Claro/escuro compartilham os mesmos componentes | 2026-07-12 |
-| UI compartilhada | Primitivos shadcn/Radix em `src/components/ui` e Kibo UI em `src/components/kibo-ui` | Novas telas devem reutilizar essas bases | 2026-07-12 |
-| Arquivos | Backblaze B2 via API compatível com S3 | URLs públicas ficam salvas nas entidades | 2026-07-12 |
+| Renderização web | Next.js 16 App Router, telas operacionais majoritariamente client components | Estado e acesso ao Supabase ficam próximos da UI | 2026-08-15 |
+| Persistência | Supabase/PostgreSQL acessado diretamente pelo cliente | Banco e triggers funcionam como núcleo de integridade | 2026-08-15 |
+| Integridade comercial | Regra crítica (estoque, notificação) mora em trigger/função no banco, não na UI | Nenhum caminho de frontend contorna a regra | 2026-08-15 |
+| Atualização operacional | Refetch dirigido por mutação e foco; **sem Realtime** | Egress previsível no plano free | 2026-08-15 |
+| Estado no cliente | React Context (`AdminAuthContext`, `CarrinhoContext`, `NotificacoesContext`, …) | Sem Redux/Zustand/TanStack Query, por decisão | 2026-08-15 |
+| Forms | `useState` manual, sem zod nem react-hook-form | Validação manual e por tipo | 2026-08-15 |
+| Testes | `node:test` sobre módulos `.mjs` + SQL transacional com rollback | Sem framework de teste; sem browser test (`AGENTS.md §3.4`) | 2026-08-15 |
+| Temas | Variáveis CSS semânticas + Tailwind v3; `next-themes` | Claro/escuro compartilham os mesmos componentes | 2026-08-15 |
+| UI compartilhada | shadcn/Radix em `src/components/ui` e Kibo UI em `src/components/kibo-ui` | Novas telas devem reutilizar essas bases | 2026-08-15 |
+| Arquivos | Backblaze B2 via API compatível com S3 | URLs públicas ficam salvas nas entidades | 2026-08-15 |
 
 ## Hotspots e dependências sensíveis
 
-Arquivos grandes e com alto acoplamento funcional exigem leitura dirigida antes de qualquer edição:
+Arquivos grandes e com alto acoplamento exigem leitura dirigida antes de qualquer edição:
 
-- `src/app/admin/pdv/page.tsx` — cerca de 2,9 mil linhas.
-- `src/components/ModalCarrinho.tsx` — cerca de 2,7 mil linhas.
-- `src/app/admin/pedidos/novo/page.tsx` — cerca de 2,5 mil linhas.
-- `src/components/admin/ModalDetalhesPedido.tsx` e `src/app/admin/produtos/page.tsx` — mais de 2,3 mil linhas.
-- `src/app/admin/mesas/page.tsx`, `src/app/garcom/novo/page.tsx`, `PainelCrediario.tsx` e `useCaixa.ts` — entre 1,5 mil e 2,1 mil linhas.
+- `src/app/admin/pdv/page.tsx` — 2.895 linhas *(legado)*.
+- `src/features/crediario/components/PainelCrediario.tsx` — 2.781 linhas *(legado)*.
+- `src/components/ModalCarrinho.tsx` — 2.769 linhas.
+- `src/app/admin/produtos/page.tsx` — 2.350 linhas.
+- `src/components/admin/ModalDetalhesPedido.tsx` — 2.259 linhas.
+- `src/app/garcom/novo/page.tsx` — 2.174 linhas *(legado)*.
+- `src/app/admin/mesas/page.tsx` — 2.113 linhas *(legado)*.
+- `src/app/admin/vitrine/page.tsx` — 1.906 linhas.
+- `src/lib/useCaixa.ts` — 1.646 linhas *(legado)*.
+- `src/components/admin/ModalEditarPedido.tsx` — 1.603 linhas.
 
-Uma mudança em pedido pode refletir em `itens_pedido`, pagamentos, entrega, mesa, caixa, crediário, impressão e notificações. O menor escopo seguro deve mapear esses consumidores antes do patch.
+Uma mudança em pedido pode refletir em `itens_pedido`, pagamentos, entrega, estoque e notificações. O menor escopo seguro deve mapear esses consumidores antes do patch.
 
 ## Restrições e não-negociáveis
 
-- O custo de compra de um produto é opcional. Quando informado, ele é copiado para o item no momento da venda; mudar o custo no catálogo não altera o lucro de pedidos já realizados.
-- Finanças distingue resultado de caixa (receitas menos saídas manuais) de lucro bruto de produtos (venda líquida de itens menos custo de compra). Itens antigos ou sem custo não entram no lucro bruto e deixam o período explicitamente parcial.
-
-- Preservar os contratos e padrões já usados; não introduzir arquitetura ou dependência sem alinhamento.
+- Preservar contratos e padrões existentes; não introduzir arquitetura ou dependência sem alinhamento.
 - Consultar e administrar o banco exclusivamente pela Supabase Management API; não usar MCP.
-- Nunca persistir access tokens ou outras credenciais em código/documentação.
-- Não executar SQL de escrita ou migration sem autorização explícita para a tarefa correspondente.
-- Não usar Playwright.
-- O estado atual depende de acesso direto dos clientes ao Supabase e de triggers. Qualquer mudança de autenticação, grants, RLS, status ou trigger exige migração coordenada entre web, Electron e bot.
+- Nunca persistir access tokens ou credenciais em código/documentação.
+- Não executar SQL de escrita ou migration sem autorização explícita para a tarefa.
+- Não usar Playwright nem teste de browser.
+- Toda alteração funcional segue SPEC → TESTE (RED) → IMPLEMENTAÇÃO → REFACTOR → VALIDAÇÃO (`AGENTS.md §0.5`).
+- Não reintroduzir mesa, salão, comanda, garçom, cozinha ou impressão de cozinha na experiência Fortes Fios.
+- Qualquer mudança de autenticação, grants, RLS ou trigger é migração com autorização própria.
 
 ## Lacunas conhecidas de documentação
 
-- Não existe uma especificação formal de regras comerciais para cada status e exceção.
-- O schema remoto não está integralmente reproduzido em migrations locais/versionadas.
+- O schema remoto não está reproduzido em migrations locais versionadas; o histórico remoto tem uma única migration.
 - As tabelas TypeScript de `src/lib/supabase.ts` cobrem somente parte do schema real.
-- Não há suíte ampla de testes para os fluxos web; há um teste local isolado e uma suíte mais completa no serviço Evolution.
+- Não existe especificação formal de regras comerciais para cada status de pedido e suas exceções.
+- Não há suíte de testes cobrindo os fluxos de UI; a cobertura automatizada é de domínio (`.mjs`) e de banco (SQL).
+- `npm run lint` está quebrado: o script legado `next lint` é incompatível com Next 16 e falha antes de analisar arquivos. A verificação em vigor é `npx tsc --noEmit` + `npm run build`.
+- O destino do código legado (remover, migrar ou reativar com migration) ainda não foi decidido. `[?]`
 
 ## Glossário de domínio
 
-- **Pedido:** agregado de venda que conecta itens, pagamentos, entrega, mesa, cliente e impressão.
-- **Dia operacional:** janela de trabalho usada para agrupar pedidos/caixa, não necessariamente o dia civil simples.
-- **Mesa/comanda/local externo:** tipos de ponto de atendimento presencial em `mesas`.
-- **Fila de impressão:** outbox persistente consumida pela impressora Electron.
-- **Escopo de impressão:** pedido completo ou somente itens novos.
-- **Crediário:** conta corrente do cliente formada por consumos e pagamentos.
-- **Pagamento parcial:** divisão do total do pedido em registros de `pagamentos_pedido`.
-- **Diária:** pagamento avulso a diarista (nome livre), lançado em Finanças; grava `financas_diarias` e despesa em `movimentacoes_caixa`.
-- **Gaveta / caixa operacional:** dinheiro físico da sessão aberta; sangria/suprimento e fechamento conferem só Dinheiro (PIX/cartão são informativos).
-- **Carol:** atendente do serviço WhatsApp via Evolution API.
-- **Outbox:** fila persistente de mensagens a enviar pelo bot.
+- **Pedido:** agregado de venda que conecta itens, pagamentos, entrega, cliente e estoque.
+- **Dia operacional:** janela de trabalho usada para agrupar pedidos, com corte às 03:00.
+- **Situação de estoque:** estado derivado `em_estoque` / `baixo` / `esgotado`; nunca persistido.
+- **Bloqueio no zero:** regra opcional por produto que impede a venda quando a quantidade chega a zero.
+- **Notificação:** condição do sistema que precisa de atenção, não evento de log; uma condição contínua tem um único alerta ativo.
+- **Chave de deduplicação:** `<tipo>:<entidade_id>`, única entre as notificações ativas.
+- **Diária:** pagamento avulso a diarista, lançado em Finanças; grava `financas_diarias` e despesa em `movimentacoes_caixa`.
+- **Legado:** código herdado do Edienai Lanches cujas estruturas de banco não existem neste projeto.

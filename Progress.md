@@ -1,5 +1,164 @@
 # Progress
 
+## [2026-08-15] RBAC fase 2 — tela de Acessos com permissões configuráveis
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Objetivo:** o administrador criar e permissionar atendentes pela interface, no padrão visual atual.
+**Spec:** `specs/rbac-admin.md` §5 e §11
+**Arquivos criados:** `src/components/admin/acessos/EditorPermissoes.tsx`.
+**Arquivos alterados:** `src/components/admin/GerenciadorUsuariosSistema.tsx`, `src/lib/rbac.mjs|.d.mts`, `src/lib/autenticacao.ts`, `src/lib/cadastro-equipe.ts`, `src/components/login/TelaSelecaoPerfil.tsx`, `src/app/admin/login/page.tsx`, `src/app/api/admin/acessos/route.ts`, `tests/rbac.test.mjs`, `specs/rbac-admin.md`, `UI.md`, `Progress.md`.
+
+**Regressão que eu mesmo tinha causado e corrigi antes de seguir:** a rota
+`/api/admin/acessos` validava o papel contra `PAPEIS_ADMIN` (admin | atendente),
+mas a tela de **Equipe** cria acesso `garcom`/`entregador` — esses cadastros
+passariam a falhar. Agora existe `PAPEIS_VALIDOS` com os quatro: os legados
+continuam graváveis e resolvem para conjunto vazio. Existir como linha não é o
+mesmo que ter acesso ao Admin.
+
+**O que foi feito:**
+- `EditorPermissoes`: módulos agrupados, "marcar tudo" por grupo, contador por módulo e selo de sensibilidade (**Financeiro** âmbar, **Acesso** vermelho). Botão **Padrão do atendente** aplica o preset como retrato completo, zerando o que está fora dele.
+- Administrador não ganha formulário desabilitado — ganha aviso de acesso total. Formulário cinza sugere que é configurável, e não é.
+- `atendente` entra como papel operacional do projeto; `garcom`/`entregador` viram "(legado)" e não são oferecidos para cadastro novo.
+- A tela carrega por `/api/admin/acessos`, que devolve as permissões **já resolvidas** — a interface não reimplementa preset + override.
+- Login do Admin passou a listar administradores **e** atendentes (`papeisListados`): os dois entram pela mesma porta.
+- A escrita de avatar, que ainda ia direto ao Supabase, passou pela rota. Era a última escrita solta em `usuarios_sistema` nesta tela.
+- Lista mostra o resumo de acesso por usuário (`Acesso total`, `14 permissões`, `Sem acesso ao Admin`).
+
+**Decisões tomadas:** o editor trabalha sobre o mapa resolvido e envia o mapa inteiro como override — `resolverPermissoes` faz `{...preset, ...overrides}`, então `false` explícito é preservado e não há ambiguidade entre "não marcado" e "revogado". Clicar no papel já selecionado não recarrega o preset: perderia as customizações.
+
+**Verificação:** `node --test tests/*.test.mjs` **87/87** (3 casos novos) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · smoke do ciclo completo com admin descartável: criar atendente com `financas.ver` concedido → lista devolve 41 permissões para admin e 14 para o atendente → atendente entra em `/financas` (200) e é barrado em `/acessos` (403) → admin revoga → **sessão antiga invalidada (401)** → depois de novo login, `/financas` = 403. Artefatos removidos.
+
+**Pendências / próximos passos:**
+- 🔴 `ajustar_estoque_produto` e `definir_estoque_produto` seguem executáveis por `anon`.
+- 🔴 `pedidos`, `itens_pedido`, `pagamentos_pedido`, `usuarios_cliente` continuam abertos ao `anon` — fechar exige migrar o checkout público.
+- `ADMIN_SESSAO_SECRET` continua pendente na Vercel.
+- Smoke visual da tela nova, desktop e mobile: a verificação desta sessão foi por API.
+
+**Armadilhas descobertas:**
+- Preset aplicado como merge (`{...atual, ...PRESET}`) mantém ligado o que estava fora do preset e o botão vira "adicionar", não "restaurar padrão". Tem que partir de tudo desligado.
+- Trocar de papel sem recarregar o preset deixa o formulário com as permissões do papel anterior — o oposto do que a escolha significa.
+- Enviar `permissoes` para um administrador grava override que nunca é lido, porque `resolverPermissoes` devolve tudo antes de olhar overrides. Melhor não mandar.
+
+## [2026-08-15] RBAC fase 4 — dado financeiro fora do alcance da anon key
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Objetivo:** fechar de verdade Finanças e receita, não só esconder da sidebar.
+**Spec:** `specs/rbac-admin.md` §11
+**Arquivos criados:** `src/app/api/admin/financas/route.ts`, `src/app/api/admin/financas/diarias/route.ts`, `src/app/api/admin/dashboard/route.ts`, `supabase/migrations/202608150005_rbac_fechar_financas.sql`, `supabase/migrations/202608150006_rbac_fechar_rpcs.sql`.
+**Arquivos alterados:** `src/features/financas/hooks/useFinancas.ts`, `useDiarias.ts`, `src/app/admin/dashboard/page.tsx`, `src/lib/autenticacao.ts`, `src/app/api/admin/acessos/route.ts`, `tests/rbac-banco.sql`, `specs/rbac-admin.md`, `Progress.md`, `UI.md`.
+
+**🔴 O achado desta sessão:** todo `revoke ... from anon` que escrevi nas
+migrations anteriores era **no-op silencioso**. Função em Postgres nasce com
+`EXECUTE` para `PUBLIC` (o `=X/postgres` no `proacl`); `anon` executa por
+herança, sem grant próprio, e revogar de quem não tem grant não tira nada **nem
+devolve erro**. Descobri auditando por `has_function_privilege` em vez de
+confiar no texto do comando: 21 funções ainda executáveis por `anon`, entre elas
+`salvar_acesso_usuario`, `criar_usuario_sistema` e `atualizar_senha_usuario` —
+todas `SECURITY DEFINER`, rodando como `postgres`. Ou seja: o RBAC que entreguei
+antes era contornável por uma requisição REST que criava um administrador ou
+trocava a senha de outra pessoa. Fechado em `202608150006`; sobraram 7
+executáveis por anon, sendo 3 trigger functions (não expostas pelo PostgREST) e
+4 intencionais.
+
+**O que foi feito:**
+- `/api/admin/financas` e `/api/admin/financas/diarias`: as 9 consultas do `useFinancas` e as escritas do `useDiarias` passam a rodar com service_role atrás de `financas.ver`/`criar`/`editar`/`excluir`. A compensação da diária (apagar a movimentação quando a segunda inserção falha) foi para o servidor, onde o cliente não pode desistir no meio.
+- `/api/admin/dashboard`: o corte operacional × estratégico acontece no servidor. Sem `dashboard.ver_receita` os campos de receita não são calculados nem enviados — **ausentes, não zerados**, porque faturamento zero significa outra coisa.
+- Migration `202608150005`: `financas_diarias`, `movimentacoes_caixa`, `caixas` e `categorias_caixa` fora do `anon`, com RLS ligada sem policy como segunda camada (service_role tem BYPASSRLS).
+- Os quatro helpers de `autenticacao.ts` (criar/atualizar/senha/excluir) agora chamam `/api/admin/acessos`, que ganhou `PUT` (senha) e `DELETE` com a invariante do último admin.
+- `PATCH /api/admin/acessos` passou a ter dois níveis: papel/permissões/ativação exigem `acessos.permissoes`; nome e avatar bastam `acessos.editar`.
+
+**Decisões tomadas:** não fechei `pedidos`/`itens_pedido`/`pagamentos_pedido` — a **loja pública** escreve neles no checkout, e revogar quebraria a venda. Relatórios e Análise derivam dessas tabelas, então continuam expostos por essa via; fechá-los é migrar o checkout, tarefa própria. `ajustar_estoque_produto`/`definir_estoque_produto` seguem abertas porque a tela de Estoque as chama client-side.
+
+**Verificação:** `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · `node --test tests/*.test.mjs` 84/84 · `tests/rbac-banco.sql` com o cenário 11 novo (12 asserções de grant), rollback limpo · smoke com admin e atendente descartáveis: `/financas`, `/financas/diarias`, `POST /financas` e `/acessos` = **200 admin / 403 atendente**; `/dashboard` devolve `receitaTotal` só para o admin; `/notificacoes` 200 para ambos (service_role intacto após o lockdown) · ataque pela anon key: 4 tabelas financeiras e 2 RPCs de lucro/faturamento em `42501`. Artefatos removidos: 1 usuário, 1 admin ativo, 0 lixo.
+
+**Pendências / próximos passos:**
+- Fase 2 — tela de Acessos reconstruída. Hoje a permissão só se edita pela API.
+- 🔴 `ajustar_estoque_produto` e `definir_estoque_produto` seguem executáveis por `anon`: com a anon key dá para zerar o estoque de qualquer produto. Pré-existente, mas agora é o buraco mais fácil que sobrou.
+- 🔴 `pedidos`, `itens_pedido`, `pagamentos_pedido` e `usuarios_cliente` continuam abertos ao `anon` — histórico de pedidos, telefone e endereço de cliente são legíveis por quem tiver a chave do bundle público.
+- `ADMIN_SESSAO_SECRET` continua pendente de configuração na Vercel.
+
+**Armadilhas descobertas:**
+- **`revoke ... from anon` em função não faz nada** se o grant veio de `PUBLIC`. Sempre `revoke ... from public`, e sempre conferir por `has_function_privilege`, nunca por leitura do comando.
+- Ligar RLS sem policy nenhuma nega tudo, menos para quem tem BYPASSRLS — `service_role` passa. É a segunda camada barata: se um GRANT voltar por engano numa migration futura, a tabela continua fechada.
+- Campo sensível ausente ≠ zerado. Devolver `receita: 0` para quem não tem permissão inventa um faturamento de zero reais; omitir o campo diz a verdade.
+
+## [2026-08-15] RBAC do Admin — fundação: sessão verificável + modelo de permissões
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Objetivo:** Administrador e Atendente entrando pelo mesmo `/admin`, com controle real de acesso a dados e ações.
+**Spec:** `specs/rbac-admin.md` (Opção A escolhida pelo usuário)
+**Arquivos criados:** `specs/rbac-admin.md`, `src/lib/rbac.mjs|.d.mts`, `src/lib/sessao-token.mjs|.d.mts`, `src/lib/server/sessao-admin.ts`, `src/app/api/admin/sessao/route.ts`, `src/app/api/admin/acessos/route.ts`, `supabase/migrations/202608150004_rbac_admin.sql`, `tests/rbac.test.mjs`, `tests/sessao-token.test.mjs`, `tests/rbac-banco.sql`.
+**Arquivos alterados:** `src/contexts/AdminAuthContext.tsx`, `src/components/admin/ProtectedRoute.tsx`, `src/components/admin/AdminLayout.tsx`, `src/app/admin/login/page.tsx`, `src/components/login/TelaSelecaoPerfil.tsx`, `Progress.md`, `UI.md`.
+
+**O diagnóstico que mudou o desenho:** o pedido era RBAC, mas a base não tinha
+autenticação. `AdminAuthContext` trazia duas senhas em texto claro **dentro do
+bundle** (`edienailanches/1234`, `dzndev/1503`) e o `ProtectedRoute` aceitava
+qualquer `localStorage.adminToken` com o prefixo certo — uma linha no console
+virava administrador. No banco: 0 tabelas com RLS, 0 policies, `anon` com SELECT
+e DELETE em 27 de 30 tabelas, `auth.users` vazio, senha em SHA-256 **sem salt**
+e `senha_hash` legível pela anon key (que é pública). Sem identidade que o
+servidor consiga conferir, permissão é só componente escondido. Apresentei as
+duas saídas e o usuário escolheu a sessão assinada própria.
+
+**O que foi feito:**
+- Cookie `httpOnly` + `SameSite=Lax` assinado em HMAC-SHA256 com `node:crypto` — sem dependência nova. Comparação em tempo constante; entrada malformada devolve `null` em vez de lançar.
+- Senha migra para bcrypt (`crypt`/`gen_salt('bf')`) de forma transparente: hash antigo continua entrando e é regravado no primeiro login. Ninguém redefine senha.
+- `anon` perde `senha_hash` (leitura) e `papel`/`permissoes`/`permissoes_versao` (escrita) por **grant de coluna** — o buraco fecha hoje sem quebrar as 8 telas que leem a tabela pelo cliente.
+- `permissoes jsonb` + `permissoes_versao` + tabela `acessos_auditoria`; `salvar_acesso_usuario` audita e impõe no banco: ninguém altera o próprio acesso, e a loja nunca fica sem administrador ativo.
+- `exigirPermissao(request, chave)` como fronteira dos route handlers: 401/403 **antes** de tocar no banco.
+- Catálogo `rbac.mjs` com os 15 módulos reais do menu. Nenhuma tela legada recebeu permissão — várias consultam tabela que não existe (PRD §Legado).
+- Sidebar, ⌘K e rotas filtrados por permissão; `ProtectedRoute` mostra tela de bloqueio em vez de redirecionar em silêncio.
+
+**Decisões tomadas:** `admin` resolve para todas as chaves por retorno de função, não por linha em tabela — não existe estado em que um administrador se tranque para fora. `pedidos.ver_valor` e `dashboard.ver_receita` são chaves distintas, que é a fronteira entre valor operacional e número estratégico. Revogação total do `anon` em `usuarios_sistema` ficou para quando as consultas dessas telas migrarem para route handler (fase 4).
+
+**Verificação:** RED `ERR_MODULE_NOT_FOUND` → GREEN em ambos os módulos novos · `node --test tests/*.test.mjs` **84/84** · `tests/rbac-banco.sql` 10 cenários pela Management API, encerrado em rollback, 0 fixtures vazadas · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · smoke ponta a ponta com atendente descartável: senha errada 401, cookie `HttpOnly`, `/api/admin/acessos` 401 sem sessão e **403 com sessão de atendente**, autopromoção a admin 403 · **ataque pela anon key recusado com `42501`** em `papel`, `permissoes` e `senha_hash` · alteração de permissão invalidou a sessão na hora (`motivo: permissoes_alteradas`) · escrita legítima (avatar) segue em 204. Usuário de teste removido.
+
+**Pendências / próximos passos:**
+- 🔴 **Fase 4** — Finanças, Relatórios e Análise ainda são só tela escondida: `financas_diarias`, `movimentacoes_caixa`, `caixas` e `crediario_*` continuam com grant total para `anon`. Enquanto isso não migrar para route handler autorizado, o §6 do pedido **não vale para esses módulos**.
+- Fase 2 — tela de Acessos reconstruída; hoje a permissão só é editável por SQL ou pela rota `PATCH /api/admin/acessos`.
+- Fase 5 — Dashboard decomposto: atendente com `dashboard.ver` ainda enxerga `receitaHoje`/`receitaTotal`.
+- `ADMIN_SESSAO_SECRET` foi gerado no `.env.local` (não rastreado). **Precisa ser configurado também na Vercel** ou o login quebra em produção.
+- `/api/controle-acesso`, `ControleAcessoContext` e `GerenciadorPermissoesEquipe` seguem mortos (RPCs inexistentes). Não removi: §3.7.
+
+**Armadilhas descobertas:**
+- Grant por coluna (`grant update (avatar_url, …)`) fecha escalonamento de privilégio sem quebrar tela — muito menos invasivo que revogar a tabela e migrar 8 arquivos de uma vez.
+- `salvar_acesso_usuario` levanta `check_violation` para recusa de negócio (último admin, auto-edição). No route handler isso vira 409, não 500: é recusa, não falha.
+- Revalidar a sessão contra o banco a cada request parece caro e não é: é busca por chave primária, e é o único jeito de uma permissão revogada parar de valer sem polling.
+
+## [2026-08-15] Correção do "Dispensar" e redesenho da central de notificações
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Objetivo:** fazer as ações do painel funcionarem de fato e aproximar a interface de um sistema de gestão profissional.
+**Arquivos alterados:** `supabase/migrations/202608150003_notificacoes_dispensar.sql`, `src/lib/notificacoes.mjs`, `src/lib/notificacoes.d.mts`, `tests/notificacoes.test.mjs`, `tests/notificacoes-banco.sql`, `src/contexts/NotificacoesContext.tsx`, `src/components/admin/notificacoes/{ItemNotificacao,PainelNotificacoes,SinoNotificacoes,ModalAlertasEntrada,NotificacoesRoot,aparencia}.tsx|.ts`, `UI.md`, `Progress.md`.
+
+**O defeito (confirmado no banco antes de tocar em código):** três linhas de
+`notificacoes_leitura` já tinham `silenciada_em` preenchido — o clique em
+**Dispensar** chegava ao Postgres. O que não existia era o lado da leitura:
+nem `resumo_notificacoes`, nem `listar_notificacoes`, nem o filtro do painel
+consultavam a coluna. O item voltava na lista e continuava no badge, então o
+botão parecia morto. Com os 5 alertas já lidos, "Marcar todas como lidas"
+ficava desabilitado e o painel não tinha saída nenhuma.
+
+**O que foi feito:**
+- Migration `202608150003`: `resumo_notificacoes` e `listar_notificacoes` passam a respeitar `silenciada_em`. `p_incluir_resolvidas` vira "incluir histórico" (resolvidas + dispensadas), sem trocar a assinatura.
+- `notificacaoVisivelNaCentral` / `notificacaoNoHistorico` no domínio, espelhando o `where` do banco; `resumirNotificacoes` reescrito sobre `contribuicaoResumo`.
+- `deltaResumo` para a marcação otimista: dispensar tira urgentes/normais/naoLidas/total de uma vez, e não tira "não lida" de algo que já estava lido.
+- Delta calculado **fora** dos updaters, sobre um espelho síncrono (`notificacoesRef`): o cálculo antigo chamava `setResumo` dentro do updater de `setNotificacoes`, que o StrictMode executa duas vezes.
+- Clicar no cartão agora marca como lida antes de navegar — ir até o contexto é atender o aviso.
+- UI: painel virou `Popover` ancorado no sino (desktop) e `Drawer` no mobile, no lugar do `Dialog` centrado. Cartões com borda, ações `✓`/`✕` no canto e *stretched link* no lugar da fileira de botões de texto. Rodapé de três ghosts virou dois; "aviso ao entrar desligado" virou aviso no corpo com botão de reverter.
+- Selo **Urgente** removido do cartão: com 4 de 5 produtos esgotados ele aparecia em tudo e apagava a diferença entre baixo e esgotado. Urgência agora é o agrupamento + fio vermelho na borda.
+
+**Decisões tomadas:** dispensada continua `ativa` no banco (a condição continua verdadeira) e some só para quem dispensou; reincidência é linha nova, sem registro de leitura, então volta a aparecer. Nada de Realtime — a estratégia de egress da spec segue valendo.
+
+**Verificação:** `node --test tests/notificacoes.test.mjs` 20/20 (4 casos novos) · `tests/notificacoes-banco.sql` com os cenários 25 e 26 novos, aplicado pela Management API e encerrado em rollback (0 fixtures vazadas) · `npx tsc --noEmit` sem erros · `npm run build` ✓ 49 páginas · validação ponta a ponta pela rota HTTP com chave de teste descartável: 5 ativas → dispensar → 4 ativas e badge 4, item presente no histórico, outro usuário segue com 5. Artefato de teste removido do banco.
+
+**Pendências / próximos passos:** smoke visual do popover e do drawer após login, desktop e mobile — a verificação desta sessão foi por API, não por navegador.
+
+**Armadilhas descobertas:**
+- Gravar uma coluna de leitura sem que alguma leitura a respeite produz botão que "não funciona" sem erro nenhum no console nem no banco. Toda coluna de `notificacoes_leitura` precisa aparecer no `where` de quem lista **e** de quem conta.
+- `PopoverContent` e `DialogContent` já trazem `overflow-y-auto`; sobrescrever com `overflow-hidden` não resolve, porque o twMerge trata `overflow` e `overflow-y` como grupos diferentes e os dois sobrevivem. O correto é `overflow-y-hidden`.
+- `max-h: min(32rem, var(--radix-popover-content-available-height))` não vira classe: a vírgula não sobrevive ao JIT. Vai em `style` inline, depois do `zIndex` que o primitivo injeta.
+
 ## [2026-08-15] Reconstrução da Ajuda do Admin a partir do produto real
 
 **Agente/Modelo:** Cursor Grok 4.6
@@ -19,6 +178,31 @@
 - O progresso “0 de 3” vinha de tours registrados para `/admin/crediario` e `/admin/painel`, rotas que o layout redireciona. O catálogo da sidebar nunca mostrava esses tours, só “Em breve”.
 - Lucro bruto ≠ resultado do caixa: a aba Lucro ignora despesas/salário/diárias e só usa itens com `custo_unitario` em pedidos que não estão cancelados, aguardando ou pendentes.
 - `usePathname` não traz query string; `?produto=` em Estoque não muda o artigo contextual.
+
+## [2026-08-15] Correção do PRD para o projeto real
+
+**Agente/Modelo:** Claude Opus 5
+**Objetivo:** substituir no `PRD.md` a descrição herdada do Edienai Lanches pelo estado verificado do projeto Fortes Fios.
+**Arquivos alterados:** `PRD.md`, `Progress.md`.
+**O que foi feito:**
+- Todos os números e nomes foram levantados do banco pela Management API e do repositório, não do texto anterior.
+- Projeto corrigido: `fortes-fios` / `tjljhspczbaxtpbxlyjd` / PG 17.6.1.155 / criado em 2026-08-13 — o PRD apontava para `edienai` / `bawysvqqeqwxasmggfcn`.
+- Inventário corrigido: 30 tabelas + 1 view, 365 colunas, 98 índices, 20 funções e 5 triggers. O texto anterior dizia 50 tabelas, 647 colunas, 199 índices, 82 funções e 36 triggers.
+- Nova seção **§Legado: código presente, banco ausente**, com a tabela módulo × estruturas ausentes. É a correção mais importante: as telas ocultas não estão apenas escondidas — suas tabelas e funções não existem.
+- Segurança reescrita com os números reais (0 pedidos, 1 cliente, 1 usuário) e com a correção sobre `.env.local`.
+- Arquitetura do repositório corrigida: os subprojetos Electron e o bot não existem aqui.
+- Rotas, fluxos, integrações, hotspots e glossário alinhados ao que existe; acrescentados os fluxos de Estoque e Notificações.
+- Seção Realtime reescrita: a publication está vazia e 32 arquivos assinam `postgres_changes` sem receber evento.
+**Decisões tomadas:** preservei o legado como seção documentada em vez de apagá-lo, porque o código continua no repositório e a próxima pessoa precisa saber por que aquelas telas existem e por que não podem ser reativadas por toggle. Marquei com `[?]` a única questão em aberto: o destino desse legado.
+**Verificação:** cada afirmação numérica conferida por consulta à Management API ou por contagem no repositório nesta sessão. Contagens de tabela por domínio somam exatamente as 30 tabelas. Sem alteração de código, portanto sem typecheck/build novos — o build desta sessão já havia passado.
+**Pendências / próximos passos:**
+- 🔴 O `AGENTS.md` §3.9 e §3.10 ainda descrevem o projeto antigo (50 tabelas; `.env.local` versionado com `MERCADO_PAGO_ACCESS_TOKEN`/`EVOLUTION_API_KEY`/`VERCEL_OIDC_TOKEN`). Como o `AGENTS.md` tem precedência sobre o `PRD.md` (§1), essa divergência engana o próximo agente. Correção pendente de autorização.
+- Decidir o destino do código legado: remover, migrar ou reativar com migration própria.
+**Armadilhas descobertas:**
+- O banco veio de `supa-mk/00_public_schema.sql` (dump estrutural do projeto "MK Soluções", 27 tabelas), aplicado como a única migration do histórico remoto. O frontend veio do Edienai inteiro. A divergência entre os dois é a origem de quase todo o legado quebrado.
+- 17 RPCs são chamadas pelo código e **não existem** no banco (crediário, produtividade, controle de acesso, mesas, fila de impressão).
+- `SUPABASE_SERVICE_ROLE_KEY` **está** configurada, ao contrário do que o PRD afirmava ao justificar as funções `security definer` de produtividade.
+- `.env.local` **não** está rastreado no git neste repositório e contém apenas as quatro variáveis do Supabase.
 
 ## [2026-08-15] Central de Notificações do Admin e alerta visual de estoque
 

@@ -76,6 +76,7 @@ import {
   telaEstaVisivel,
   type ConfigVisibilidadeTela,
 } from '@/lib/visibilidade-telas'
+import { podeVerRota } from '@/lib/rbac.mjs'
 
 type AdminLayoutProps = {
   children: ReactNode
@@ -145,7 +146,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const mainRef = useRef<HTMLElement | null>(null)
   const sidebarNavRef = useRef<HTMLElement | null>(null)
   const sidebarScrollTopRef = useRef(0)
-  const { logout, usuarioAtual } = useAdminAuth()
+  const { logout, usuarioAtual, permissoes } = useAdminAuth()
   const { theme, resolvedTheme, setTheme } = useTheme()
   const pathname = usePathname()
   const router = useRouter()
@@ -181,27 +182,46 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     [visibilidadeGlobal],
   )
 
+  /**
+   * Dois filtros diferentes empilhados, e vale não confundi-los:
+   * `telaEstaVisivel` é preferência (o dono escondeu a tela do menu);
+   * `podeVerRota` é permissão (o usuário não tem acesso àquela área).
+   * Grupo que fica sem nenhum item some inteiro — atendente sem Finanças nem
+   * Relatórios não vê a seção "Gestão" vazia.
+   */
+  const itemPermitido = useCallback(
+    (item: { id: string; path: string }) =>
+      telaEstaVisivel(visibilidadeGlobal, item.id) && podeVerRota(item.path, permissoes),
+    [permissoes, visibilidadeGlobal],
+  )
+
   const gruposMenuVisiveis = useMemo(
     () =>
       sidebarMesclada.visiveis
         .map((grupo) => ({
           ...grupo,
-          itens: grupo.itens.filter((item) => telaEstaVisivel(visibilidadeGlobal, item.id)),
+          itens: grupo.itens.filter(itemPermitido),
         }))
         .filter((grupo) => grupo.itens.length > 0),
-    [sidebarMesclada.visiveis, visibilidadeGlobal],
+    [itemPermitido, sidebarMesclada.visiveis],
   )
 
   const itensOcultos = useMemo(
-    () => sidebarMesclada.ocultos.filter((item) => telaEstaVisivel(visibilidadeGlobal, item.id)),
-    [sidebarMesclada.ocultos, visibilidadeGlobal],
+    () => sidebarMesclada.ocultos.filter(itemPermitido),
+    [itemPermitido, sidebarMesclada.ocultos],
   )
 
   const atalhosVisiveis = useMemo(
-    () => atalhosHeader.filter((item) => telaEstaVisivel(visibilidadeGlobal, item.path)),
-    [visibilidadeGlobal],
+    () =>
+      atalhosHeader.filter(
+        (item) =>
+          telaEstaVisivel(visibilidadeGlobal, item.path) && podeVerRota(item.path, permissoes),
+      ),
+    [permissoes, visibilidadeGlobal],
   )
 
+  // O ⌘K é um caminho de navegação como outro qualquer: deixar a rota
+  // proibida aparecer nele só empurraria o usuário para a tela de bloqueio.
   const itensCommand = useMemo(() => {
     const atalhosPaths = new Set(atalhosVisiveis.map((item) => item.path))
     return [
@@ -209,11 +229,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       ...ITENS_MENU_ADMIN
         .filter(
           (item) =>
-            !atalhosPaths.has(item.path) && telaEstaVisivel(visibilidadeGlobal, item.path),
+            !atalhosPaths.has(item.path) &&
+            telaEstaVisivel(visibilidadeGlobal, item.path) &&
+            podeVerRota(item.path, permissoes),
         )
         .map((item) => ({ ...item, tecla: '' })),
     ]
-  }, [atalhosVisiveis, visibilidadeGlobal])
+  }, [atalhosVisiveis, permissoes, visibilidadeGlobal])
 
   useEffect(() => {
     let cancelado = false

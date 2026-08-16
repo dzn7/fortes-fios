@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { supabase } from '@/lib/supabase'
 import { obterDiaTrabalhoReferencia } from '@/lib/utils'
 import type { CategoriaCaixa, Funcionario, MovimentacaoCaixa } from '@/lib/tipos-caixa'
 import type {
@@ -19,12 +18,29 @@ import type {
 } from '../types'
 import { CORES_GRAFICOS, rotularFormaPagamento } from '../lib/formatadores'
 
-const STATUS_PEDIDO_NAO_PAGO = ['aguardando_pagamento', 'pendente']
+// As colunas e filtros destas consultas agora vivem em `/api/admin/financas`.
 
-const COLUNAS_CATEGORIA = 'id, nome, tipo, cor, icone, ativo, ordem'
-const COLUNAS_FUNCIONARIO = 'id, nome, cargo, ativo, tipo'
-const COLUNAS_MOVIMENTACAO =
-  'id, caixa_id, categoria_id, funcionario_id, pedido_id, tipo, valor, descricao, forma_pagamento, created_at, categoria:categorias_caixa(id, nome, tipo, cor, icone, ativo, ordem), funcionario:funcionarios(id, nome, cargo, ativo)'
+/** Resposta de `/api/admin/financas` — os mesmos conjuntos que o hook lia direto. */
+type RespostaFinancas = {
+  sucesso?: boolean
+  erro?: string
+  categorias?: CategoriaCaixa[]
+  funcionarios?: Funcionario[]
+  pedidosPagos?: PedidoFinanceiro[]
+  pedidosNaoPagos?: PedidoFinanceiro[]
+  movimentacoes?: MovimentacaoCaixa[]
+  crediarios?: ContaCrediarioResumo[]
+  janela?: { total: number; created_at: string }[]
+  movsJanela?: {
+    tipo: TipoMovimentacao
+    valor: number
+    created_at: string
+    pedido_id: string | null
+  }[]
+  pagamentos?: PagamentoPedido[]
+  lucroPeriodo?: LinhaLucroProdutoRpc[]
+  lucroJanela?: LinhaLucroProdutoRpc[]
+}
 
 interface DadosFinancas {
   movimentacoes: MovimentacaoCaixa[]
@@ -69,6 +85,27 @@ const chaveDiaTrabalho = (isoOuDate: string | Date) => {
   return `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}-${String(ref.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * Envia lançamento para a rota autorizada. Devolve a mensagem de erro, ou
+ * `null` em caso de sucesso — 403 vira texto de permissão, não erro genérico.
+ */
+const enviarLancamento = async (
+  metodo: 'POST' | 'PATCH',
+  corpo: Record<string, unknown>,
+): Promise<string | null> => {
+  const resposta = await fetch('/api/admin/financas', {
+    method: metodo,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(corpo),
+  })
+  const json = (await resposta.json()) as { sucesso?: boolean; erro?: string }
+
+  if (resposta.status === 403) return 'Seu acesso não inclui esta operação.'
+  if (!resposta.ok || !json.sucesso) return json.erro || 'Falha ao salvar'
+  return null
+}
+
 export function useFinancas(filtro: FiltroFinancas) {
   const [dados, setDados] = useState<DadosFinancas>(DADOS_VAZIO)
   const [categorias, setCategorias] = useState<CategoriaCaixa[]>([])
@@ -78,137 +115,48 @@ export function useFinancas(filtro: FiltroFinancas) {
 
   const fetchIdRef = useRef(0)
 
-  const carregarCategoriasFuncionarios = useCallback(async () => {
-    const [{ data: cats }, { data: funcs }] = await Promise.all([
-      supabase.from('categorias_caixa').select(COLUNAS_CATEGORIA).eq('ativo', true).order('nome'),
-      supabase.from('funcionarios').select(COLUNAS_FUNCIONARIO).eq('ativo', true).order('nome'),
-    ])
-    setCategorias((cats as CategoriaCaixa[]) ?? [])
-    setFuncionarios((funcs as Funcionario[]) ?? [])
-  }, [])
-
   const carregarDados = useCallback(async (alvo: FiltroFinancas) => {
     const id = ++fetchIdRef.current
     setCarregando(true)
     setErro(null)
 
     try {
-      const fimFiltro = new Date(alvo.fim)
-      const inicioJanela = new Date(fimFiltro.getFullYear(), fimFiltro.getMonth() - 11, 1, 0, 0, 0, 0)
-
-      const [resPedidosPagos, resPedidosNaoPagos, resMovs, resCrediario, resJanela, resMovsJanela, resPagamentos, resLucroPeriodo, resLucroJanela] =
-        await Promise.all([
-          supabase
-            .from('pedidos')
-            .select(
-              'id, numero_pedido, nome_cliente, total, taxa_entrega, taxa_servico, taxa_pagamento, status, pagamento_online, pagamento_online_status, forma_pagamento, created_at',
-            )
-            .gte('created_at', alvo.inicio)
-            .lte('created_at', alvo.fim)
-            .neq('status', 'cancelado')
-            .neq('status', 'aguardando_pagamento')
-            .neq('status', 'pendente')
-            .order('created_at', { ascending: false })
-            .limit(2000),
-
-          supabase
-            .from('pedidos')
-            .select(
-              'id, numero_pedido, nome_cliente, total, taxa_entrega, taxa_servico, taxa_pagamento, status, pagamento_online, pagamento_online_status, forma_pagamento, created_at',
-            )
-            .gte('created_at', alvo.inicio)
-            .lte('created_at', alvo.fim)
-            .or(
-              `status.in.(${STATUS_PEDIDO_NAO_PAGO.join(',')}),pagamento_online_status.eq.aguardando_pagamento`,
-            )
-            .order('created_at', { ascending: false })
-            .limit(500),
-
-          supabase
-            .from('movimentacoes_caixa')
-            .select(COLUNAS_MOVIMENTACAO)
-            .gte('created_at', alvo.inicio)
-            .lte('created_at', alvo.fim)
-            .order('created_at', { ascending: false })
-            .limit(1000),
-
-          supabase
-            .from('crediario_contas')
-            .select('id, cliente_nome, telefone, saldo_atual, status, atualizado_em')
-            .eq('status', 'aberto')
-            .gt('saldo_atual', 0)
-            .order('saldo_atual', { ascending: false })
-            .limit(300),
-
-          supabase
-            .from('pedidos')
-            .select('total, created_at')
-            .gte('created_at', inicioJanela.toISOString())
-            .lte('created_at', alvo.fim)
-            .neq('status', 'cancelado')
-            .neq('status', 'aguardando_pagamento')
-            .neq('status', 'pendente')
-            .limit(20000),
-
-          supabase
-            .from('movimentacoes_caixa')
-            .select('tipo, valor, created_at, pedido_id')
-            .gte('created_at', inicioJanela.toISOString())
-            .lte('created_at', alvo.fim)
-            .limit(20000),
-
-          supabase
-            .from('pagamentos_pedido')
-            .select('id, pedido_id, forma_pagamento, valor, bandeira, created_at')
-            .gte('created_at', alvo.inicio)
-            .lte('created_at', alvo.fim)
-            .order('created_at', { ascending: false })
-            .limit(5000),
-
-          supabase.rpc('obter_lucro_produtos', {
-            p_inicio: alvo.inicio,
-            p_fim: alvo.fim,
-          }),
-
-          supabase.rpc('obter_lucro_produtos', {
-            p_inicio: inicioJanela.toISOString(),
-            p_fim: alvo.fim,
-          }),
-        ])
+      const parametros = new URLSearchParams({ inicio: alvo.inicio, fim: alvo.fim })
+      const resposta = await fetch(`/api/admin/financas?${parametros}`, {
+        credentials: 'same-origin',
+      })
+      const json = (await resposta.json()) as RespostaFinancas
 
       if (id !== fetchIdRef.current) return
 
-      const erros = [
-        resPedidosPagos.error,
-        resPedidosNaoPagos.error,
-        resMovs.error,
-        resCrediario.error,
-        resJanela.error,
-        resMovsJanela.error,
-        resPagamentos.error,
-        resLucroPeriodo.error,
-        resLucroJanela.error,
-      ].filter(Boolean)
-
-      if (erros.length) {
-        throw new Error(erros.map((e) => e?.message).join(' | '))
+      if (!resposta.ok || !json.sucesso) {
+        throw new Error(
+          resposta.status === 403
+            ? 'Seu acesso não inclui os dados financeiros.'
+            : json.erro || 'Falha ao carregar dados financeiros',
+        )
       }
 
+      const fimFiltro = new Date(alvo.fim)
+
+      setCategorias(json.categorias ?? [])
+      setFuncionarios(json.funcionarios ?? [])
+
       const resumoMensal = construirResumoMensal(
-        (resJanela.data as { total: number; created_at: string }[]) ?? [],
-        (resMovsJanela.data as { tipo: TipoMovimentacao; valor: number; created_at: string; pedido_id: string | null }[]) ?? [],
-        (resLucroJanela.data as LinhaLucroProdutoRpc[]) ?? [],
+        json.janela ?? [],
+        json.movsJanela ?? [],
+        json.lucroJanela ?? [],
         fimFiltro,
       )
 
       setDados({
-        pedidos: (resPedidosPagos.data as PedidoFinanceiro[]) ?? [],
-        pedidosNaoPagos: (resPedidosNaoPagos.data as PedidoFinanceiro[]) ?? [],
-        movimentacoes: (resMovs.data as unknown as MovimentacaoCaixa[]) ?? [],
-        crediarios: (resCrediario.data as ContaCrediarioResumo[]) ?? [],
+        pedidos: json.pedidosPagos ?? [],
+        pedidosNaoPagos: json.pedidosNaoPagos ?? [],
+        movimentacoes: json.movimentacoes ?? [],
+        crediarios: json.crediarios ?? [],
         resumoMensal,
-        pagamentos: (resPagamentos.data as PagamentoPedido[]) ?? [],
-        lucroProdutos: agruparLucroPorProduto((resLucroPeriodo.data as LinhaLucroProdutoRpc[]) ?? []),
+        pagamentos: json.pagamentos ?? [],
+        lucroProdutos: agruparLucroPorProduto(json.lucroPeriodo ?? []),
       })
     } catch (err) {
       if (id !== fetchIdRef.current) return
@@ -220,10 +168,6 @@ export function useFinancas(filtro: FiltroFinancas) {
       if (id === fetchIdRef.current) setCarregando(false)
     }
   }, [])
-
-  useEffect(() => {
-    carregarCategoriasFuncionarios()
-  }, [carregarCategoriasFuncionarios])
 
   useEffect(() => {
     carregarDados(filtro)
@@ -325,29 +269,12 @@ export function useFinancas(filtro: FiltroFinancas) {
       forma_pagamento?: string | null
       data?: string
     }) => {
-      const { data: caixaAberto } = await supabase
-        .from('caixas')
-        .select('id')
-        .eq('status', 'aberto')
-        .order('data_abertura', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      const payload = {
-        tipo: entrada.tipo,
-        valor: entrada.valor,
-        descricao: entrada.descricao ?? null,
-        categoria_id: entrada.categoria_id ?? null,
-        funcionario_id: entrada.funcionario_id ?? null,
-        forma_pagamento: entrada.forma_pagamento ?? null,
-        caixa_id: caixaAberto?.id ?? null,
-        created_at: entrada.data ?? new Date().toISOString(),
-      }
-
-      const { error } = await supabase.from('movimentacoes_caixa').insert(payload)
-      if (error) {
-        toast.error('Não foi possível salvar a movimentação. ' + error.message)
-        throw error
+      // O caixa aberto e a gravação ficam no servidor: `movimentacoes_caixa`
+      // não é mais alcançável pela anon key.
+      const erroSalvar = await enviarLancamento('POST', entrada)
+      if (erroSalvar) {
+        toast.error('Não foi possível salvar a movimentação. ' + erroSalvar)
+        throw new Error(erroSalvar)
       }
       toast.success(entrada.tipo === 'entrada' ? 'Receita lançada' : 'Despesa lançada')
       await carregarDados(filtro)
@@ -367,19 +294,10 @@ export function useFinancas(filtro: FiltroFinancas) {
         data?: string
       },
     ) => {
-      const payload: Record<string, unknown> = {
-        tipo: entrada.tipo,
-        valor: entrada.valor,
-        descricao: entrada.descricao ?? null,
-        categoria_id: entrada.categoria_id ?? null,
-        forma_pagamento: entrada.forma_pagamento ?? null,
-      }
-      if (entrada.data) payload.created_at = entrada.data
-
-      const { error } = await supabase.from('movimentacoes_caixa').update(payload).eq('id', id)
-      if (error) {
-        toast.error('Não foi possível atualizar. ' + error.message)
-        throw error
+      const erroAtualizar = await enviarLancamento('PATCH', { ...entrada, id })
+      if (erroAtualizar) {
+        toast.error('Não foi possível atualizar. ' + erroAtualizar)
+        throw new Error(erroAtualizar)
       }
       toast.success('Lançamento atualizado')
       await carregarDados(filtro)
@@ -389,10 +307,15 @@ export function useFinancas(filtro: FiltroFinancas) {
 
   const removerMovimentacao = useCallback(
     async (id: string) => {
-      const { error } = await supabase.from('movimentacoes_caixa').delete().eq('id', id)
-      if (error) {
-        toast.error('Não foi possível excluir. ' + error.message)
-        throw error
+      const resposta = await fetch(`/api/admin/financas?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      })
+      const json = (await resposta.json()) as { sucesso?: boolean; erro?: string }
+      if (!resposta.ok || !json.sucesso) {
+        const mensagem = json.erro || 'Falha ao excluir'
+        toast.error('Não foi possível excluir. ' + mensagem)
+        throw new Error(mensagem)
       }
       toast.success('Lançamento removido')
       await carregarDados(filtro)

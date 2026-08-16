@@ -8,10 +8,13 @@ import {
   TIPOS_NOTIFICACAO,
   agruparPorPrioridade,
   chaveDedupe,
+  deltaResumo,
   descreverNotificacaoEstoque,
   descreverNotificacaoPedido,
   estadoLeitura,
   notificacaoAbreModal,
+  notificacaoNoHistorico,
+  notificacaoVisivelNaCentral,
   resumirNotificacoes,
   rotaDaNotificacao,
   selecionarNotificacoesDoModal,
@@ -248,6 +251,81 @@ test('resumo conta urgentes, normais e não lidas apenas entre as ativas', () =>
     naoLidas: 2,
     total: 3,
   })
+})
+
+// 13.1 dispensar tira da lista ativa — o bug era exatamente este: `silenciada_em`
+// era gravado e nenhuma leitura olhava para a coluna.
+test('notificação dispensada sai da lista ativa e entra no histórico', () => {
+  const ativa = notificacao({ id: 'n1' })
+  const dispensada = notificacao({ id: 'n2', silenciada_em: '2026-08-15T11:00:00.000Z' })
+  const resolvida = notificacao({ id: 'n3', estado: 'resolvida' })
+
+  assert.equal(notificacaoVisivelNaCentral(ativa), true)
+  assert.equal(notificacaoVisivelNaCentral(dispensada), false)
+  assert.equal(notificacaoVisivelNaCentral(resolvida), false)
+
+  assert.equal(notificacaoNoHistorico(ativa), false)
+  assert.equal(notificacaoNoHistorico(dispensada), true)
+  assert.equal(notificacaoNoHistorico(resolvida), true)
+})
+
+// 13.2 dispensada não conta no badge
+test('resumo ignora dispensada, como faz resumo_notificacoes no banco', () => {
+  const lista = [
+    notificacao({ id: 'n1', prioridade: PRIORIDADES.URGENTE }),
+    notificacao({
+      id: 'n2',
+      prioridade: PRIORIDADES.URGENTE,
+      silenciada_em: '2026-08-15T11:00:00.000Z',
+    }),
+    notificacao({ id: 'n3', prioridade: PRIORIDADES.NORMAL }),
+  ]
+
+  assert.deepEqual(resumirNotificacoes(lista), {
+    urgentes: 1,
+    normais: 1,
+    naoLidas: 2,
+    total: 2,
+  })
+})
+
+// 13.3 delta usado pela marcação otimista do cliente
+test('delta do resumo: marcar como lida tira 1 de não lidas; dispensar zera as quatro', () => {
+  const antes = notificacao({ id: 'n1', prioridade: PRIORIDADES.URGENTE })
+
+  assert.deepEqual(deltaResumo(antes, { ...antes, lida_em: '2026-08-15T11:00:00.000Z' }), {
+    urgentes: 0,
+    normais: 0,
+    naoLidas: -1,
+    total: 0,
+  })
+
+  assert.deepEqual(deltaResumo(antes, { ...antes, silenciada_em: '2026-08-15T11:00:00.000Z' }), {
+    urgentes: -1,
+    normais: 0,
+    naoLidas: -1,
+    total: -1,
+  })
+
+  // Dispensar algo que já estava lido não pode devolver -1 em `naoLidas`:
+  // aquela unidade já tinha saído do contador.
+  const lida = notificacao({ id: 'n2', lida_em: '2026-08-15T11:00:00.000Z' })
+  assert.deepEqual(deltaResumo(lida, { ...lida, silenciada_em: '2026-08-15T11:30:00.000Z' }), {
+    urgentes: -1,
+    normais: 0,
+    naoLidas: 0,
+    total: -1,
+  })
+})
+
+// 13.4 reincidência é linha nova, com leitura vazia
+test('reincidência não herda o silêncio da ocorrência anterior', () => {
+  const dispensada = notificacao({ id: 'n1', silenciada_em: '2026-08-15T11:00:00.000Z' })
+  const reincidencia = notificacao({ id: 'n2', criada_em: '2026-08-15T11:59:00.000Z' })
+
+  assert.equal(dispensada.chave_dedupe, reincidencia.chave_dedupe)
+  assert.equal(notificacaoVisivelNaCentral(reincidencia), true)
+  assert.equal(notificacaoAbreModal(reincidencia), true)
 })
 
 // 14. rota de contexto

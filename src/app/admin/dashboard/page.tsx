@@ -64,8 +64,13 @@ const COLUNAS_PEDIDO_DASHBOARD =
 type Estatisticas = {
   totalPedidos: number
   pedidosHoje: number
-  receitaTotal: number
-  receitaHoje: number
+  /**
+   * Ausentes quando falta `dashboard.ver_receita`. `undefined` em vez de zero
+   * de propósito: zero é um faturamento, e faturamento zero significa outra
+   * coisa que "você não tem acesso a este número".
+   */
+  receitaTotal?: number
+  receitaHoje?: number
 }
 
 // Formata valor monetário no padrão brasileiro (R$ 1.234,56)
@@ -83,8 +88,6 @@ export default function Dashboard() {
   const [estatisticas, setEstatisticas] = useState<Estatisticas>({
     totalPedidos: 0,
     pedidosHoje: 0,
-    receitaTotal: 0,
-    receitaHoje: 0,
   })
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [loading, setLoading] = useState(true)
@@ -186,28 +189,34 @@ export default function Dashboard() {
     const agora = new Date()
     const { inicio: inicioPeriodoHoje } = obterIntervaloDiaOperacionalAtual(agora)
 
-    const [{ data: statsMes, error: erroMes }, { data: statsHoje, error: erroHoje }] = await Promise.all([
-      supabase.rpc('estatisticas_pedidos_periodo', {
-        p_inicio: inicioMes,
-        p_fim: fimMes,
-      }),
-      supabase.rpc('estatisticas_pedidos_periodo', {
-        p_inicio: inicioPeriodoHoje.toISOString(),
-        p_fim: agora.toISOString(),
-      }),
-    ])
+    const parametros = new URLSearchParams({
+      inicioMes,
+      fimMes,
+      inicioHoje: inicioPeriodoHoje.toISOString(),
+      fimHoje: agora.toISOString(),
+    })
 
-    if (erroMes) throw erroMes
-    if (erroHoje) throw erroHoje
+    const resposta = await fetch(`/api/admin/dashboard?${parametros}`, {
+      credentials: 'same-origin',
+    })
+    const json = (await resposta.json()) as {
+      sucesso?: boolean
+      erro?: string
+      totalPedidos?: number
+      pedidosHoje?: number
+      receitaTotal?: number
+      receitaHoje?: number
+    }
 
-    const linhaMes = Array.isArray(statsMes) ? statsMes[0] : statsMes
-    const linhaHoje = Array.isArray(statsHoje) ? statsHoje[0] : statsHoje
+    if (!resposta.ok || !json.sucesso) {
+      throw new Error(json.erro || 'Falha ao carregar indicadores')
+    }
 
     setEstatisticas({
-      totalPedidos: Number(linhaMes?.total_pedidos || 0),
-      pedidosHoje: Number(linhaHoje?.total_pedidos || 0),
-      receitaTotal: Number(linhaMes?.receita || 0),
-      receitaHoje: Number(linhaHoje?.receita || 0),
+      totalPedidos: Number(json.totalPedidos || 0),
+      pedidosHoje: Number(json.pedidosHoje || 0),
+      receitaTotal: json.receitaTotal,
+      receitaHoje: json.receitaHoje,
     })
   }, [])
 
@@ -311,12 +320,18 @@ export default function Dashboard() {
             })
           }, 5000)
 
+          // Só soma receita para quem já a estava vendo: incrementar um campo
+          // ausente o faria aparecer do nada para quem não tem a permissão.
           setEstatisticas(prev => ({
             ...prev,
             totalPedidos: prev.totalPedidos + 1,
             pedidosHoje: prev.pedidosHoje + 1,
-            receitaTotal: prev.receitaTotal + Number(novoPedido.total || 0),
-            receitaHoje: prev.receitaHoje + Number(novoPedido.total || 0),
+            ...(prev.receitaTotal !== undefined && prev.receitaHoje !== undefined
+              ? {
+                  receitaTotal: prev.receitaTotal + Number(novoPedido.total || 0),
+                  receitaHoje: prev.receitaHoje + Number(novoPedido.total || 0),
+                }
+              : {}),
           }))
         }
       )
@@ -479,14 +494,16 @@ export default function Dashboard() {
                     {estatisticas.pedidosHoje}
                   </p>
                 </div>
-                <div className="min-w-[100px]">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                    Receita hoje
-                  </p>
-                  <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">
-                    {formatarValor(`R$ ${formatarMoeda(estatisticas.receitaHoje)}`)}
-                  </p>
-                </div>
+                {estatisticas.receitaHoje !== undefined ? (
+                  <div className="min-w-[100px]">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                      Receita hoje
+                    </p>
+                    <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">
+                      {formatarValor(`R$ ${formatarMoeda(estatisticas.receitaHoje)}`)}
+                    </p>
+                  </div>
+                ) : null}
                 <div className="min-w-[72px]">
                   <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                     Pedidos mês
@@ -495,14 +512,16 @@ export default function Dashboard() {
                     {estatisticas.totalPedidos}
                   </p>
                 </div>
-                <div className="min-w-[100px]">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                    Receita mês
-                  </p>
-                  <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">
-                    {formatarValor(`R$ ${formatarMoeda(estatisticas.receitaTotal)}`)}
-                  </p>
-                </div>
+                {estatisticas.receitaTotal !== undefined ? (
+                  <div className="min-w-[100px]">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                      Receita mês
+                    </p>
+                    <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">
+                      {formatarValor(`R$ ${formatarMoeda(estatisticas.receitaTotal)}`)}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             </div>
 

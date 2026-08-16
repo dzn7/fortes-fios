@@ -135,6 +135,26 @@ export const notificacaoAbreModal = (notificacao) =>
   !notificacao.lida_em &&
   !notificacao.silenciada_em
 
+/**
+ * Uma notificação ocupa a lista ativa e os contadores enquanto a condição
+ * existir E o usuário não a tiver dispensado. Espelha o `where` de
+ * `resumo_notificacoes`/`listar_notificacoes` — sem esse espelho, a marcação
+ * otimista do cliente diverge do que o servidor devolve logo em seguida.
+ *
+ * @param {{ estado?: string, silenciada_em?: unknown }} notificacao
+ */
+export const notificacaoVisivelNaCentral = (notificacao) =>
+  notificacao?.estado === 'ativa' && !notificacao.silenciada_em
+
+/**
+ * Histórico: o que saiu da lista ativa, seja porque a condição acabou
+ * (resolvida) ou porque o usuário dispensou a ocorrência.
+ *
+ * @param {{ estado?: string, silenciada_em?: unknown }} notificacao
+ */
+export const notificacaoNoHistorico = (notificacao) =>
+  notificacao?.estado === 'resolvida' || Boolean(notificacao?.silenciada_em)
+
 const pesoPrioridade = (notificacao) =>
   notificacao?.prioridade === PRIORIDADES.URGENTE ? 0 : 1
 
@@ -165,6 +185,45 @@ export const agruparPorPrioridade = (lista) => {
   }
 }
 
+const RESUMO_ZERO = { urgentes: 0, normais: 0, naoLidas: 0, total: 0 }
+
+/**
+ * Quanto uma única notificação soma ao badge. Usada para ajustar os contadores
+ * por DELTA depois de uma ação local: a lista do painel vem truncada, então
+ * recontar a coleção inteira derrubaria o badge para o tamanho da página.
+ *
+ * @param {Record<string, unknown>} notificacao
+ */
+export const contribuicaoResumo = (notificacao) => {
+  if (!notificacaoVisivelNaCentral(notificacao)) return { ...RESUMO_ZERO }
+
+  const urgente = notificacao.prioridade === PRIORIDADES.URGENTE
+  return {
+    urgentes: urgente ? 1 : 0,
+    normais: urgente ? 0 : 1,
+    naoLidas: notificacao.lida_em ? 0 : 1,
+    total: 1,
+  }
+}
+
+/**
+ * Diferença entre o retrato anterior e o novo da MESMA notificação, no formato
+ * do resumo. Marcar como lida devolve `naoLidas: -1`; dispensar zera as quatro.
+ *
+ * @param {Record<string, unknown>} antes
+ * @param {Record<string, unknown>} depois
+ */
+export const deltaResumo = (antes, depois) => {
+  const a = contribuicaoResumo(antes)
+  const b = contribuicaoResumo(depois)
+  return {
+    urgentes: b.urgentes - a.urgentes,
+    normais: b.normais - a.normais,
+    naoLidas: b.naoLidas - a.naoLidas,
+    total: b.total - a.total,
+  }
+}
+
 /**
  * Contadores do badge derivados de uma coleção já carregada. O caminho de
  * produção usa `resumo_notificacoes` no banco; esta função existe para o
@@ -173,14 +232,14 @@ export const agruparPorPrioridade = (lista) => {
  * @param {Array<Record<string, unknown>>} lista
  */
 export const resumirNotificacoes = (lista) => {
-  const resumo = { urgentes: 0, normais: 0, naoLidas: 0, total: 0 }
+  const resumo = { ...RESUMO_ZERO }
 
   for (const item of Array.isArray(lista) ? lista : []) {
-    if (item?.estado !== 'ativa') continue
-    resumo.total += 1
-    if (item.prioridade === PRIORIDADES.URGENTE) resumo.urgentes += 1
-    else resumo.normais += 1
-    if (!item.lida_em) resumo.naoLidas += 1
+    const parcela = contribuicaoResumo(item)
+    resumo.urgentes += parcela.urgentes
+    resumo.normais += parcela.normais
+    resumo.naoLidas += parcela.naoLidas
+    resumo.total += parcela.total
   }
 
   return resumo

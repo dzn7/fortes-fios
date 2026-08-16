@@ -87,6 +87,23 @@ export function notificacaoAbreModal(notificacao: {
   silenciada_em?: string | null
 }): boolean
 
+export function notificacaoVisivelNaCentral(notificacao: {
+  estado?: string
+  silenciada_em?: string | null
+}): boolean
+
+export function notificacaoNoHistorico(notificacao: {
+  estado?: string
+  silenciada_em?: string | null
+}): boolean
+
+export function contribuicaoResumo(notificacao: Partial<Notificacao>): ResumoNotificacoes
+
+export function deltaResumo(
+  antes: Partial<Notificacao>,
+  depois: Partial<Notificacao>,
+): ResumoNotificacoes
+
 export function selecionarNotificacoesDoModal<T extends Notificacao>(
   lista: T[],
   limite?: number,

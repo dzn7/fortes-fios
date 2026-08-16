@@ -110,10 +110,10 @@ Primitivos Kibo UI disponíveis:
 | Componente | Caminho | Responsabilidade |
 |---|---|---|
 | `AdminLayout` | `src/components/admin/AdminLayout.tsx` | Sidebar, header, comandos, atalhos, tema e personalização via `SidebarPersonalizarModal` + API; exibe logo e marca Fortes Fios sem alterar a paleta azul administrativa |
-| `SinoNotificacoes` | `src/components/admin/notificacoes/SinoNotificacoes.tsx` | Sino do header, entre o botão de tema e o menu do usuário. Badge com não lidas (vermelho quando há urgente, `9+` acima de nove); o número vem de contadores do servidor, nunca de varredura da lista |
-| `PainelNotificacoes` | `src/components/admin/notificacoes/PainelNotificacoes.tsx` | Central: separa **Precisa de atenção** (urgentes, acento vermelho) de **Informações**; marcar como lida, dispensar, marcar todas, mostrar resolvidas e reativar o modal de entrada. `Dialog` compartilhado → `Drawer` no mobile |
+| `SinoNotificacoes` | `src/components/admin/notificacoes/SinoNotificacoes.tsx` | Sino do header, entre o botão de tema e o menu do usuário. Badge com não lidas (vermelho quando há urgente, `9+` acima de nove); o número vem de contadores do servidor, nunca de varredura da lista. **Hospeda a superfície da central**: `Popover` ancorado no sino no desktop, `Drawer` abaixo de 768 px |
+| `PainelNotificacoes` | `src/components/admin/notificacoes/PainelNotificacoes.tsx` | Conteúdo da central, sem superfície própria (quem a fornece é o `SinoNotificacoes`): separa **Precisa de atenção** de **Informações**, com **Histórico** sob demanda. Cabeçalho e rodapé fixos, só a lista rola; rodapé com duas ações apenas — marcar todas como lidas e histórico |
 | `ModalAlertasEntrada` | `src/components/admin/notificacoes/ModalAlertasEntrada.tsx` | Modal de entrada, uma vez por sessão, com até 3 alertas e "e mais N". Fechar marca como visualizado; **Não mostrar novamente** desliga o modal para o usuário, de forma reversível pelo rodapé do painel |
-| `ItemNotificacao` | `src/components/admin/notificacoes/ItemNotificacao.tsx` | Linha compartilhada por painel e modal: ícone por tipo, selo **Urgente**, barra vermelha à esquerda, tempo relativo e navegação para o contexto |
+| `ItemNotificacao` | `src/components/admin/notificacoes/ItemNotificacao.tsx` | Cartão compartilhado por painel e modal: ícone por tipo, fio vermelho à esquerda quando urgente, ponto de não lida, tempo relativo e ações `✓`/`✕` no canto. O cartão inteiro leva ao contexto por *stretched link* (`after:inset-0`), sem aninhar botão em botão |
 | `NotificacoesProvider` | `src/contexts/NotificacoesContext.tsx` | Origem única dos dados, montada em `src/app/admin/layout.tsx`. Nenhuma tela abre consulta própria |
 | `/admin/vitrine` | `src/app/admin/vitrine/page.tsx` | Gestão dos banners: arte desktop obrigatoriamente horizontal (21:8 ou 16:9), arte mobile 16:9/4:5/9:16, prévia alternável Desktop/Celular fiel à proporção e tipografia públicas, título multilinear de até 240 caracteres, família tipográfica e peso configuráveis por banner, nove posições de texto (grade 3×3), cor/contraste, publicação, ordem e exclusão; persiste imediatamente no JSON existente. Editor e recorte são etapas sequenciais: nunca manter dois overlays ou dois focus traps montados ao mesmo tempo |
 | `EditorFaixaRodape` | `src/components/admin/vitrine/EditorFaixaRodape.tsx` | Aba Cabeçalho da Vitrine: ativa/oculta a faixa promocional, edita a mensagem em linguagem comercial e mostra uma prévia fiel sem exigir caminhos de arquivo ou conhecimento técnico |
@@ -200,7 +200,8 @@ Central interna do Admin (não é push, e-mail ou WhatsApp). Spec: `specs/centra
 
 - **Vermelho = urgência**, e no estoque fica reservado ao caso terminal: `esgotado` (não vende mais).
 - **Âmbar = estoque baixo** — atenção, ainda vende.
-- A cor do **ícone** diz *qual* é o problema; a **barra vermelha à esquerda** e o selo **Urgente** dizem que é urgente. São eixos separados, então "urgente" não obriga tudo a ficar vermelho.
+- A cor do **ícone** diz *qual* é o problema; o **fio vermelho na borda esquerda** e o agrupamento em **Precisa de atenção** dizem que é urgente. São eixos separados, então "urgente" não obriga tudo a ficar vermelho.
+- Não repetir o selo **Urgente** em todo cartão: com o estoque inteiro em alerta o selo vira ruído e apaga a diferença entre baixo e esgotado. A urgência já está no agrupamento e no fio da borda.
 - Nunca comunicar estado só por cor: sempre acompanha texto e ícone.
 - Com 4 de 5 produtos esgotados hoje, pintar estoque baixo de vermelho destruiria a hierarquia — por isso a divisão âmbar/vermelho.
 
@@ -211,14 +212,22 @@ Dois eixos, porque quem resolve o problema é a operação e quem lê é a pesso
 ```
 notificação (sistema):  ativa ──────────────► resolvida
 por usuário (leitura):  nova → visualizada → lida
-                                 └─ silenciada (não volta ao modal)
+                                 └─ dispensada (sai da lista e do badge)
 ```
+
+**Dispensar tem que ter efeito nas três leituras.** `silenciada_em` mora em
+`notificacoes_leitura` e precisa ser respeitado por `resumo_notificacoes`, por
+`listar_notificacoes` e pelo filtro do painel. Foi exatamente aí que a primeira
+versão quebrou: a coluna era gravada e nenhuma das três leituras a consultava,
+então o botão parecia morto. `notificacaoVisivelNaCentral` (em
+`notificacoes.mjs`) é o espelho em JS desse mesmo `where`.
 
 Uma condição contínua gera **um** alerta ativo — garantido por índice único parcial no banco, não por disciplina de código. Resolver e reincidir gera **ocorrência nova**, que volta a aparecer.
 
 ### Regras de superfície
 
-- Painel e modal usam o `Dialog` compartilhado, que já vira `Drawer` vaul abaixo de 768 px; camada vem de `overlay-layer.tsx`, nunca `z-index` literal.
+- O painel é `Popover` ancorado no sino no desktop e `Drawer` abaixo de 768 px; o modal de entrada usa o `Dialog` compartilhado. Camada vem de `overlay-layer.tsx`, nunca `z-index` literal.
+- Consultar aviso não é decisão modal: o painel não escurece a tela nem prende o foco. Painel centrado no meio da tela perde o vínculo com o sino que a pessoa acabou de clicar.
 - Cadeia `flex flex-col` + `min-h-0 flex-1 overflow-y-auto`, com rodapé fora da área que rola e `pb-[max(...,env(safe-area-inset-bottom))]`.
 - Mensagem longa usa `break-words`; o modal não bloqueia o uso do sistema (Escape, clique fora e botão de 44 px).
 - O modal de entrada aparece **uma vez por sessão** e no máximo com 3 itens; o excedente vira "e mais N".
@@ -229,6 +238,62 @@ Uma condição contínua gera **um** alerta ativo — garantido por índice úni
 - Contar notificação varrendo a lista para montar o badge — a lista vem truncada, o contador vem do servidor.
 - Transformar toda notificação em urgente. Pedido novo é `normal`; ele só escala para urgente depois de 12 h parado.
 - Tratar "não mostrar novamente" como estado local: a preferência mora no banco e precisa sobreviver a logout e a outro dispositivo.
+- Gravar uma marcação de leitura sem que alguma leitura a respeite. Toda coluna de `notificacoes_leitura` precisa aparecer no `where` de quem lista **e** de quem conta.
+- Empilhar três ou mais ações no rodapé do painel. São duas: marcar todas como lidas e histórico. Estado raro — "aviso ao entrar desligado" — vira aviso no corpo, com o próprio botão de reverter.
+
+## Permissões no Admin
+
+RBAC de Administrador e Atendente. Spec: `specs/rbac-admin.md`.
+
+### A pergunta certa
+
+Nunca `papel === 'atendente'`. Sempre a permissão:
+
+```tsx
+const pode = usePermissoes()
+{pode('dashboard.ver_receita') ? <CardFaturamento /> : null}
+```
+
+O catálogo é `src/lib/rbac.mjs` — 15 módulos, os do menu real. Tela legada não
+tem permissão porque não tem tabela no banco (PRD §Legado).
+
+### Três camadas, e só uma é visual
+
+| Camada | Onde | O que garante |
+|---|---|---|
+| Sessão | cookie `httpOnly` assinado, `/api/admin/sessao` | quem é |
+| Autorização | `exigirPermissao()` no route handler | 401/403 antes de tocar no banco |
+| Dados | grants do Postgres | o desvio pelo DevTools |
+
+Esconder componente é **UX**, não segurança. Todo `if (!pode(...)) return null`
+precisa de um `exigirPermissao` correspondente no servidor — senão o dado
+continua a uma requisição de distância.
+
+### Tela de Acessos
+
+`GerenciadorUsuariosSistema` (aba **Acessos da equipe** em `/admin/usuarios`) com
+`EditorPermissoes` (`src/components/admin/acessos/`).
+
+- Permissões **agrupadas por módulo**, com "marcar tudo" por grupo e contador `3 de 7`. Lista corrida de 40 caixas é onde esse tipo de tela vira inútil.
+- Ação que alcança número estratégico leva selo **Financeiro** (âmbar); ação que mexe em acesso leva **Acesso** (vermelho). O administrador enxerga o que está concedendo sem decorar a matriz.
+- Botão **Padrão do atendente** aplica o preset como retrato completo — zera o que estava fora dele, em vez de somar por cima.
+- Administrador não tem formulário: aparece um aviso de acesso total. Formulário desabilitado dá a impressão de ser configurável, e não é — admin resolve para tudo por função, não por linha em tabela.
+- Trocar o papel recarrega o preset; clicar no papel **já selecionado** não faz nada, senão o clique perderia as customizações.
+- A lista mostra o resumo (`Acesso total`, `14 permissões`, `Sem acesso ao Admin`) para responder "o que essa pessoa vê?" sem abrir cada usuário.
+
+### Regras de interface
+
+- Sidebar, ⌘K e atalhos do header filtram por `podeVerRota`. Grupo que fica sem item some inteiro, em vez de virar seção vazia.
+- Rota sem permissão mostra a tela de bloqueio do `ProtectedRoute`, com o caminho de volta — não redireciona em silêncio, que deixa a pessoa sem saber o que aconteceu.
+- Distinguir preferência de permissão: `telaEstaVisivel` é "o dono escondeu"; `podeVerRota` é "você não tem acesso". Os dois filtram a sidebar e não significam a mesma coisa.
+- `/admin/usuarios` abre com Clientes **ou** Acessos liberado; negar a rota inteira por falta de `acessos.ver` esconderia também a lista de clientes.
+
+### Anti-padrões desta área
+
+- `if (role === 'atendente')` espalhado pela tela. A regra mora no catálogo, não no componente.
+- Conceder permissão nova sem fechar o dado no servidor: vira teatro.
+- Devolver campo sensível zerado para quem não tem acesso. `receita: 0` inventa um faturamento de zero reais; o campo **ausente** diz a verdade. Ver `/api/admin/dashboard`.
+- Tratar valor de pedido e faturamento como a mesma permissão. `pedidos.ver_valor` é o R$ 85,00 que o atendente precisa cobrar; `dashboard.ver_receita` é o R$ 4.580 do dia.
 
 ## Padrões de layout
 

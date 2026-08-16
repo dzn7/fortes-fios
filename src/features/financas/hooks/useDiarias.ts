@@ -2,21 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { supabase } from '@/lib/supabase'
 import type { EntradaDiaria, FinancasDiaria } from '../types'
-
-const COLUNAS_DIARIA =
-  'id, data_referencia, nome_pessoa, funcionario_id, valor, forma_pagamento, observacoes, movimentacao_id, created_at, updated_at'
 
 type UseDiariasArgs = {
   inicio: string
   fim: string
-}
-
-const dataIsoMeioDia = (yyyyMmDd: string) => {
-  const [ano, mes, dia] = yyyyMmDd.split('-').map(Number)
-  if (!ano || !mes || !dia) return new Date().toISOString()
-  return new Date(ano, mes - 1, dia, 12, 0, 0, 0).toISOString()
 }
 
 const normalizarDataReferencia = (valor: string) => {
@@ -41,17 +31,26 @@ export function useDiarias({ inicio, fim }: UseDiariasArgs) {
     setCarregando(true)
     setErro(null)
     try {
-      const { data, error } = await supabase
-        .from('financas_diarias')
-        .select(COLUNAS_DIARIA)
-        .gte('data_referencia', inicioDia)
-        .lte('data_referencia', fimDia)
-        .order('data_referencia', { ascending: false })
-        .order('created_at', { ascending: false })
+      const parametros = new URLSearchParams({ inicio: inicioDia, fim: fimDia })
+      const resposta = await fetch(`/api/admin/financas/diarias?${parametros}`, {
+        credentials: 'same-origin',
+      })
+      const json = (await resposta.json()) as {
+        sucesso?: boolean
+        erro?: string
+        diarias?: FinancasDiaria[]
+      }
 
-      if (error) throw error
+      if (!resposta.ok || !json.sucesso) {
+        throw new Error(
+          resposta.status === 403
+            ? 'Seu acesso não inclui os dados financeiros.'
+            : json.erro || 'Falha ao carregar diárias',
+        )
+      }
+
       setDiarias(
-        (data ?? []).map((row) => ({
+        (json.diarias ?? []).map((row) => ({
           ...row,
           valor: Number(row.valor ?? 0),
           data_referencia: normalizarDataReferencia(String(row.data_referencia)),
@@ -85,67 +84,35 @@ export function useDiarias({ inicio, fim }: UseDiariasArgs) {
 
       const dataRef = normalizarDataReferencia(entrada.data_referencia)
 
-      const { data: categoria } = await supabase
-        .from('categorias_caixa')
-        .select('id')
-        .eq('tipo', 'saida')
-        .ilike('nome', 'diária')
-        .eq('ativo', true)
-        .maybeSingle()
-
-      const { data: caixaAberto } = await supabase
-        .from('caixas')
-        .select('id')
-        .eq('status', 'aberto')
-        .order('data_abertura', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      const descricaoBase = `Diária – ${nome}`
-      const obs = entrada.observacoes?.trim()
-      const descricao = obs ? `${descricaoBase} (${obs})` : descricaoBase
-
-      const { data: movimentacao, error: erroMov } = await supabase
-        .from('movimentacoes_caixa')
-        .insert({
-          tipo: 'saida',
-          valor: entrada.valor,
-          descricao,
-          categoria_id: categoria?.id ?? null,
-          funcionario_id: entrada.funcionario_id || null,
-          forma_pagamento: entrada.forma_pagamento ?? null,
-          caixa_id: caixaAberto?.id ?? null,
-          created_at: dataIsoMeioDia(dataRef),
-        })
-        .select('id')
-        .single()
-
-      if (erroMov || !movimentacao?.id) {
-        const msg = erroMov?.message || 'Não foi possível lançar a despesa da diária.'
-        toast.error(msg)
-        throw new Error(msg)
-      }
-
-      const { data: diaria, error: erroDiaria } = await supabase
-        .from('financas_diarias')
-        .insert({
-          data_referencia: dataRef,
+      const resposta = await fetch('/api/admin/financas/diarias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
           nome_pessoa: nome,
-          funcionario_id: entrada.funcionario_id || null,
           valor: entrada.valor,
+          data_referencia: dataRef,
+          funcionario_id: entrada.funcionario_id || null,
           forma_pagamento: entrada.forma_pagamento ?? null,
-          observacoes: obs || null,
-          movimentacao_id: movimentacao.id,
-        })
-        .select(COLUNAS_DIARIA)
-        .single()
+          observacoes: entrada.observacoes ?? null,
+        }),
+      })
+      const json = (await resposta.json()) as {
+        sucesso?: boolean
+        erro?: string
+        diaria?: FinancasDiaria
+      }
 
-      if (erroDiaria || !diaria) {
-        await supabase.from('movimentacoes_caixa').delete().eq('id', movimentacao.id)
-        const msg = erroDiaria?.message || 'Não foi possível salvar a diária.'
+      if (!resposta.ok || !json.sucesso || !json.diaria) {
+        const msg =
+          resposta.status === 403
+            ? 'Seu acesso não inclui esta operação.'
+            : json.erro || 'Não foi possível salvar a diária.'
         toast.error(msg)
         throw new Error(msg)
       }
+
+      const diaria = json.diaria
 
       toast.success('Diária lançada como despesa')
       await carregar()
@@ -160,14 +127,19 @@ export function useDiarias({ inicio, fim }: UseDiariasArgs) {
 
   const removerDiaria = useCallback(
     async (diaria: FinancasDiaria) => {
-      const { error } = await supabase
-        .from('movimentacoes_caixa')
-        .delete()
-        .eq('id', diaria.movimentacao_id)
+      const resposta = await fetch(
+        `/api/admin/financas/diarias?movimentacaoId=${encodeURIComponent(diaria.movimentacao_id)}`,
+        { method: 'DELETE', credentials: 'same-origin' },
+      )
+      const json = (await resposta.json()) as { sucesso?: boolean; erro?: string }
 
-      if (error) {
-        toast.error('Não foi possível excluir a diária. ' + error.message)
-        throw error
+      if (!resposta.ok || !json.sucesso) {
+        const msg =
+          resposta.status === 403
+            ? 'Seu acesso não inclui esta operação.'
+            : json.erro || 'Falha ao excluir'
+        toast.error('Não foi possível excluir a diária. ' + msg)
+        throw new Error(msg)
       }
 
       toast.success('Diária e despesa removidas')

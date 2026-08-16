@@ -18,7 +18,6 @@ import {
   Camera,
   Save,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import {
   criarUsuarioSistema,
   atualizarUsuarioSistema,
@@ -60,6 +59,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { EditorPermissoes } from '@/components/admin/acessos/EditorPermissoes'
+import { PAPEIS as PAPEIS_RBAC, resolverPermissoes, type PermissoesAdmin } from '@/lib/rbac.mjs'
 import { FiltrosAtivosChips, type ChipFiltroAtivo } from '@/components/admin/filtros/FiltrosAtivosChips'
 import { CHIP_FILTRO_DEFAULT } from '@/components/admin/filtros/chip-classes'
 import { ListaVazia, TabelaSkeleton } from '@/components/admin/filtros/ListaEstado'
@@ -76,6 +77,8 @@ type UsuarioComStatus = {
   funcionario_id: string | null
   ultimo_acesso: string | null
   created_at: string
+  /** Já resolvidas pelo servidor (preset do papel + overrides). */
+  permissoes?: PermissoesAdmin
 }
 
 type FormularioUsuario = {
@@ -86,9 +89,6 @@ type FormularioUsuario = {
   corAvatar: string
   ativo: boolean
 }
-
-const COLUNAS_SEGURAS =
-  'id, nome, nome_usuario, papel, avatar_url, cor_avatar, ativo, funcionario_id, ultimo_acesso, created_at'
 
 const CORES_AVATAR = [
   '#0296F9',
@@ -101,28 +101,53 @@ const CORES_AVATAR = [
   '#06b6d4',
 ]
 
+/**
+ * Os dois papéis que entram pelo `/admin`. `garcom` e `entregador` continuam
+ * existindo como linha (a tela de Equipe ainda os cria) e aparecem na lista
+ * quando houver, mas não são oferecidos aqui: não abrem tela administrativa
+ * nenhuma neste projeto.
+ */
 const PAPEIS: { valor: PapelUsuario; rotulo: string; icone: typeof Shield }[] = [
   { valor: 'admin', rotulo: 'Administrador', icone: Shield },
-  { valor: 'garcom', rotulo: 'Atendimento', icone: Headphones },
-  { valor: 'entregador', rotulo: 'Entrega', icone: Truck },
+  { valor: 'atendente', rotulo: 'Atendente', icone: Headphones },
 ]
+
+const PAPEIS_LEGADOS: { valor: PapelUsuario; rotulo: string; icone: typeof Shield }[] = [
+  { valor: 'garcom', rotulo: 'Atendimento (legado)', icone: Headphones },
+  { valor: 'entregador', rotulo: 'Entrega (legado)', icone: Truck },
+]
+
+const TODOS_PAPEIS = [...PAPEIS, ...PAPEIS_LEGADOS]
 
 const FILTROS_PAPEL: Array<{ valor: PapelUsuario | 'todos'; label: string }> = [
   { valor: 'todos', label: 'Todos' },
-  ...PAPEIS.map((p) => ({ valor: p.valor, label: p.rotulo })),
+  ...TODOS_PAPEIS.map((p) => ({ valor: p.valor, label: p.rotulo })),
 ]
 
 const formularioInicial: FormularioUsuario = {
   nome: '',
   nomeUsuario: '',
   senha: '',
-  papel: 'garcom',
+  papel: 'atendente',
   corAvatar: '#0296F9',
   ativo: true,
 }
 
 const rotuloPapel = (papel: PapelUsuario) =>
-  PAPEIS.find((p) => p.valor === papel)?.rotulo ?? papel
+  TODOS_PAPEIS.find((p) => p.valor === papel)?.rotulo ?? papel
+
+/**
+ * Resumo do alcance do usuário, para a lista responder "o que essa pessoa vê?"
+ * sem obrigar a abrir o modal de cada uma.
+ */
+const resumoAcesso = (usuario: UsuarioComStatus) => {
+  if (usuario.papel === PAPEIS_RBAC.ADMIN) return 'Acesso total'
+  if (usuario.papel !== PAPEIS_RBAC.ATENDENTE) return 'Sem acesso ao Admin'
+
+  const total = Object.values(usuario.permissoes ?? {}).filter(Boolean).length
+  if (total === 0) return 'Nenhuma permissão'
+  return `${total} ${total === 1 ? 'permissão' : 'permissões'}`
+}
 
 export default function GerenciadorUsuariosSistema() {
   const [usuarios, setUsuarios] = useState<UsuarioComStatus[]>([])
@@ -147,18 +172,37 @@ export default function GerenciadorUsuariosSistema() {
     PAPEL_PARA_TIPO_FUNCIONARIO[formularioInicial.papel],
   )
   const [telefoneFuncionario, setTelefoneFuncionario] = useState('')
+  // Mapa completo (não só os overrides): o editor trabalha sobre o retrato
+  // resolvido, e é ele que vai para o servidor.
+  const [permissoes, setPermissoes] = useState<PermissoesAdmin>({})
   const inputAvatarRef = useRef<HTMLInputElement>(null)
 
+  /**
+   * Lista pela rota autorizada, não por consulta direta: `permissoes` e
+   * `permissoes_versao` saíram do alcance de `anon`, e é o servidor que resolve
+   * preset + overrides — assim a tela não reimplementa a regra.
+   */
   const carregarUsuarios = useCallback(async () => {
     try {
       setCarregando(true)
-      const { data, error } = await supabase
-        .from('usuarios_sistema')
-        .select(COLUNAS_SEGURAS)
-        .order('nome')
+      const resposta = await fetch('/api/admin/acessos', { credentials: 'same-origin' })
+      const json = (await resposta.json()) as {
+        sucesso?: boolean
+        erro?: string
+        usuarios?: UsuarioComStatus[]
+      }
 
-      if (error) throw error
-      setUsuarios((data || []) as UsuarioComStatus[])
+      if (!resposta.ok || !json.sucesso) {
+        toast.error(
+          resposta.status === 403
+            ? 'Seu acesso não inclui a gestão de acessos.'
+            : json.erro || 'Erro ao carregar usuários',
+        )
+        setUsuarios([])
+        return
+      }
+
+      setUsuarios(json.usuarios || [])
     } catch (erro) {
       console.error('Erro ao carregar usuários:', erro)
       toast.error('Erro ao carregar usuários')
@@ -178,13 +222,20 @@ export default function GerenciadorUsuariosSistema() {
     setCriarFuncionario(true)
     setTipoFuncionario(PAPEL_PARA_TIPO_FUNCIONARIO[formularioInicial.papel])
     setTelefoneFuncionario('')
+    setPermissoes(resolverPermissoes({ papel: formularioInicial.papel, ativo: true }))
     setModalAberto(true)
   }
 
-  /** Trocar o papel reposiciona a função sugerida do funcionário. */
+  /**
+   * Trocar o papel reposiciona a função sugerida do funcionário e recarrega o
+   * preset — virar atendente sem trazer o padrão deixaria o formulário com as
+   * permissões do papel anterior, que é o oposto do que a escolha significa.
+   */
   const alterarPapel = (papel: PapelUsuario) => {
+    if (papel === formulario.papel) return
     setFormulario((atual) => ({ ...atual, papel }))
     setTipoFuncionario(PAPEL_PARA_TIPO_FUNCIONARIO[papel])
+    setPermissoes(resolverPermissoes({ papel, ativo: true }))
   }
 
   const abrirModalEditar = (usuario: UsuarioComStatus) => {
@@ -200,6 +251,9 @@ export default function GerenciadorUsuariosSistema() {
       ativo: usuario.ativo,
     })
     setMostrarSenha(false)
+    setPermissoes(
+      usuario.permissoes ?? resolverPermissoes({ papel: usuario.papel, ativo: usuario.ativo }),
+    )
     setModalAberto(true)
   }
 
@@ -239,6 +293,9 @@ export default function GerenciadorUsuariosSistema() {
           papel: formulario.papel,
           corAvatar: formulario.corAvatar,
           ativo: formulario.ativo,
+          // Administrador resolve para tudo no servidor; mandar mapa para ele
+          // seria gravar override que nunca é lido.
+          permissoes: formulario.papel === PAPEIS_RBAC.ADMIN ? undefined : permissoes,
         })
         if (!resultado.sucesso) {
           toast.error(resultado.erro || 'Erro ao atualizar')
@@ -272,6 +329,7 @@ export default function GerenciadorUsuariosSistema() {
           papel: formulario.papel,
           corAvatar: formulario.corAvatar,
           funcionarioId,
+          permissoes: formulario.papel === PAPEIS_RBAC.ADMIN ? undefined : permissoes,
         })
         if (!resultado.sucesso) {
           // O funcionário fica cadastrado: ao tentar de novo com outro login,
@@ -381,12 +439,12 @@ export default function GerenciadorUsuariosSistema() {
         throw new Error(resultado.erro || 'Falha no upload')
       }
 
-      const { error } = await supabase
-        .from('usuarios_sistema')
-        .update({ avatar_url: resultado.url })
-        .eq('id', usuarioAvatar.id)
-
-      if (error) throw error
+      // Pela rota também: é a mesma tabela que está sendo fechada por etapas,
+      // e deixar uma escrita solta aqui recriaria o caminho que queremos tirar.
+      const salvo = await atualizarUsuarioSistema(usuarioAvatar.id, {
+        avatarUrl: resultado.url,
+      })
+      if (!salvo.sucesso) throw new Error(salvo.erro || 'Falha ao salvar avatar')
 
       toast.success('Avatar atualizado')
       void carregarUsuarios()
@@ -632,6 +690,9 @@ export default function GerenciadorUsuariosSistema() {
                             <Icone className="h-3.5 w-3.5 text-primary" />
                             {rotuloPapel(usuario.papel)}
                           </span>
+                          <span className="mt-0.5 block text-[11px] text-muted-foreground/80">
+                            {resumoAcesso(usuario)}
+                          </span>
                         </td>
                         <td className="px-4 py-3 tabular-nums text-muted-foreground">
                           @{usuario.nome_usuario}
@@ -701,6 +762,9 @@ export default function GerenciadorUsuariosSistema() {
                             <span className="truncate">
                               {rotuloPapel(usuario.papel)} · @{usuario.nome_usuario}
                             </span>
+                          </p>
+                          <p className="mt-0.5 truncate text-[11px] text-muted-foreground/80">
+                            {resumoAcesso(usuario)}
                           </p>
                         </div>
                       </div>
@@ -842,6 +906,12 @@ export default function GerenciadorUsuariosSistema() {
                 })}
               </div>
             </div>
+
+            <EditorPermissoes
+              papel={formulario.papel}
+              permissoes={permissoes}
+              onChange={setPermissoes}
+            />
 
             <div className="space-y-2">
               <Label>Cor do avatar</Label>

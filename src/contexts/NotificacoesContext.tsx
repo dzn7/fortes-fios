@@ -13,6 +13,8 @@ import {
 import { usePathname } from 'next/navigation'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
 import {
+  deltaResumo,
+  notificacaoVisivelNaCentral,
   resumirNotificacoes,
   selecionarNotificacoesDoModal,
   type Notificacao,
@@ -63,7 +65,7 @@ type NotificacoesContextValue = {
   marcarTodasComoLidas: () => void
   dispensar: (id: string) => void
   reativarModalDeEntrada: () => void
-  carregarResolvidas: () => void
+  carregarHistorico: () => void
   invalidar: () => void
 }
 
@@ -87,6 +89,15 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
   // dependência, o listener de foco seria removido e re-registrado a cada
   // atualização de contador.
   const resumoRef = useRef<ResumoNotificacoes>(RESUMO_VAZIO)
+  // Espelho síncrono da coleção. A marcação otimista precisa calcular o delta
+  // ANTES de chamar os setters: fazer isso dentro do updater de `setNotificacoes`
+  // seria efeito colateral em updater, que o StrictMode executa duas vezes.
+  const notificacoesRef = useRef<Notificacao[]>([])
+
+  const definirNotificacoes = useCallback((lista: Notificacao[]) => {
+    notificacoesRef.current = lista
+    setNotificacoes(lista)
+  }, [])
 
   const usuarioChave = usuarioAtual?.id || CHAVE_USUARIO_PADRAO
   const ativo = !loading && isAuthenticated && pathname !== '/admin/login'
@@ -112,7 +123,7 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
       if (!resposta.ok || !json.sucesso) return
 
       const lista = Array.isArray(json.notificacoes) ? json.notificacoes : []
-      setNotificacoes(lista)
+      definirNotificacoes(lista)
       setResumo(json.resumo ?? resumirNotificacoes(lista))
       setModalAtivo(json.modalAtivo !== false)
       ultimaBuscaRef.current = Date.now()
@@ -130,7 +141,7 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
       buscandoRef.current = false
       setCarregando(false)
     }
-  }, [usuarioChave])
+  }, [definirNotificacoes, usuarioChave])
 
   const revalidarResumo = useCallback(async () => {
     if (buscandoRef.current) return
@@ -161,7 +172,7 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!ativo) {
-      setNotificacoes([])
+      definirNotificacoes([])
       setResumo(RESUMO_VAZIO)
       setAlertasDeEntrada([])
       entradaJaAvaliadaRef.current = false
@@ -174,7 +185,7 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
     if (Date.now() - ultimaBuscaRef.current < INTERVALO_MINIMO_REVALIDACAO_MS) return
 
     void buscarCompleto()
-  }, [ativo, buscarCompleto])
+  }, [ativo, buscarCompleto, definirNotificacoes])
 
   useEffect(() => {
     resumoRef.current = resumo
@@ -222,32 +233,40 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
    * então um recálculo total faria o badge cair para o tamanho da página
    * sempre que o usuário marcasse algo. A resposta do servidor, que conta no
    * banco, sobrescreve logo em seguida.
+   *
+   * O delta é somado FORA dos updaters, sobre o espelho síncrono: updater de
+   * estado precisa ser puro e o StrictMode o executa duas vezes.
    */
   const aplicarLocalmente = useCallback(
     (ids: string[], campos: Partial<Notificacao>) => {
       if (ids.length === 0) return
       const alvo = new Set(ids)
+      const delta = { urgentes: 0, normais: 0, naoLidas: 0, total: 0 }
 
-      setNotificacoes((atual) => {
-        let viraramLidas = 0
+      const proxima = notificacoesRef.current.map((item) => {
+        if (!alvo.has(item.id)) return item
 
-        const proxima = atual.map((item) => {
-          if (!alvo.has(item.id)) return item
-          if (campos.lida_em && !item.lida_em && item.estado === 'ativa') viraramLidas += 1
-          return { ...item, ...campos }
-        })
-
-        if (viraramLidas > 0) {
-          setResumo((anterior) => ({
-            ...anterior,
-            naoLidas: Math.max(0, anterior.naoLidas - viraramLidas),
-          }))
-        }
-
-        return proxima
+        const atualizada = { ...item, ...campos }
+        const parcela = deltaResumo(item, atualizada)
+        delta.urgentes += parcela.urgentes
+        delta.normais += parcela.normais
+        delta.naoLidas += parcela.naoLidas
+        delta.total += parcela.total
+        return atualizada
       })
+
+      definirNotificacoes(proxima)
+
+      if (delta.urgentes || delta.normais || delta.naoLidas || delta.total) {
+        setResumo((anterior) => ({
+          urgentes: Math.max(0, anterior.urgentes + delta.urgentes),
+          normais: Math.max(0, anterior.normais + delta.normais),
+          naoLidas: Math.max(0, anterior.naoLidas + delta.naoLidas),
+          total: Math.max(0, anterior.total + delta.total),
+        }))
+      }
     },
-    [],
+    [definirNotificacoes],
   )
 
   const marcarComoLida = useCallback(
@@ -262,12 +281,19 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
   const marcarTodasComoLidas = useCallback(() => {
     const agora = new Date().toISOString()
     aplicarLocalmente(
-      notificacoes.filter((item) => item.estado === 'ativa' && !item.lida_em).map((item) => item.id),
+      notificacoes
+        .filter((item) => notificacaoVisivelNaCentral(item) && !item.lida_em)
+        .map((item) => item.id),
       { visualizada_em: agora, lida_em: agora },
     )
     void enviarAcao({ acao: 'lidas_todas' })
   }, [aplicarLocalmente, enviarAcao, notificacoes])
 
+  /**
+   * Dispensar silencia ESTA ocorrência: ela sai da lista e do badge na hora.
+   * A linha continua ativa no banco porque a condição continua verdadeira — o
+   * que reaparece depois é uma reincidência, que nasce como linha nova.
+   */
   const dispensar = useCallback(
     (id: string) => {
       const agora = new Date().toISOString()
@@ -312,8 +338,11 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
   const abrirPainel = useCallback(() => setPainelAberto(true), [])
   const fecharPainel = useCallback(() => setPainelAberto(false), [])
 
-  /** Busca sob demanda o histórico recente já resolvido, só quando pedido. */
-  const carregarResolvidas = useCallback(() => {
+  /**
+   * Histórico recente — resolvidas e dispensadas — buscado só quando pedido.
+   * Fora daí a lista carrega apenas o que está ativo e visível.
+   */
+  const carregarHistorico = useCallback(() => {
     ultimaBuscaRef.current = 0
     void buscarCompleto(true)
   }, [buscarCompleto])
@@ -333,14 +362,14 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
       marcarTodasComoLidas,
       dispensar,
       reativarModalDeEntrada,
-      carregarResolvidas,
+      carregarHistorico,
       invalidar,
     }),
     [
       abrirPainel,
       alertasDeEntrada,
       carregando,
-      carregarResolvidas,
+      carregarHistorico,
       dispensar,
       fecharAlertasDeEntrada,
       fecharPainel,

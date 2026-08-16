@@ -4,31 +4,36 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
 import TelaSelecaoPerfil from '@/components/login/TelaSelecaoPerfil'
-import { salvarSessao, type UsuarioSistema } from '@/lib/autenticacao'
+import { type UsuarioSistema } from '@/lib/autenticacao'
 import { Loader2 } from 'lucide-react'
 
+/**
+ * Login do Admin.
+ *
+ * A senha vai uma única vez para `/api/admin/sessao`, que a confere no banco e
+ * devolve um cookie assinado `httpOnly`. O "lembrar de mim" que guardava
+ * usuário e SENHA em texto claro no `localStorage` saiu junto com as duas
+ * credenciais que estavam escritas dentro do bundle.
+ *
+ * Spec: specs/rbac-admin.md §7
+ */
 export default function AdminLogin() {
-  const { isAuthenticated, login, loading } = useAdminAuth()
+  const { isAuthenticated, loading, autenticarNoServidor } = useAdminAuth()
   const router = useRouter()
-
-  useEffect(() => {
-    const savedUsername = localStorage.getItem('admin_saved_username')
-    const savedPassword = localStorage.getItem('admin_saved_password')
-    const savedRemember = localStorage.getItem('admin_remember_me')
-
-    if (savedRemember === 'true' && savedUsername && savedPassword) {
-      const sucesso = login(savedUsername, savedPassword)
-      if (sucesso) {
-        router.push('/admin/dashboard')
-      }
-    }
-  }, [])
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
       router.push('/admin/dashboard')
     }
   }, [loading, isAuthenticated, router])
+
+  // Limpa o que o modelo antigo deixou no navegador, inclusive a senha salva.
+  useEffect(() => {
+    localStorage.removeItem('admin_saved_username')
+    localStorage.removeItem('admin_saved_password')
+    localStorage.removeItem('admin_remember_me')
+    localStorage.removeItem('adminToken')
+  }, [])
 
   if (loading) {
     return (
@@ -40,28 +45,18 @@ export default function AdminLogin() {
 
   if (isAuthenticated) return null
 
-  const handleAutenticar = (usuario: UsuarioSistema) => {
-    if (usuario.papel !== 'admin') return
-    salvarSessao(usuario)
-    localStorage.setItem('adminToken', `admin-supabase-${usuario.id}`)
+  // A sessão já foi criada pelo servidor em `autenticarNoServidor`; aqui só
+  // resta sair da tela de login.
+  const handleAutenticar = (_usuario: UsuarioSistema) => {
     router.push('/admin/dashboard')
-    window.location.reload()
-  }
-
-  const handleLoginHardcoded = (usuario: string, senha: string): boolean => {
-    const sucesso = login(usuario, senha)
-    if (sucesso) {
-      router.push('/admin/dashboard')
-    }
-    return sucesso
   }
 
   return (
     <TelaSelecaoPerfil
       papel="admin"
+      papeisListados={['admin', 'atendente']}
       aoAutenticar={handleAutenticar}
-      loginHardcoded={handleLoginHardcoded}
+      autenticarNoServidor={autenticarNoServidor}
     />
   )
 }
-

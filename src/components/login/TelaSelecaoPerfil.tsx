@@ -19,10 +19,29 @@ type TelaSelecaoPerfilProps = {
   aoAutenticar: (usuario: UsuarioSistema) => void
   loginHardcoded?: (usuario: string, senha: string) => boolean
   rotaLoginClassico?: string
+  /**
+   * Substitui a verificação de senha pelo cliente. O Admin passa a rota de
+   * sessão, que confere a senha no servidor e emite o cookie assinado; sem
+   * isso, nenhuma autorização server-side teria como saber quem entrou.
+   * Garçom e entregador não passam nada e seguem no fluxo antigo.
+   */
+  autenticarNoServidor?: (
+    nomeUsuario: string,
+    senha: string,
+  ) => Promise<{ sucesso: boolean; usuario?: UsuarioSistema; erro?: string }>
+  /**
+   * Funções cujos perfis aparecem na seleção. O Admin lista administradores
+   * **e** atendentes: os dois entram pelo mesmo `/admin`. Omitido, lista só a
+   * função da própria tela.
+   */
+  papeisListados?: PapelUsuario[]
 }
 
 const TITULOS_PAPEL: Record<PapelUsuario, string> = {
   admin: 'Painel Administrativo',
+  // Atendente entra pela mesma tela do administrador: no `/admin`, o que muda
+  // é a permissão, não a porta.
+  atendente: 'Painel Administrativo',
   garcom: 'Área indisponível',
   entregador: 'Painel de Entregas',
 }
@@ -32,6 +51,8 @@ export default function TelaSelecaoPerfil({
   aoAutenticar,
   loginHardcoded,
   rotaLoginClassico,
+  autenticarNoServidor,
+  papeisListados,
 }: TelaSelecaoPerfilProps) {
   const [usuarios, setUsuarios] = useState<UsuarioSistema[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -45,16 +66,17 @@ export default function TelaSelecaoPerfil({
   const [transicaoAtiva, setTransicaoAtiva] = useState(false)
   const [usuarioAutenticado, setUsuarioAutenticado] = useState<UsuarioSistema | null>(null)
 
-  useEffect(() => {
-    carregarUsuarios()
-  }, [papel])
+  const chavePapeis = (papeisListados ?? [papel]).join(',')
 
-  const carregarUsuarios = async () => {
-    setCarregando(true)
-    const lista = await listarUsuariosPorPapel(papel)
-    setUsuarios(lista)
-    setCarregando(false)
-  }
+  useEffect(() => {
+    const carregarUsuarios = async () => {
+      setCarregando(true)
+      const lista = await listarUsuariosPorPapel(chavePapeis.split(',') as PapelUsuario[])
+      setUsuarios(lista)
+      setCarregando(false)
+    }
+    void carregarUsuarios()
+  }, [chavePapeis])
 
   const handleSelecionarPerfil = (usuario: UsuarioSistema) => {
     setUsuarioSelecionado(usuario)
@@ -79,7 +101,8 @@ export default function TelaSelecaoPerfil({
     setLoginEmAndamento(true)
     setErroLogin('')
 
-    const resultado = await loginUsuarioSistema(usuarioSelecionado.nome_usuario, senha)
+    const entrar = autenticarNoServidor ?? loginUsuarioSistema
+    const resultado = await entrar(usuarioSelecionado.nome_usuario, senha)
     if (resultado.sucesso && resultado.usuario) {
       iniciarTransicao(resultado.usuario)
     } else {
@@ -102,7 +125,8 @@ export default function TelaSelecaoPerfil({
       }
     }
 
-    const resultado = await loginUsuarioSistema(usuarioClassico, senhaClassica)
+    const entrar = autenticarNoServidor ?? loginUsuarioSistema
+    const resultado = await entrar(usuarioClassico, senhaClassica)
     if (resultado.sucesso && resultado.usuario) {
       iniciarTransicao(resultado.usuario)
     } else {

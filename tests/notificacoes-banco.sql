@@ -198,10 +198,10 @@ begin
   values (v_id_baixo_2, '__teste_usuario_a__', now(), now());
 
   select count(*) into v_count
-    from public.listar_notificacoes('__teste_usuario_a__', 200)
+    from public.listar_notificacoes('__teste_usuario_a__', 200, true)
    where id = v_id_baixo_2 and lida_em is not null and silenciada_em is not null;
   if v_count <> 1 then
-    raise exception 'usuário A deveria ver a própria marcação de leitura';
+    raise exception 'usuário A deveria ver a própria marcação no histórico';
   end if;
 
   select count(*) into v_count
@@ -215,6 +215,44 @@ begin
   select count(*) into v_real_total from public.notificacoes where estado = 'ativa';
   if v_resumo_total <> v_real_total then
     raise exception 'usuário B não marcou nada, deveria ter % não lidas, tem %', v_real_total, v_resumo_total;
+  end if;
+
+  ------------------------------------------------------------------
+  -- 25. dispensar some da lista ativa e do badge — só para quem dispensou.
+  -- Era o defeito: silenciada_em era gravado e a leitura ignorava a coluna.
+  ------------------------------------------------------------------
+  select count(*) into v_count
+    from public.listar_notificacoes('__teste_usuario_a__', 200)
+   where id = v_id_baixo_2;
+  if v_count <> 0 then
+    raise exception 'dispensada não pode voltar na lista ativa de quem dispensou';
+  end if;
+
+  select count(*) into v_count
+    from public.listar_notificacoes('__teste_usuario_b__', 200)
+   where id = v_id_baixo_2;
+  if v_count <> 1 then
+    raise exception 'a dispensa de A não pode esconder a notificação de B';
+  end if;
+
+  select total into v_resumo_total from public.resumo_notificacoes('__teste_usuario_a__');
+  select count(*) into v_real_total from public.notificacoes where estado = 'ativa';
+  if v_resumo_total <> v_real_total - 1 then
+    raise exception 'badge de A deveria ter % ativas, tem %', v_real_total - 1, v_resumo_total;
+  end if;
+
+  ------------------------------------------------------------------
+  -- 26. dispensar não cala a reincidência: a condição volta como linha nova,
+  -- sem registro de leitura, então reaparece para A.
+  ------------------------------------------------------------------
+  update public.produtos set estoque_quantidade = 50 where id = v_produto;
+  update public.produtos set estoque_quantidade = 1 where id = v_produto;
+
+  select count(*) into v_count
+    from public.listar_notificacoes('__teste_usuario_a__', 200)
+   where entidade_id = v_produto and tipo = 'estoque_baixo';
+  if v_count <> 1 then
+    raise exception 'reincidência deveria voltar para A, encontrei %', v_count;
   end if;
 end;
 $$;

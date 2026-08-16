@@ -1,6 +1,11 @@
 import { supabase } from './supabase'
 
-export type PapelUsuario = 'admin' | 'garcom' | 'entregador'
+/**
+ * `atendente` é o papel operacional deste projeto — entra pelo mesmo `/admin` e
+ * enxerga só o que o administrador autorizou. `garcom` e `entregador` são de
+ * fluxos legados: continuam graváveis, mas não resolvem permissão nenhuma.
+ */
+export type PapelUsuario = 'admin' | 'atendente' | 'garcom' | 'entregador'
 
 export type UsuarioSistema = {
   id: string
@@ -110,14 +115,19 @@ export async function listarUsuariosSistema(): Promise<UsuarioSistema[]> {
   }
 }
 
+/**
+ * Perfis de uma ou mais funções. O login do Admin passa `['admin','atendente']`
+ * porque os dois entram pela mesma porta — o que muda depois é a permissão.
+ */
 export async function listarUsuariosPorPapel(
-  papel: PapelUsuario
+  papel: PapelUsuario | PapelUsuario[]
 ): Promise<UsuarioSistema[]> {
   try {
+    const papeis = Array.isArray(papel) ? papel : [papel]
     const { data, error } = await supabase
       .from('usuarios_sistema')
       .select('id, nome, nome_usuario, papel, avatar_url, cor_avatar, funcionario_id')
-      .eq('papel', papel)
+      .in('papel', papeis)
       .eq('ativo', true)
       .order('nome')
 
@@ -137,6 +147,42 @@ export async function listarUsuariosPorPapel(
   }
 }
 
+/**
+ * Chamada à rota de Acessos.
+ *
+ * As RPCs `criar_usuario_sistema`, `atualizar_senha_usuario` e
+ * `salvar_acesso_usuario` são `SECURITY DEFINER` e deixaram de ser executáveis
+ * por `anon` na migration `202608150006`. Enquanto estavam abertas, qualquer
+ * pessoa com a anon key criava um administrador ou trocava a senha alheia por
+ * uma chamada REST — sem passar por tela nenhuma.
+ */
+const chamarRotaAcessos = async (
+  metodo: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+  corpo?: Record<string, unknown>,
+  query?: string,
+): Promise<{ sucesso: boolean; id?: string; erro?: string }> => {
+  try {
+    const resposta = await fetch(`/api/admin/acessos${query ?? ''}`, {
+      method: metodo,
+      credentials: 'same-origin',
+      ...(corpo
+        ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }
+        : {}),
+    })
+    const json = (await resposta.json()) as { sucesso?: boolean; id?: string; erro?: string }
+
+    if (resposta.status === 403) {
+      return { sucesso: false, erro: json.erro || 'Seu acesso não inclui esta operação.' }
+    }
+    if (!resposta.ok || !json.sucesso) {
+      return { sucesso: false, erro: json.erro || 'Não foi possível concluir a operação.' }
+    }
+    return { sucesso: true, id: json.id }
+  } catch {
+    return { sucesso: false, erro: 'Erro ao conectar com o servidor' }
+  }
+}
+
 export async function criarUsuarioSistema(dados: {
   nome: string
   nomeUsuario: string
@@ -145,31 +191,15 @@ export async function criarUsuarioSistema(dados: {
   avatarUrl?: string
   corAvatar?: string
   funcionarioId?: string
+  permissoes?: Record<string, boolean>
 }): Promise<{ sucesso: boolean; id?: string; erro?: string }> {
-  try {
-    const { data, error } = await supabase.rpc('criar_usuario_sistema', {
-      p_nome: dados.nome,
-      p_nome_usuario: dados.nomeUsuario,
-      p_senha: dados.senha,
-      p_papel: dados.papel,
-      p_avatar_url: dados.avatarUrl || null,
-      p_cor_avatar: dados.corAvatar || '#f97316',
-      p_funcionario_id: dados.funcionarioId || null,
-    })
-
-    if (error) {
-      if (error.message?.includes('unique') || error.message?.includes('duplicate')) {
-        return { sucesso: false, erro: 'Nome de usuario ja existe' }
-      }
-      console.error('[Autenticacao] Erro ao criar usuario:', error)
-      return { sucesso: false, erro: 'Erro ao criar usuario' }
-    }
-
-    return { sucesso: true, id: data }
-  } catch (erro) {
-    console.error('[Autenticacao] Erro inesperado ao criar usuario:', erro)
-    return { sucesso: false, erro: 'Erro inesperado' }
-  }
+  return chamarRotaAcessos('POST', {
+    nome: dados.nome,
+    nomeUsuario: dados.nomeUsuario,
+    senha: dados.senha,
+    papel: dados.papel,
+    ...(dados.permissoes ? { permissoes: dados.permissoes } : {}),
+  })
 }
 
 export async function atualizarUsuarioSistema(
@@ -181,24 +211,20 @@ export async function atualizarUsuarioSistema(
     corAvatar?: string
     ativo?: boolean
     funcionarioId?: string | null
+    permissoes?: Record<string, boolean>
   }
 ): Promise<{ sucesso: boolean; erro?: string }> {
   try {
-    const atualizacao: Record<string, unknown> = {}
-    if (dados.nome !== undefined) atualizacao.nome = dados.nome.trim()
-    if (dados.papel !== undefined) atualizacao.papel = dados.papel
-    if (dados.avatarUrl !== undefined) atualizacao.avatar_url = dados.avatarUrl
-    if (dados.corAvatar !== undefined) atualizacao.cor_avatar = dados.corAvatar
-    if (dados.ativo !== undefined) atualizacao.ativo = dados.ativo
-    if (dados.funcionarioId !== undefined) atualizacao.funcionario_id = dados.funcionarioId
-
-    const { error } = await supabase
-      .from('usuarios_sistema')
-      .update(atualizacao)
-      .eq('id', id)
-
-    if (error) throw error
-    return { sucesso: true }
+    return chamarRotaAcessos('PATCH', {
+      id,
+      ...(dados.nome !== undefined ? { nome: dados.nome.trim() } : {}),
+      ...(dados.papel !== undefined ? { papel: dados.papel } : {}),
+      ...(dados.avatarUrl !== undefined ? { avatarUrl: dados.avatarUrl } : {}),
+      ...(dados.corAvatar !== undefined ? { corAvatar: dados.corAvatar } : {}),
+      ...(dados.ativo !== undefined ? { ativo: dados.ativo } : {}),
+      ...(dados.funcionarioId !== undefined ? { funcionarioId: dados.funcionarioId } : {}),
+      ...(dados.permissoes !== undefined ? { permissoes: dados.permissoes } : {}),
+    })
   } catch (erro) {
     console.error('[Autenticacao] Erro ao atualizar usuario:', erro)
     return { sucesso: false, erro: 'Erro ao atualizar usuario' }
@@ -209,34 +235,11 @@ export async function atualizarSenhaUsuario(
   id: string,
   novaSenha: string
 ): Promise<{ sucesso: boolean; erro?: string }> {
-  try {
-    const { data, error } = await supabase.rpc('atualizar_senha_usuario', {
-      p_usuario_id: id,
-      p_nova_senha: novaSenha,
-    })
-
-    if (error) throw error
-    if (!data) return { sucesso: false, erro: 'Usuario nao encontrado' }
-    return { sucesso: true }
-  } catch (erro) {
-    console.error('[Autenticacao] Erro ao atualizar senha:', erro)
-    return { sucesso: false, erro: 'Erro ao atualizar senha' }
-  }
+  return chamarRotaAcessos('PUT', { id, senha: novaSenha })
 }
 
 export async function excluirUsuarioSistema(
   id: string
 ): Promise<{ sucesso: boolean; erro?: string }> {
-  try {
-    const { error } = await supabase
-      .from('usuarios_sistema')
-      .delete()
-      .eq('id', id)
-
-    if (error) throw error
-    return { sucesso: true }
-  } catch (erro) {
-    console.error('[Autenticacao] Erro ao excluir usuario:', erro)
-    return { sucesso: false, erro: 'Erro ao excluir usuario' }
-  }
+  return chamarRotaAcessos('DELETE', undefined, `?id=${encodeURIComponent(id)}`)
 }

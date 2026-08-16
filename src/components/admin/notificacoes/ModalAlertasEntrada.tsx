@@ -11,9 +11,13 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { notificacaoAbreModal, rotaDaNotificacao } from '@/lib/notificacoes.mjs'
+import {
+  notificacaoAbreModal,
+  rotaDaNotificacao,
+  type Notificacao,
+} from '@/lib/notificacoes.mjs'
 import { useNotificacoes } from '@/contexts/NotificacoesContext'
-import { aparenciaDaNotificacao, ehUrgente } from './aparencia'
+import { ItemNotificacao } from './ItemNotificacao'
 
 /**
  * Modal de entrada.
@@ -22,7 +26,10 @@ import { aparenciaDaNotificacao, ehUrgente } from './aparencia'
  * ainda não viu. Fechar marca as exibidas como visualizadas — aquelas
  * ocorrências não voltam, mas uma notificação NOVA reabre o modal. O checkbox
  * "Não mostrar novamente" desliga o modal de vez para o usuário, com reversão
- * disponível no rodapé do painel.
+ * disponível dentro do painel.
+ *
+ * Usa o mesmo `ItemNotificacao` do painel: o alerta que interrompe e o alerta
+ * que fica na central precisam ser reconhecíveis como a mesma coisa.
  *
  * Não bloqueia o uso do sistema: fecha com Escape, clique fora e botão de 44 px.
  */
@@ -34,7 +41,7 @@ export function ModalAlertasEntrada() {
 
   const aberto = alertasDeEntrada.length > 0
   // Conta o excedente entre os que ABRIRIAM o modal, não entre todos os ativos:
-  // o que já foi lido ou silenciado não é "mais um alerta esperando".
+  // o que já foi lido ou dispensado não é "mais um alerta esperando".
   const restantes = Math.max(
     0,
     notificacoes.filter(notificacaoAbreModal).length - alertasDeEntrada.length,
@@ -46,20 +53,25 @@ export function ModalAlertasEntrada() {
   }
 
   const verTodas = () => {
-    fecharAlertasDeEntrada(naoMostrarNovamente)
-    setNaoMostrarNovamente(false)
+    fechar()
     abrirPainel()
   }
 
-  const irParaContexto = (rota: string) => {
-    fecharAlertasDeEntrada(naoMostrarNovamente)
-    setNaoMostrarNovamente(false)
+  const abrirContexto = (notificacao: Notificacao) => {
+    const rota = rotaDaNotificacao(notificacao)
+    if (!rota) return
+    fechar()
     router.push(rota)
   }
 
   return (
-    <Dialog open={aberto} onOpenChange={(proximo) => { if (!proximo) fechar() }}>
-      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+    <Dialog
+      open={aberto}
+      onOpenChange={(proximo) => {
+        if (!proximo) fechar()
+      }}
+    >
+      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-y-hidden p-0 sm:max-w-md">
         <DialogTitle className="sr-only">Atenção necessária</DialogTitle>
         <DialogDescription className="sr-only">
           Alertas de estoque e pedidos que precisam da sua atenção agora.
@@ -81,68 +93,15 @@ export function ModalAlertasEntrada() {
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
-          <ul className="flex flex-col gap-2">
-            {alertasDeEntrada.map((item) => {
-              const { Icone, classeIcone } = aparenciaDaNotificacao(item.tipo)
-              const rota = rotaDaNotificacao(item)
-
-              const corpo = (
-                <>
-                  <span
-                    className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${classeIcone}`}
-                    aria-hidden
-                  >
-                    <Icone strokeWidth={1.7} className="size-[18px]" />
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">{item.titulo}</span>
-                      {ehUrgente(item) ? (
-                        <span className="rounded border border-destructive/30 bg-destructive/10 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-destructive">
-                          Urgente
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="break-words text-sm leading-snug text-muted-foreground">
-                      {item.mensagem}
-                    </span>
-                  </span>
-                </>
-              )
-
-              return (
-                <li key={item.id}>
-                  {rota ? (
-                    <button
-                      type="button"
-                      onClick={() => irParaContexto(rota)}
-                      className={`flex w-full items-start gap-3 rounded-lg border-l-[3px] px-3 py-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${
-                        ehUrgente(item)
-                          ? 'border-l-destructive bg-destructive/[0.04]'
-                          : 'border-l-border'
-                      }`}
-                    >
-                      {corpo}
-                    </button>
-                  ) : (
-                    <div
-                      className={`flex items-start gap-3 rounded-lg border-l-[3px] px-3 py-3 ${
-                        ehUrgente(item)
-                          ? 'border-l-destructive bg-destructive/[0.04]'
-                          : 'border-l-border'
-                      }`}
-                    >
-                      {corpo}
-                    </div>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 [-webkit-overflow-scrolling:touch]">
+          <div className="flex flex-col gap-2">
+            {alertasDeEntrada.map((item) => (
+              <ItemNotificacao key={item.id} notificacao={item} onAbrir={abrirContexto} />
+            ))}
+          </div>
 
           {restantes > 0 ? (
-            <p className="px-3 pt-3 text-xs text-muted-foreground">
+            <p className="px-1 pt-3 text-xs text-muted-foreground">
               e mais {restantes} {restantes === 1 ? 'alerta' : 'alertas'} na central.
             </p>
           ) : null}

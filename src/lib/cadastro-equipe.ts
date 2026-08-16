@@ -25,21 +25,22 @@ export const rotuloTipoFuncionario = (tipo: TipoFuncionario) =>
   TIPOS_FUNCIONARIO.find((item) => item.valor === tipo)?.rotulo ?? tipo
 
 /**
- * Sugestões de tradução entre os dois cadastros. `usuarios_sistema.papel` tem
- * CHECK (admin | garcom | entregador), então cozinheiro cai em `garcom`, que é o
- * papel operacional de menor privilégio. Em ambas as telas o campo continua
- * editável — isto é só o valor inicial.
+ * Sugestões de tradução entre os dois cadastros. `usuarios_sistema.papel` aceita
+ * admin | atendente | garcom | entregador, e quem entra no `/admin` são os dois
+ * primeiros — `atendente` é o papel operacional deste projeto. Em ambas as telas
+ * o campo continua editável: isto é só o valor inicial.
  */
 export const PAPEL_PARA_TIPO_FUNCIONARIO: Record<PapelUsuario, TipoFuncionario> = {
   admin: 'gerente',
+  atendente: 'atendente',
   garcom: 'atendente',
   entregador: 'entregador',
 }
 
 export const TIPO_FUNCIONARIO_PARA_PAPEL: Record<TipoFuncionario, PapelUsuario> = {
   entregador: 'entregador',
-  cozinheiro: 'garcom',
-  atendente: 'garcom',
+  cozinheiro: 'atendente',
+  atendente: 'atendente',
   gerente: 'admin',
   dono: 'admin',
 }

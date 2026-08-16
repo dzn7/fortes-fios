@@ -61,5 +61,13 @@ export const tempoRelativo = (iso: string | null | undefined): string => {
   return dias === 1 ? 'ontem' : `há ${dias} d`
 }
 
+/** Data por extenso para o `title` do horário relativo — "15/08/2026 22:12". */
+export const dataCompleta = (iso: string | null | undefined): string => {
+  if (!iso) return ''
+  const data = new Date(iso)
+  if (Number.isNaN(data.getTime())) return ''
+  return data.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+}
+
 export const ehUrgente = (notificacao: Pick<Notificacao, 'prioridade'>) =>
   notificacao.prioridade === 'urgente'
