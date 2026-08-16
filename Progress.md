@@ -1,5 +1,36 @@
 # Progress
 
+## [2026-08-16] Envio automático do pedido no WhatsApp + troco inteligente
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Objetivo:** o pedido sair para o WhatsApp sozinho, com passo manual claro quando o navegador barrar; e o troco parar de sugerir valores que não pagam a conta.
+**Arquivos criados:** `src/lib/troco.mjs`, `tests/troco.test.mjs`.
+**Arquivos alterados:** `src/components/ModalCarrinho.tsx`, `UI.md`, `Progress.md`.
+
+**Por que não abria sozinho:** a abertura acontecia depois do `await` que grava o
+pedido. Nesse ponto o navegador já não associa a ação ao gesto do usuário e trata
+`window.open` como popup — bloqueado em Safari e Chrome. Eu tinha documentado o
+risco e ainda assim deixei a abertura só no clique manual.
+
+**O que foi feito:**
+- A aba é **reservada no clique** (`window.open('', '_blank')`), antes do await; quando a mensagem fica pronta, troca-se o `location.href` da aba já aberta.
+- Falhou o bloqueador? A tela de sucesso muda de tom: aviso "Falta enviar o pedido" e botão de 56px destacado. Deu certo? O mesmo botão vira "Abrir o WhatsApp de novo", secundário, e "Entendi" vira "Fechar" em ghost.
+- A aba reservada é fechada quando o pedido falha, senão sobra janela em branco.
+- Troco reescrito: pergunta "Vai pagar com quanto?", sugestões derivadas do total, "Valor exato" como padrão, troco calculado na hora e erro que **bloqueia o envio**.
+- Saiu o verde hardcoded (`bg-green-50 dark:bg-green-950/20`, `bg-white dark:bg-gray-900`) do bloco de troco; agora usa tokens.
+
+**Decisões tomadas:** mantive o botão manual visível mesmo quando a abertura automática funciona — em iOS o app pode demorar a subir e a pessoa acha que não foi. O `resumoWhatsApp` do estado e o objeto que abre a aba são o mesmo, em vez de duas cópias dos 15 campos.
+
+**Verificação:** `node --test tests/*.test.mjs` **131/131** (12 novos) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · sugestões conferidas: `75 → 80, 100, 150, 200` e `250 → 255, 260, 300, 400`.
+
+**Pendências / próximos passos:**
+- Smoke real em Safari iOS e Chrome Android: a reserva de aba é justamente o caminho que só o dispositivo confirma.
+- Se a aba reservada ficar em branco por alguns segundos antes de navegar, vale avaliar um `about:blank` com mensagem de "preparando seu pedido".
+
+**Armadilhas descobertas:**
+- Reservar a aba no gesto e navegar depois é o único caminho confiável para abrir algo após trabalho assíncrono. Tentar `window.open` no fim do fluxo falha calado — sem erro no console.
+- Sugestão de troco fixa é pior que nenhuma: num pedido acima do maior valor sugerido, todos os atalhos ficam errados e a pessoa nem percebe.
+
 ## [2026-08-16] Tela de cupons reconstruída
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

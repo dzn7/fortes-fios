@@ -327,6 +327,31 @@ nada mais. Punhado se lê de relance; lista longa vira uma segunda decisão ante
 da conversa. Cada linha traz o rótulo **e** quando usar, senão a escolha vira
 adivinhação e o atendente escreve tudo do zero.
 
+### Envio automático do pedido
+
+A aba do WhatsApp é **reservada no clique** (`window.open('', '_blank')`), antes
+do `await` que grava o pedido; quando a mensagem fica pronta, só se troca o
+`location.href` da aba já aberta. Abrir depois do `await` não funciona: o
+navegador já não reconhece o gesto do usuário e trata como popup — foi
+exatamente por isso que o WhatsApp não abria sozinho.
+
+Se o bloqueador recusar mesmo assim, a tela de sucesso **muda de tom**: aviso
+verde "Falta enviar o pedido" e botão de 56px destacado. Quando abriu, o mesmo
+botão vira "Abrir o WhatsApp de novo", secundário. Pedido gravado com mensagem
+não enviada é o pior estado possível — a tela nunca deixa isso passar em branco.
+
+A aba reservada é fechada quando o pedido falha, senão sobra uma janela em branco.
+
+### Troco
+
+A pergunta é **"vai pagar com quanto?"**, não uma caixa "preciso de troco"
+seguida de campo vazio.
+
+- Sugestões saem do total (`sugerirValoresTroco`), sempre acima dele. A versão anterior oferecia `[20, 50, 100, 200]` fixos — num pedido de R$ 250, as quatro eram menores que a conta.
+- "Valor exato" é a primeira opção e o padrão.
+- O troco aparece calculado (`Troco de R$ 25,00`) assim que o valor é escolhido.
+- Valor abaixo do total é erro no campo **e** bloqueia o envio: senão o problema só aparecia na entrega.
+
 ### Pedido do cliente
 
 A tela de sucesso do carrinho tem **Enviar pedido no WhatsApp** como ação

@@ -20,6 +20,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerNested, DrawerTitle } f
 import { Separator } from '@/components/ui/separator'
 import { useAjusteTecladoVirtual } from '@/hooks/useAjusteTecladoVirtual'
 import { linkWhatsApp, mensagemPedidoParaLoja, type PedidoWhatsApp } from '@/lib/whatsapp.mjs'
+import { calcularTroco, sugerirValoresTroco, validarValorPago } from '@/lib/troco.mjs'
 import { useStatusLoja } from '@/lib/useStatusLoja'
 import IconeWhatsApp from '@/components/icons/IconeWhatsApp'
 import {
@@ -250,6 +251,9 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const [precisaTroco, setPrecisaTroco] = useState(false)
   const [trocoPara, setTrocoPara] = useState('')
   const [pedidoEnviado, setPedidoEnviado] = useState<PedidoEnviado | null>(null)
+  // `null` enquanto não houve tentativa; `false` quando o navegador barrou e a
+  // tela de sucesso precisa destacar o envio manual.
+  const [envioWhatsAppAutomatico, setEnvioWhatsAppAutomatico] = useState<boolean | null>(null)
   // Número da loja vem de `configuracoes_loja.whatsapp_numero`, o mesmo que o
   // cabeçalho e a tela de loja fechada usam.
   const { numeroWhatsApp } = useStatusLoja()
@@ -322,6 +326,12 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   }, [formaPagamentoSelecionada, totalFinal])
 
   const totalFinalComTaxaPagamento = totalFinal + taxaPagamentoAtual
+
+  // Só vale como erro quando a pessoa escolheu pagar com um valor: campo vazio
+  // significa "valor exato", não engano.
+  const erroTroco = precisaTroco
+    ? validarValorPago(trocoPara, totalFinalComTaxaPagamento)
+    : null
   const etapaAtualConfig = ETAPAS.find((etapa) => etapa.numero === etapaAtual) || ETAPAS[0]
   const progressoCheckout = Math.round((etapaAtual / ETAPAS.length) * 100)
   const usandoFallbackPagamentos =
@@ -1074,6 +1084,11 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         mostrarAlerta('aviso', 'Forma de pagamento', 'Selecione a forma de pagamento')
         return false
       }
+      // Troco menor que a conta só apareceria como problema na entrega.
+      if (erroTroco) {
+        mostrarAlerta('aviso', 'Valor do troco', erroTroco)
+        return false
+      }
       return true
     }
 
@@ -1232,6 +1247,19 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
 
   const enviarPedido = async () => {
     if (!validarEtapa(3)) return
+
+    /*
+     * A aba é reservada AQUI, ainda dentro do gesto do clique. Depois do
+     * `await` que grava o pedido, o navegador já não reconhece a ação como
+     * iniciada pelo usuário e trata qualquer `window.open` como popup — foi por
+     * isso que o WhatsApp não abria sozinho. Reservando antes, só resta trocar
+     * o endereço da aba quando a mensagem estiver pronta.
+     *
+     * Se o bloqueador recusar mesmo assim, `janelaWhatsApp` fica nulo e a tela
+     * de sucesso destaca o passo manual.
+     */
+    const janelaWhatsApp =
+      typeof window !== 'undefined' ? window.open('', '_blank', 'noopener,noreferrer') : null
     if (tipoEntrega === 'entrega' && !dadosEntregaPreenchidos) {
       if (!validarEtapa(2)) setEtapaAtual(2)
       return
@@ -1501,6 +1529,41 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         })
       }
 
+      const resumoParaEnvio: PedidoWhatsApp = {
+        numeroPedido: numeroPedidoFinal ?? proximoNumeroPedido,
+        nomeCliente: nomeClientePedido,
+        telefone: telefone.trim(),
+        tipoEntrega,
+        formaPagamento,
+        trocoPara: precisaTroco ? Number(String(trocoPara).replace(',', '.')) : null,
+        total: totalComTaxaPagamentoConfirmado,
+        taxaEntrega,
+        endereco: enderecoEntrega,
+        bairro,
+        cidade: bairroSelecionado?.nome || '',
+        pontoReferencia,
+        observacoes,
+        itens: itens.map((item) => ({
+          nome: item.produto.nome,
+          quantidade: item.quantidade,
+          subtotal: item.subtotal,
+        })),
+      }
+
+      const urlWhatsApp = numeroWhatsApp
+        ? linkWhatsApp(numeroWhatsApp, mensagemPedidoParaLoja(resumoParaEnvio))
+        : null
+
+      if (janelaWhatsApp && urlWhatsApp) {
+        janelaWhatsApp.location.href = urlWhatsApp
+        setEnvioWhatsAppAutomatico(true)
+      } else {
+        // Sem aba reservada não dá para abrir depois do await; a tela de
+        // sucesso passa a pedir o clique.
+        janelaWhatsApp?.close()
+        setEnvioWhatsAppAutomatico(false)
+      }
+
       // Salva dados do pedido enviado para mostrar tela de sucesso
       setPedidoEnviado({
         id: pedido.id,
@@ -1511,26 +1574,8 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         mesa: mesaSelecionada || undefined,
         pagamentoOnlineAprovado: false,
         dataPrevistaEntrega,
-        resumoWhatsApp: {
-          numeroPedido: numeroPedidoFinal ?? proximoNumeroPedido,
-          nomeCliente: nomeClientePedido,
-          telefone: telefone.trim(),
-          tipoEntrega,
-          formaPagamento,
-          trocoPara: precisaTroco ? Number(String(trocoPara).replace(',', '.')) : null,
-          total: totalComTaxaPagamentoConfirmado,
-          taxaEntrega,
-          endereco: enderecoEntrega,
-          bairro,
-          cidade: bairroSelecionado?.nome || '',
-          pontoReferencia,
-          observacoes,
-          itens: itens.map((item) => ({
-            nome: item.produto.nome,
-            quantidade: item.quantidade,
-            subtotal: item.subtotal,
-          })),
-        },
+        // Mesmo objeto que abriu o WhatsApp, para a tela poder reenviar.
+        resumoWhatsApp: resumoParaEnvio,
       })
 
       // Salvar nome e telefone no localStorage para próximos pedidos
@@ -1558,6 +1603,8 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       setEtapaAtual(1)
     } catch (error) {
       console.error('Erro ao enviar pedido:', error)
+      // Pedido não existe: a aba reservada viraria uma janela em branco.
+      janelaWhatsApp?.close()
       if (pedidoCriadoId) {
         if (mesaFoiOcupada) {
           const { error: erroLiberarMesa } = await supabase
@@ -1673,7 +1720,9 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
 
   const enviarPedidoNoWhatsApp = () => {
     if (!linkPedidoWhatsApp) return
+    // Clique direto do usuário: aqui `window.open` é sempre permitido.
     window.open(linkPedidoWhatsApp, '_blank', 'noopener,noreferrer')
+    setEnvioWhatsAppAutomatico(true)
   }
 
   if (pedidoEnviado) {
@@ -1802,23 +1851,48 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
               secundário.
             */}
             {linkPedidoWhatsApp ? (
-              <Button
-                type="button"
-                onClick={enviarPedidoNoWhatsApp}
-                className="h-12 w-full gap-2 bg-[#25D366] text-base font-semibold text-white hover:bg-[#1ebe57]"
-              >
-                <IconeWhatsApp className="size-5" />
-                Enviar pedido no WhatsApp
-              </Button>
+              <>
+                {envioWhatsAppAutomatico === false ? (
+                  <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-[#25D366]/30 bg-[#25D366]/10 p-3">
+                    <AlertCircle className="mt-0.5 size-4 shrink-0 text-[#128C7E]" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">
+                        Falta enviar o pedido
+                      </p>
+                      <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                        Seu navegador bloqueou a abertura automática. Toque no botão abaixo
+                        para mandar o pedido para a loja.
+                      </p>
+                    </div>
+                  </div>
+                ) : envioWhatsAppAutomatico ? (
+                  <p className="mb-3 text-center text-sm text-muted-foreground">
+                    Abrimos o WhatsApp com seu pedido. Não apareceu? Toque abaixo.
+                  </p>
+                ) : null}
+
+                <Button
+                  type="button"
+                  onClick={enviarPedidoNoWhatsApp}
+                  className={`h-14 w-full gap-2 bg-[#25D366] text-base font-semibold text-white hover:bg-[#1ebe57] ${
+                    envioWhatsAppAutomatico === false ? 'animate-pulse' : ''
+                  }`}
+                >
+                  <IconeWhatsApp className="size-5" />
+                  {envioWhatsAppAutomatico
+                    ? 'Abrir o WhatsApp de novo'
+                    : 'Confirmar e enviar no WhatsApp'}
+                </Button>
+              </>
             ) : null}
 
             <Button
               type="button"
               onClick={onFechar}
-              variant={linkPedidoWhatsApp ? 'outline' : 'default'}
+              variant={linkPedidoWhatsApp ? 'ghost' : 'default'}
               className={`h-12 w-full text-base font-semibold${linkPedidoWhatsApp ? ' mt-2' : ''}`}
             >
-              Entendi
+              {linkPedidoWhatsApp ? 'Fechar' : 'Entendi'}
             </Button>
 
             {/* Mensagem de agradecimento */}
@@ -2344,56 +2418,98 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                   )}
                 </div>
 
+                {/*
+                  Troco: a pergunta é "vai pagar com quanto?", não uma caixa
+                  "preciso de troco" seguida de um campo vazio. As sugestões saem
+                  do total do pedido — a versão anterior oferecia R$ 20/50/100/200
+                  fixos, que num pedido de R$ 250 não pagavam nem a conta.
+                */}
                 {formaPagamentoSelecionada?.aceita_troco && (
-                  <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4 space-y-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={precisaTroco}
-                        onChange={(e) => {
-                          setPrecisaTroco(e.target.checked)
-                          if (!e.target.checked) setTrocoPara('')
-                        }}
-                        className="w-4 h-4 rounded border-green-300 text-green-600 focus:ring-green-500"
-                      />
-                      <span className="text-sm font-medium text-green-800 dark:text-green-300">
-                        Preciso de troco
-                      </span>
-                    </label>
-
-                    {precisaTroco && (
-                      <div>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600 font-medium">
-                            R$
-                          </span>
-                          <input
-                            type="number"
-                            value={trocoPara}
-                            onChange={(e) => setTrocoPara(e.target.value)}
-                            placeholder="0,00"
-                            min={totalFinalComTaxaPagamento}
-                            step="0.01"
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-900 border border-green-300 dark:border-green-700 rounded-lg focus:ring-2 focus:ring-green-500"
-                          />
-                        </div>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {[20, 50, 100, 200].map((valor) => (
-                            <button
-                              key={valor}
-                              type="button"
-                              onClick={() => setTrocoPara(valor.toString())}
-                              className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${trocoPara === valor.toString()
-                                  ? 'bg-green-600 text-white'
-                                  : 'bg-white dark:bg-gray-800 text-green-700 border border-green-300 hover:bg-green-100'
-                                }`}
-                            >
-                              R$ {valor}
-                            </button>
-                          ))}
-                        </div>
+                  <div className="space-y-3 rounded-xl border border-border bg-muted/40 p-4">
+                    <div className="flex items-start gap-2.5">
+                      <Banknote className="mt-0.5 size-4 shrink-0 text-primary" strokeWidth={1.8} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">Vai pagar com quanto?</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          Para o entregador levar o troco certo.
+                        </p>
                       </div>
-                    )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrecisaTroco(false)
+                          setTrocoPara('')
+                        }}
+                        className={`inline-flex h-9 items-center rounded-lg border px-3 text-sm font-medium transition-colors ${
+                          !precisaTroco
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-background text-muted-foreground hover:bg-accent'
+                        }`}
+                      >
+                        Valor exato
+                      </button>
+
+                      {sugerirValoresTroco(totalFinalComTaxaPagamento).map((valor) => (
+                        <button
+                          key={valor}
+                          type="button"
+                          onClick={() => {
+                            setPrecisaTroco(true)
+                            setTrocoPara(String(valor))
+                          }}
+                          className={`inline-flex h-9 items-center rounded-lg border px-3 text-sm font-medium transition-colors ${
+                            precisaTroco && trocoPara === String(valor)
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-border bg-background text-foreground hover:bg-accent'
+                          }`}
+                        >
+                          R$ {valor}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="carrinho-troco" className="text-xs text-muted-foreground">
+                        Ou digite outro valor
+                      </label>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                          R$
+                        </span>
+                        <input
+                          id="carrinho-troco"
+                          inputMode="decimal"
+                          value={trocoPara}
+                          onChange={(evento) => {
+                            const valor = evento.target.value
+                            setTrocoPara(valor)
+                            setPrecisaTroco(valor.trim() !== '')
+                          }}
+                          placeholder="0,00"
+                          className={`h-11 w-full rounded-lg border bg-background pl-10 pr-4 text-base text-foreground outline-none transition-colors focus:ring-2 focus:ring-ring/60 ${
+                            erroTroco ? 'border-destructive' : 'border-border'
+                          }`}
+                        />
+                      </div>
+
+                      {erroTroco ? (
+                        <p className="text-xs text-destructive">{erroTroco}</p>
+                      ) : precisaTroco && trocoPara ? (
+                        <p className="text-sm text-foreground">
+                          Troco de{' '}
+                          <span className="font-semibold tabular-nums">
+                            R$ {calcularTroco(trocoPara, totalFinalComTaxaPagamento).toFixed(2)}
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Sem troco: você paga R$ {totalFinalComTaxaPagamento.toFixed(2)}.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
 
