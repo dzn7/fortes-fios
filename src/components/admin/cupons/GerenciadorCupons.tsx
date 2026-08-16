@@ -1,27 +1,84 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   BadgePercent,
-  CheckCircle2,
+  Check,
+  Copy,
+  Eye,
+  EyeOff,
   Gift,
-  Layers,
-  Loader2,
   Pencil,
   Plus,
-  Save,
   Search,
+  SlidersHorizontal,
+  Sparkles,
+  Ticket,
   Trash2,
   Truck,
-  X,
-  XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { supabase, Combo, Produto } from '@/lib/supabase'
-import { Cupom, normalizarCodigoCupom, TipoAplicacaoCupom, TipoDescontoCupom } from '@/lib/cupons'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { supabase, Produto } from '@/lib/supabase'
+import { Cupom, normalizarCodigoCupom, TipoDescontoCupom } from '@/lib/cupons'
+import {
+  PRESETS_CUPOM,
+  VALOR_SIMULACAO_PADRAO,
+  aplicarPreset,
+  erroDoCampo,
+  sugerirCodigo,
+  validarFormularioCupom,
+  type FormularioCupom,
+} from '@/lib/cupom-formulario.mjs'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { MenuAcoes, type MenuAcaoItem } from '@/components/ui/menu-acoes'
+import { ListaSkeleton, ListaVazia } from '@/components/admin/filtros/ListaEstado'
+import { cn } from '@/lib/utils'
+import { ResumoCupom } from './ResumoCupom'
+
+/**
+ * Cupons.
+ *
+ * A versão anterior veio de outro sistema: pedia 16 campos que espelhavam
+ * colunas do banco, usava `<select>` cru com cor `zinc` fixa fora do design
+ * system, oferecia "aplicar em combo" (tabela vazia, rota legada) e não dizia
+ * em lugar nenhum o que o cupom faria.
+ *
+ * O desenho agora parte do que a pessoa quer fazer:
+ *   1. escolhe uma receita pronta (10%, R$ 15, frete grátis);
+ *   2. confere no painel o efeito em reais;
+ *   3. salva.
+ * Tudo que não é essencial — pedido mínimo, teto, limites de uso, validade —
+ * fica atrás de "Regras avançadas", desligado por padrão.
+ *
+ * Spec de UI: UI.md §Cupons · domínio testável em `src/lib/cupom-formulario.mjs`
+ */
 
 type CupomComMetricas = Cupom & {
   totalDescontoAplicado: number
@@ -29,890 +86,975 @@ type CupomComMetricas = Cupom & {
   quantidadeUsosConfirmados: number
 }
 
-type EstadoFormularioCupom = {
-  codigo: string
-  nome: string
-  descricao: string
-  tipoDesconto: TipoDescontoCupom
-  valorDesconto: string
-  pedidoMinimo: string
-  limiteDesconto: string
-  aplicaEm: TipoAplicacaoCupom
-  produtoId: string
-  comboId: string
-  usoUnico: boolean
-  usoMaximoTotal: string
-  usoMaximoPorCliente: string
-  validadeInicio: string
-  validadeFim: string
-  ativo: boolean
-}
-
-const ESTADO_INICIAL_FORMULARIO: EstadoFormularioCupom = {
+const FORMULARIO_INICIAL: FormularioCupom = {
   codigo: '',
   nome: '',
   descricao: '',
   tipoDesconto: 'percentual',
   valorDesconto: '',
-  pedidoMinimo: '0',
+  pedidoMinimo: '',
   limiteDesconto: '',
   aplicaEm: 'pedido',
   produtoId: '',
-  comboId: '',
-  usoUnico: false,
   usoMaximoTotal: '',
   usoMaximoPorCliente: '',
-  validadeInicio: '',
   validadeFim: '',
   ativo: true,
 }
 
-type UsoCupom = {
-  cupom_id: string
-  valor_desconto: number
-  valor_frete_descontado: number
-}
+const TIPOS_DESCONTO: {
+  valor: TipoDescontoCupom
+  rotulo: string
+  ajuda: string
+  icone: typeof BadgePercent
+}[] = [
+  {
+    valor: 'percentual',
+    rotulo: 'Porcentagem',
+    ajuda: 'Ex.: 10% do pedido',
+    icone: BadgePercent,
+  },
+  { valor: 'valor_fixo', rotulo: 'Valor fixo', ajuda: 'Ex.: R$ 15 de abatimento', icone: Ticket },
+  { valor: 'frete_gratis', rotulo: 'Frete grátis', ajuda: 'O cliente não paga entrega', icone: Truck },
+]
 
-const formatarMoeda = (valor: number): string =>
+const formatarMoeda = (valor: number) =>
   valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
-const formatarData = (valor: string | null): string => {
-  if (!valor) return 'Sem data'
-  const data = new Date(valor)
-  if (Number.isNaN(data.getTime())) return 'Data inválida'
-  return data.toLocaleString('pt-BR')
-}
-
-const converterIsoParaInput = (valor: string | null): string => {
-  if (!valor) return ''
-  const data = new Date(valor)
-  if (Number.isNaN(data.getTime())) return ''
-  const ano = data.getFullYear()
-  const mes = `${data.getMonth() + 1}`.padStart(2, '0')
-  const dia = `${data.getDate()}`.padStart(2, '0')
-  const hora = `${data.getHours()}`.padStart(2, '0')
-  const minuto = `${data.getMinutes()}`.padStart(2, '0')
-  return `${ano}-${mes}-${dia}T${hora}:${minuto}`
-}
-
-const converterInputParaIso = (valor: string): string | null => {
+const formatarData = (valor: string | null) => {
   if (!valor) return null
   const data = new Date(valor)
   if (Number.isNaN(data.getTime())) return null
-  return data.toISOString()
+  return data.toLocaleDateString('pt-BR')
 }
 
-const paraNumero = (valor: string): number => {
-  if (!valor) return 0
-  const numero = Number(valor)
+const paraNumero = (valor: string) => {
+  const numero = Number(String(valor).replace(',', '.'))
   return Number.isFinite(numero) ? numero : 0
 }
 
-const CLASSE_CAMPO = 'min-w-0 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white'
+const dataParaInput = (valor: string | null) => {
+  if (!valor) return ''
+  const data = new Date(valor)
+  if (Number.isNaN(data.getTime())) return ''
+  return data.toISOString().slice(0, 10)
+}
+
+/** Etiqueta curta do desconto, o que a lista precisa mostrar de relance. */
+const rotuloDesconto = (cupom: Cupom) => {
+  if (cupom.tipo_desconto === 'frete_gratis') return 'Frete grátis'
+  if (cupom.tipo_desconto === 'valor_fixo') return `− ${formatarMoeda(cupom.valor_desconto)}`
+  return `− ${cupom.valor_desconto}%`
+}
+
+const cupomExpirado = (cupom: Cupom) => {
+  if (!cupom.validade_fim) return false
+  const fim = new Date(cupom.validade_fim)
+  return !Number.isNaN(fim.getTime()) && fim.getTime() < Date.now()
+}
 
 export default function GerenciadorCupons() {
   const [cupons, setCupons] = useState<CupomComMetricas[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
-  const [combos, setCombos] = useState<Combo[]>([])
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
-  const [modalFormularioAberto, setModalFormularioAberto] = useState(false)
-  const [idCupomEditando, setIdCupomEditando] = useState<string | null>(null)
-  const [filtroBusca, setFiltroBusca] = useState('')
+
+  const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativos' | 'inativos'>('todos')
-  const [filtroAplicacao, setFiltroAplicacao] = useState<'todos' | TipoAplicacaoCupom>('todos')
-  const [formulario, setFormulario] = useState<EstadoFormularioCupom>(ESTADO_INICIAL_FORMULARIO)
+
+  const [modalAberto, setModalAberto] = useState(false)
+  const [idEditando, setIdEditando] = useState<string | null>(null)
+  const [formulario, setFormulario] = useState<FormularioCupom>(FORMULARIO_INICIAL)
+  const [mostrarAvancado, setMostrarAvancado] = useState(false)
+  const [valorSimulacao, setValorSimulacao] = useState(String(VALOR_SIMULACAO_PADRAO))
+  const [tentouSalvar, setTentouSalvar] = useState(false)
   const [cupomParaExcluir, setCupomParaExcluir] = useState<CupomComMetricas | null>(null)
+  const [codigoCopiado, setCodigoCopiado] = useState<string | null>(null)
 
-  useEffect(() => {
-    void carregarDados()
-
-    const canal = supabase
-      .channel('admin-cupons-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cupons' }, () => {
-        void carregarDados()
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cupons_usos' }, () => {
-        void carregarDados()
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(canal)
-    }
-  }, [])
-
-  const carregarDados = async () => {
+  const carregarDados = useCallback(async () => {
     setCarregando(true)
     try {
-      const [respostaCupons, respostaUsos, respostaProdutos, respostaCombos] = await Promise.all([
+      const [respostaCupons, respostaUsos, respostaProdutos] = await Promise.all([
         supabase.from('cupons').select('*').order('created_at', { ascending: false }),
         supabase.from('cupons_usos').select('cupom_id, valor_desconto, valor_frete_descontado'),
         supabase
           .from('produtos')
-          .select('id, nome, descricao, preco, categoria, imagem_url, disponivel, ordem, destaque, created_at, updated_at')
+          .select('id, nome, preco, categoria, disponivel')
           .eq('disponivel', true)
           .order('nome'),
-        supabase.from('combos').select('*').eq('disponivel', true).order('nome'),
       ])
 
       if (respostaCupons.error) throw respostaCupons.error
       if (respostaUsos.error) throw respostaUsos.error
       if (respostaProdutos.error) throw respostaProdutos.error
-      if (respostaCombos.error) throw respostaCombos.error
 
-      const usos = (respostaUsos.data || []).map((uso: any) => ({
-        cupom_id: uso.cupom_id,
-        valor_desconto: Number(uso.valor_desconto || 0),
-        valor_frete_descontado: Number(uso.valor_frete_descontado || 0),
-      })) as UsoCupom[]
-
-      const metricasPorCupom = usos.reduce<Record<string, { usos: number; desconto: number; frete: number }>>((acumulado, uso) => {
-        const atual = acumulado[uso.cupom_id] || { usos: 0, desconto: 0, frete: 0 }
+      const metricas = (respostaUsos.data || []).reduce<
+        Record<string, { usos: number; desconto: number; frete: number }>
+      >((acumulado, uso: Record<string, unknown>) => {
+        const id = String(uso.cupom_id)
+        const atual = acumulado[id] || { usos: 0, desconto: 0, frete: 0 }
         atual.usos += 1
-        atual.desconto += uso.valor_desconto
-        atual.frete += uso.valor_frete_descontado
-        acumulado[uso.cupom_id] = atual
+        atual.desconto += Number(uso.valor_desconto || 0)
+        atual.frete += Number(uso.valor_frete_descontado || 0)
+        acumulado[id] = atual
         return acumulado
       }, {})
 
-      const cuponsComMetricas = (respostaCupons.data || []).map((registro: any) => {
-        const metrica = metricasPorCupom[registro.id] || { usos: 0, desconto: 0, frete: 0 }
-        return {
-          ...registro,
-          valor_desconto: Number(registro.valor_desconto || 0),
-          pedido_minimo: Number(registro.pedido_minimo || 0),
-          limite_desconto: registro.limite_desconto === null ? null : Number(registro.limite_desconto),
-          uso_maximo_total: registro.uso_maximo_total === null ? null : Number(registro.uso_maximo_total),
-          uso_maximo_por_cliente: registro.uso_maximo_por_cliente === null ? null : Number(registro.uso_maximo_por_cliente),
-          total_usos: Number(registro.total_usos || 0),
-          totalDescontoAplicado: metrica.desconto,
-          totalFreteConcedido: metrica.frete,
-          quantidadeUsosConfirmados: metrica.usos,
-        } as CupomComMetricas
-      })
-
-      setCupons(cuponsComMetricas)
-      setProdutos(respostaProdutos.data || [])
-      setCombos(respostaCombos.data || [])
+      setCupons(
+        (respostaCupons.data || []).map((registro: Record<string, unknown>) => {
+          const metrica = metricas[String(registro.id)] || { usos: 0, desconto: 0, frete: 0 }
+          return {
+            ...registro,
+            valor_desconto: Number(registro.valor_desconto || 0),
+            pedido_minimo: Number(registro.pedido_minimo || 0),
+            limite_desconto:
+              registro.limite_desconto === null ? null : Number(registro.limite_desconto),
+            uso_maximo_total:
+              registro.uso_maximo_total === null ? null : Number(registro.uso_maximo_total),
+            uso_maximo_por_cliente:
+              registro.uso_maximo_por_cliente === null
+                ? null
+                : Number(registro.uso_maximo_por_cliente),
+            total_usos: Number(registro.total_usos || 0),
+            totalDescontoAplicado: metrica.desconto,
+            totalFreteConcedido: metrica.frete,
+            quantidadeUsosConfirmados: metrica.usos,
+          } as CupomComMetricas
+        }),
+      )
+      setProdutos((respostaProdutos.data || []) as Produto[])
     } catch (erro) {
       console.error('[Cupons] Falha ao carregar dados:', erro)
-      toast.error('Não foi possível carregar os dados de cupons.')
+      toast.error('Não foi possível carregar os cupons.')
     } finally {
       setCarregando(false)
     }
+  }, [])
+
+  useEffect(() => {
+    void carregarDados()
+  }, [carregarDados])
+
+  const erros = useMemo(() => validarFormularioCupom(formulario), [formulario])
+  const erroDe = (campo: string) => (tentouSalvar ? erroDoCampo(erros, campo) : null)
+
+  const atualizar = (campos: Partial<FormularioCupom>) => {
+    setFormulario((atual) => ({ ...atual, ...campos }))
   }
 
-  const limparFormulario = () => {
-    setFormulario(ESTADO_INICIAL_FORMULARIO)
-    setIdCupomEditando(null)
-  }
-
-  const abrirModalNovo = () => {
-    limparFormulario()
-    setModalFormularioAberto(true)
-  }
-
-  const fecharModalFormulario = () => {
-    if (salvando) return
-    setModalFormularioAberto(false)
-    limparFormulario()
-  }
-
-  const validarFormulario = (): string | null => {
-    if (!formulario.codigo.trim()) return 'Informe o código do cupom.'
-    if (!formulario.nome.trim()) return 'Informe o nome do cupom.'
-
-    if (formulario.tipoDesconto !== 'frete_gratis' && paraNumero(formulario.valorDesconto) <= 0) {
-      return 'Informe um valor de desconto maior que zero.'
-    }
-
-    if (formulario.aplicaEm === 'produto' && !formulario.produtoId) {
-      return 'Selecione o produto para este cupom.'
-    }
-
-    if (formulario.aplicaEm === 'combo' && !formulario.comboId) {
-      return 'Selecione o combo para este cupom.'
-    }
-
-    if (formulario.validadeInicio && formulario.validadeFim) {
-      const inicio = new Date(formulario.validadeInicio).getTime()
-      const fim = new Date(formulario.validadeFim).getTime()
-      if (fim < inicio) {
-        return 'A validade final não pode ser menor que a validade inicial.'
+  /**
+   * Trocar o tipo de desconto reescreve o código sugerido — mas só enquanto o
+   * código ainda for uma sugestão. Se a pessoa digitou o dela, mandamos ela.
+   */
+  const trocarTipo = (tipo: TipoDescontoCupom) => {
+    setFormulario((atual) => {
+      const eraSugestao =
+        !atual.codigo || atual.codigo === sugerirCodigo(atual.tipoDesconto, atual.valorDesconto)
+      const proximo: FormularioCupom = {
+        ...atual,
+        tipoDesconto: tipo,
+        valorDesconto: tipo === 'frete_gratis' ? '' : atual.valorDesconto,
+        limiteDesconto: tipo === 'percentual' ? atual.limiteDesconto : '',
       }
-    }
-
-    return null
+      return eraSugestao
+        ? { ...proximo, codigo: sugerirCodigo(tipo, proximo.valorDesconto) }
+        : proximo
+    })
   }
 
-  const montarPayload = () => {
-    const codigoNormalizado = normalizarCodigoCupom(formulario.codigo)
-    const tipoDesconto = formulario.tipoDesconto
-    const valorDesconto = tipoDesconto === 'frete_gratis' ? 0 : paraNumero(formulario.valorDesconto)
-    const usoMaximoTotal = formulario.usoUnico
-      ? 1
-      : (formulario.usoMaximoTotal ? Number(formulario.usoMaximoTotal) : null)
-
-    return {
-      codigo: codigoNormalizado,
-      nome: formulario.nome.trim(),
-      descricao: formulario.descricao.trim() || null,
-      ativo: formulario.ativo,
-      tipo_desconto: tipoDesconto,
-      valor_desconto: valorDesconto,
-      pedido_minimo: paraNumero(formulario.pedidoMinimo),
-      limite_desconto: formulario.limiteDesconto ? Number(formulario.limiteDesconto) : null,
-      uso_unico: formulario.usoUnico,
-      uso_maximo_total: usoMaximoTotal,
-      uso_maximo_por_cliente: formulario.usoMaximoPorCliente ? Number(formulario.usoMaximoPorCliente) : null,
-      aplica_em: formulario.aplicaEm,
-      produto_id: formulario.aplicaEm === 'produto' ? formulario.produtoId : null,
-      combo_id: formulario.aplicaEm === 'combo' ? formulario.comboId : null,
-      validade_inicio: converterInputParaIso(formulario.validadeInicio),
-      validade_fim: converterInputParaIso(formulario.validadeFim),
-    }
+  const trocarValor = (valor: string) => {
+    setFormulario((atual) => {
+      const eraSugestao =
+        !atual.codigo || atual.codigo === sugerirCodigo(atual.tipoDesconto, atual.valorDesconto)
+      const proximo = { ...atual, valorDesconto: valor }
+      return eraSugestao
+        ? { ...proximo, codigo: sugerirCodigo(atual.tipoDesconto, valor) }
+        : proximo
+    })
   }
 
-  const salvarCupom = async () => {
-    const erroValidacao = validarFormulario()
-    if (erroValidacao) {
-      toast.warning(erroValidacao)
-      return
-    }
-
-    setSalvando(true)
-    try {
-      const payload = montarPayload()
-
-      if (idCupomEditando) {
-        const { error } = await supabase
-          .from('cupons')
-          .update(payload)
-          .eq('id', idCupomEditando)
-
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('cupons')
-          .insert(payload)
-
-        if (error) throw error
-      }
-
-      setModalFormularioAberto(false)
-      limparFormulario()
-      await carregarDados()
-    } catch (erro: any) {
-      console.error('[Cupons] Erro ao salvar cupom:', erro)
-      if (erro?.message?.includes('idx_cupons_codigo_unico')) {
-        toast.error('Já existe um cupom com este código.')
-      } else {
-        toast.error('Não foi possível salvar o cupom.')
-      }
-    } finally {
-      setSalvando(false)
-    }
+  const abrirNovo = () => {
+    setIdEditando(null)
+    setFormulario(FORMULARIO_INICIAL)
+    setMostrarAvancado(false)
+    setTentouSalvar(false)
+    setValorSimulacao(String(VALOR_SIMULACAO_PADRAO))
+    setModalAberto(true)
   }
 
-  const iniciarEdicao = (cupom: CupomComMetricas) => {
-    setIdCupomEditando(cupom.id)
+  const abrirEdicao = (cupom: CupomComMetricas) => {
+    setIdEditando(cupom.id)
     setFormulario({
       codigo: cupom.codigo,
       nome: cupom.nome,
       descricao: cupom.descricao || '',
       tipoDesconto: cupom.tipo_desconto,
-      valorDesconto: cupom.tipo_desconto === 'frete_gratis' ? '' : String(cupom.valor_desconto),
-      pedidoMinimo: String(cupom.pedido_minimo || 0),
-      limiteDesconto: cupom.limite_desconto !== null ? String(cupom.limite_desconto) : '',
-      aplicaEm: cupom.aplica_em,
+      valorDesconto: cupom.valor_desconto ? String(cupom.valor_desconto) : '',
+      pedidoMinimo: cupom.pedido_minimo ? String(cupom.pedido_minimo) : '',
+      limiteDesconto: cupom.limite_desconto ? String(cupom.limite_desconto) : '',
+      // `combo` não existe mais na tela: a tabela está vazia e a rota é legada.
+      aplicaEm: cupom.aplica_em === 'produto' ? 'produto' : 'pedido',
       produtoId: cupom.produto_id || '',
-      comboId: cupom.combo_id || '',
-      usoUnico: cupom.uso_unico,
-      usoMaximoTotal: cupom.uso_maximo_total !== null ? String(cupom.uso_maximo_total) : '',
-      usoMaximoPorCliente: cupom.uso_maximo_por_cliente !== null ? String(cupom.uso_maximo_por_cliente) : '',
-      validadeInicio: converterIsoParaInput(cupom.validade_inicio),
-      validadeFim: converterIsoParaInput(cupom.validade_fim),
+      usoMaximoTotal: cupom.uso_maximo_total ? String(cupom.uso_maximo_total) : '',
+      usoMaximoPorCliente: cupom.uso_maximo_por_cliente
+        ? String(cupom.uso_maximo_por_cliente)
+        : '',
+      validadeFim: dataParaInput(cupom.validade_fim),
       ativo: cupom.ativo,
     })
-    setModalFormularioAberto(true)
+    // Abre já expandido quando o cupom usa alguma regra avançada — senão a
+    // pessoa edita sem ver o que está configurado.
+    setMostrarAvancado(
+      Boolean(
+        cupom.pedido_minimo ||
+          cupom.limite_desconto ||
+          cupom.uso_maximo_total ||
+          cupom.uso_maximo_por_cliente ||
+          cupom.validade_fim ||
+          cupom.aplica_em === 'produto',
+      ),
+    )
+    setTentouSalvar(false)
+    setValorSimulacao(String(VALOR_SIMULACAO_PADRAO))
+    setModalAberto(true)
   }
 
-  const alternarStatusCupom = async (cupom: CupomComMetricas) => {
+  const fecharModal = () => {
+    if (salvando) return
+    setModalAberto(false)
+  }
+
+  const salvar = async () => {
+    setTentouSalvar(true)
+    if (erros.length > 0) {
+      toast.warning(erros[0].mensagem)
+      return
+    }
+
+    setSalvando(true)
     try {
-      const { error } = await supabase
-        .from('cupons')
-        .update({ ativo: !cupom.ativo })
-        .eq('id', cupom.id)
-      if (error) throw error
+      const payload = {
+        codigo: normalizarCodigoCupom(formulario.codigo),
+        nome: formulario.nome.trim(),
+        descricao: formulario.descricao?.trim() || null,
+        ativo: formulario.ativo,
+        tipo_desconto: formulario.tipoDesconto,
+        valor_desconto:
+          formulario.tipoDesconto === 'frete_gratis' ? 0 : paraNumero(formulario.valorDesconto),
+        pedido_minimo: paraNumero(formulario.pedidoMinimo),
+        limite_desconto: formulario.limiteDesconto ? paraNumero(formulario.limiteDesconto) : null,
+        uso_maximo_total: formulario.usoMaximoTotal
+          ? Math.round(paraNumero(formulario.usoMaximoTotal))
+          : null,
+        uso_maximo_por_cliente: formulario.usoMaximoPorCliente
+          ? Math.round(paraNumero(formulario.usoMaximoPorCliente))
+          : null,
+        uso_unico: formulario.usoMaximoPorCliente === '1',
+        aplica_em: formulario.aplicaEm,
+        produto_id: formulario.aplicaEm === 'produto' ? formulario.produtoId || null : null,
+        combo_id: null,
+        validade_inicio: null,
+        // Vale até o fim do dia escolhido: quem digita 31/12 espera que o dia 31 conte.
+        validade_fim: formulario.validadeFim
+          ? new Date(`${formulario.validadeFim}T23:59:59`).toISOString()
+          : null,
+      }
+
+      const resposta = idEditando
+        ? await supabase.from('cupons').update(payload).eq('id', idEditando)
+        : await supabase.from('cupons').insert(payload)
+
+      if (resposta.error) {
+        if (resposta.error.code === '23505') {
+          toast.error('Já existe um cupom com esse código.')
+          return
+        }
+        throw resposta.error
+      }
+
+      toast.success(idEditando ? 'Cupom atualizado' : 'Cupom criado')
+      setModalAberto(false)
+      void carregarDados()
     } catch (erro) {
-      console.error('[Cupons] Erro ao alterar status:', erro)
-      toast.error('Não foi possível alterar o status do cupom.')
+      console.error('[Cupons] Falha ao salvar:', erro)
+      toast.error('Não foi possível salvar o cupom.')
+    } finally {
+      setSalvando(false)
     }
   }
 
-  const excluirCupomConfirmado = async (cupom: CupomComMetricas) => {
-    try {
-      const { error } = await supabase.from('cupons').delete().eq('id', cupom.id)
-      if (error) throw error
-      toast.success(`Cupom ${cupom.codigo} excluído`)
-      if (idCupomEditando === cupom.id) limparFormulario()
-    } catch (erro) {
-      console.error('[Cupons] Erro ao excluir cupom:', erro)
+  const alternarAtivo = async (cupom: CupomComMetricas) => {
+    const { error } = await supabase
+      .from('cupons')
+      .update({ ativo: !cupom.ativo })
+      .eq('id', cupom.id)
+
+    if (error) {
+      toast.error('Não foi possível alterar o cupom.')
+      return
+    }
+    toast.success(cupom.ativo ? 'Cupom desativado' : 'Cupom ativado')
+    void carregarDados()
+  }
+
+  const excluir = async () => {
+    if (!cupomParaExcluir) return
+    const { error } = await supabase.from('cupons').delete().eq('id', cupomParaExcluir.id)
+
+    if (error) {
       toast.error('Não foi possível excluir o cupom.')
-    } finally {
-      setCupomParaExcluir(null)
+      return
+    }
+    toast.success('Cupom excluído')
+    setCupomParaExcluir(null)
+    void carregarDados()
+  }
+
+  const copiarCodigo = async (codigo: string) => {
+    try {
+      await navigator.clipboard.writeText(codigo)
+      setCodigoCopiado(codigo)
+      setTimeout(() => setCodigoCopiado(null), 1600)
+    } catch {
+      toast.error('Não foi possível copiar o código.')
     }
   }
 
   const cuponsFiltrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase()
     return cupons.filter((cupom) => {
-      const textoBusca = filtroBusca.trim().toLowerCase()
-      const bateBusca = !textoBusca
-        || cupom.codigo.toLowerCase().includes(textoBusca)
-        || cupom.nome.toLowerCase().includes(textoBusca)
-        || (cupom.descricao || '').toLowerCase().includes(textoBusca)
-
-      const bateStatus = filtroStatus === 'todos'
-        || (filtroStatus === 'ativos' && cupom.ativo)
-        || (filtroStatus === 'inativos' && !cupom.ativo)
-
-      const bateAplicacao = filtroAplicacao === 'todos' || cupom.aplica_em === filtroAplicacao
-      return bateBusca && bateStatus && bateAplicacao
+      if (filtroStatus === 'ativos' && !cupom.ativo) return false
+      if (filtroStatus === 'inativos' && cupom.ativo) return false
+      if (!termo) return true
+      return (
+        cupom.codigo.toLowerCase().includes(termo) || cupom.nome.toLowerCase().includes(termo)
+      )
     })
-  }, [cupons, filtroBusca, filtroStatus, filtroAplicacao])
+  }, [busca, cupons, filtroStatus])
 
-  const quantidadeAtivos = cupons.filter((cupom) => cupom.ativo).length
-  const quantidadeInativos = cupons.length - quantidadeAtivos
-  const totalDescontosConcedidos = cupons.reduce((acc, cupom) => acc + cupom.totalDescontoAplicado + cupom.totalFreteConcedido, 0)
+  const ativos = cupons.filter((cupom) => cupom.ativo).length
+  const descontoConcedido = cupons.reduce(
+    (soma, cupom) => soma + cupom.totalDescontoAplicado + cupom.totalFreteConcedido,
+    0,
+  )
+  const usosTotais = cupons.reduce((soma, cupom) => soma + cupom.quantidadeUsosConfirmados, 0)
 
-  const previsaoDesconto = useMemo(() => {
-    const subtotalExemplo = 60
-    const freteExemplo = 6
-    let desconto = 0
-    let descontoFrete = 0
-
-    if (formulario.tipoDesconto === 'frete_gratis') {
-      descontoFrete = freteExemplo
-    } else if (formulario.tipoDesconto === 'percentual') {
-      desconto = (subtotalExemplo * paraNumero(formulario.valorDesconto)) / 100
-    } else {
-      desconto = paraNumero(formulario.valorDesconto)
-    }
-
-    const limite = paraNumero(formulario.limiteDesconto)
-    if (limite > 0) desconto = Math.min(desconto, limite)
-    desconto = Math.min(desconto, subtotalExemplo)
-
-    const total = Math.max(0, subtotalExemplo + freteExemplo - desconto - descontoFrete)
-
-    return {
-      subtotalExemplo,
-      freteExemplo,
-      desconto,
-      descontoFrete,
-      total,
-    }
-  }, [formulario.tipoDesconto, formulario.valorDesconto, formulario.limiteDesconto])
+  const acoesDoCupom = (cupom: CupomComMetricas): MenuAcaoItem[] => [
+    {
+      key: 'editar',
+      label: 'Editar',
+      icon: <Pencil className="h-4 w-4" />,
+      onSelect: () => abrirEdicao(cupom),
+    },
+    {
+      key: 'ativo',
+      label: cupom.ativo ? 'Desativar' : 'Ativar',
+      icon: cupom.ativo ? (
+        <EyeOff className="h-4 w-4" />
+      ) : (
+        <Eye className="h-4 w-4" />
+      ),
+      onSelect: () => void alternarAtivo(cupom),
+      variant: cupom.ativo ? 'default' : 'success',
+    },
+    {
+      key: 'excluir',
+      label: 'Excluir',
+      icon: <Trash2 className="h-4 w-4" />,
+      onSelect: () => setCupomParaExcluir(cupom),
+      variant: 'destructive',
+      separatorBefore: true,
+    },
+  ]
 
   return (
-    <div className="min-w-0 space-y-6">
-      <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div className="grid flex-1 gap-4 md:grid-cols-3">
-          <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Cupons ativos</p>
-            <p className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-white">{quantidadeAtivos}</p>
+    <div className="mx-auto w-full min-w-0 max-w-6xl space-y-5">
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-sm md:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="rounded-xl bg-primary/10 p-2.5">
+              <Ticket className="h-6 w-6 text-primary" strokeWidth={1.6} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold tracking-tight text-foreground md:text-xl">
+                Cupons
+              </h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {cupons.length === 0
+                  ? 'Nenhum cupom criado ainda'
+                  : `${ativos} ${ativos === 1 ? 'ativo' : 'ativos'} de ${cupons.length}`}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Cupons inativos</p>
-            <p className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-white">{quantidadeInativos}</p>
-          </div>
-          <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Desconto concedido</p>
-            <p className="mt-2 truncate text-2xl font-semibold text-zinc-900 dark:text-white">{formatarMoeda(totalDescontosConcedidos)}</p>
-          </div>
-        </div>
 
-        <Button
-          onClick={abrirModalNovo}
-          className="h-11 gap-2 rounded-lg px-4"
-        >
-          <Plus className="h-4 w-4" />
-          Criar cupom
-        </Button>
+          <Button onClick={abrirNovo} className="h-11 w-full gap-2 sm:h-9 sm:w-auto">
+            <Plus className="h-4 w-4" />
+            Criar cupom
+          </Button>
+        </div>
       </div>
 
-      <section className="min-w-0 space-y-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Cupons cadastrados</h2>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Lista em tempo real com métricas de uso e regras.</p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          { rotulo: 'Cupons ativos', valor: String(ativos) },
+          { rotulo: 'Vezes usados', valor: String(usosTotais) },
+          { rotulo: 'Desconto concedido', valor: formatarMoeda(descontoConcedido) },
+        ].map((metrica) => (
+          <div
+            key={metrica.rotulo}
+            className="min-w-0 rounded-xl border border-border/70 bg-card p-4 shadow-sm"
+          >
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+              {metrica.rotulo}
+            </p>
+            <p className="mt-1.5 truncate text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+              {metrica.valor}
+            </p>
           </div>
-          <div className="grid w-full min-w-0 gap-2 sm:grid-cols-3 lg:w-auto">
-            <label className="relative min-w-0">
-              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
-              <Input
-                value={filtroBusca}
-                onChange={(evento) => setFiltroBusca(evento.target.value)}
-                placeholder="Buscar cupom..."
-                className="h-10 rounded-lg pl-8"
-              />
-            </label>
-            <select
-              value={filtroStatus}
-              onChange={(evento) => setFiltroStatus(evento.target.value as 'todos' | 'ativos' | 'inativos')}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-            >
-              <option value="todos">Todos os status</option>
-              <option value="ativos">Somente ativos</option>
-              <option value="inativos">Somente inativos</option>
-            </select>
-            <select
-              value={filtroAplicacao}
-              onChange={(evento) => setFiltroAplicacao(evento.target.value as 'todos' | TipoAplicacaoCupom)}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-            >
-              <option value="todos">Todas aplicações</option>
-              <option value="pedido">Pedido</option>
-              <option value="produto">Produto</option>
-              <option value="combo">Combo</option>
-            </select>
+        ))}
+      </div>
+
+      <section className="min-w-0 space-y-4 rounded-xl border border-border/70 bg-card p-3.5 shadow-sm md:p-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1 sm:max-w-[280px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={busca}
+              onChange={(evento) => setBusca(evento.target.value)}
+              placeholder="Buscar por código ou nome"
+              className="h-10 border-border/70 pl-9 shadow-none"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                { valor: 'todos', rotulo: 'Todos' },
+                { valor: 'ativos', rotulo: 'Ativos' },
+                { valor: 'inativos', rotulo: 'Inativos' },
+              ] as const
+            ).map((opcao) => (
+              <button
+                key={opcao.valor}
+                type="button"
+                onClick={() => setFiltroStatus(opcao.valor)}
+                className={cn(
+                  'inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition-colors',
+                  filtroStatus === opcao.valor
+                    ? 'border-primary/25 bg-primary/10 text-primary'
+                    : 'border-border/70 bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                )}
+              >
+                {opcao.rotulo}
+              </button>
+            ))}
           </div>
         </div>
 
         {carregando ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
-          </div>
+          <ListaSkeleton quantidade={3} />
         ) : cuponsFiltrados.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
-            <Gift className="mx-auto h-10 w-10 text-zinc-400" />
-            <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">Nenhum cupom encontrado com os filtros atuais.</p>
-          </div>
+          <ListaVazia
+            icone={<Gift className="h-6 w-6" />}
+            titulo={cupons.length === 0 ? 'Nenhum cupom ainda' : 'Nada com esses filtros'}
+            descricao={
+              cupons.length === 0
+                ? 'Crie um cupom de desconto para o cliente usar no carrinho.'
+                : 'Ajuste a busca ou o status para ver outros cupons.'
+            }
+            acao={
+              cupons.length === 0 ? (
+                <Button onClick={abrirNovo} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Criar o primeiro cupom
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
-          <div className="space-y-3">
-            {cuponsFiltrados.map((cupom) => (
-              <article key={cupom.id} className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
-                <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-1 text-xs font-semibold text-white dark:bg-zinc-200 dark:text-zinc-900">
-                        <BadgePercent className="h-3.5 w-3.5" />
-                        {cupom.codigo}
-                      </span>
-                      {cupom.ativo ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-300">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Ativo
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
-                          <XCircle className="h-3.5 w-3.5" />
-                          Inativo
-                        </span>
+          <div className="space-y-2.5">
+            {cuponsFiltrados.map((cupom) => {
+              const expirado = cupomExpirado(cupom)
+              const validade = formatarData(cupom.validade_fim)
+
+              return (
+                <article
+                  key={cupom.id}
+                  className={cn(
+                    'flex min-w-0 flex-col gap-3 rounded-xl border p-3.5 transition-colors sm:flex-row sm:items-center',
+                    cupom.ativo && !expirado
+                      ? 'border-border/70 bg-background'
+                      : 'border-border/60 bg-muted/30',
+                  )}
+                >
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <span
+                      className={cn(
+                        'flex size-11 shrink-0 items-center justify-center rounded-lg text-xs font-semibold',
+                        cupom.ativo && !expirado
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-muted text-muted-foreground',
                       )}
-                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                        {cupom.tipo_desconto === 'frete_gratis' ? (
-                          <Truck className="h-3.5 w-3.5" />
-                        ) : cupom.tipo_desconto === 'percentual' ? (
-                          <Gift className="h-3.5 w-3.5" />
-                        ) : (
-                          <Layers className="h-3.5 w-3.5" />
-                        )}
-                        {cupom.tipo_desconto === 'percentual' ? `${cupom.valor_desconto}%` : cupom.tipo_desconto === 'valor_fixo' ? formatarMoeda(cupom.valor_desconto) : 'Frete grátis'}
-                      </span>
-                    </div>
-                    <h3 className="break-words text-base font-semibold text-zinc-900 dark:text-white">{cupom.nome}</h3>
-                    {cupom.descricao && (
-                      <p className="break-words text-sm text-zinc-600 dark:text-zinc-300">{cupom.descricao}</p>
-                    )}
-                    <div className="grid gap-2 text-xs text-zinc-500 dark:text-zinc-400 sm:grid-cols-2 xl:grid-cols-3">
-                      <p>Aplicação: <strong className="text-zinc-700 dark:text-zinc-200">{cupom.aplica_em}</strong></p>
-                      <p>Pedido mínimo: <strong className="text-zinc-700 dark:text-zinc-200">{formatarMoeda(cupom.pedido_minimo)}</strong></p>
-                      <p>Usos: <strong className="text-zinc-700 dark:text-zinc-200">{cupom.quantidadeUsosConfirmados}</strong>{cupom.uso_maximo_total ? `/${cupom.uso_maximo_total}` : ''}</p>
-                      <p>Desconto concedido: <strong className="text-zinc-700 dark:text-zinc-200">{formatarMoeda(cupom.totalDescontoAplicado + cupom.totalFreteConcedido)}</strong></p>
-                      <p>Validade início: <strong className="text-zinc-700 dark:text-zinc-200">{formatarData(cupom.validade_inicio)}</strong></p>
-                      <p>Validade fim: <strong className="text-zinc-700 dark:text-zinc-200">{formatarData(cupom.validade_fim)}</strong></p>
+                    >
+                      {cupom.tipo_desconto === 'frete_gratis' ? (
+                        <Truck strokeWidth={1.8} className="size-5" />
+                      ) : (
+                        rotuloDesconto(cupom)
+                      )}
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <button
+                          type="button"
+                          onClick={() => void copiarCodigo(cupom.codigo)}
+                          title="Copiar código"
+                          className="inline-flex items-center gap-1.5 rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold tracking-wide text-foreground transition-colors hover:bg-accent"
+                        >
+                          {cupom.codigo}
+                          {codigoCopiado === cupom.codigo ? (
+                            <Check strokeWidth={2.2} className="size-3 text-primary" />
+                          ) : (
+                            <Copy strokeWidth={1.8} className="size-3 text-muted-foreground" />
+                          )}
+                        </button>
+
+                        {!cupom.ativo ? (
+                          <span className="rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            Inativo
+                          </span>
+                        ) : expirado ? (
+                          <span className="rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
+                            Expirado
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <p className="mt-1 truncate text-sm font-medium text-foreground">
+                        {cupom.nome}
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {[
+                          cupom.pedido_minimo > 0
+                            ? `mínimo ${formatarMoeda(cupom.pedido_minimo)}`
+                            : null,
+                          validade ? `até ${validade}` : null,
+                          cupom.quantidadeUsosConfirmados > 0
+                            ? `${cupom.quantidadeUsosConfirmados} ${cupom.quantidadeUsosConfirmados === 1 ? 'uso' : 'usos'}`
+                            : 'sem uso ainda',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-3 lg:w-[230px]">
-                    <button
-                      onClick={() => iniciarEdicao(cupom)}
-                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-zinc-300 px-2 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-700"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => alternarStatusCupom(cupom)}
-                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-zinc-300 px-2 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-700"
-                    >
-                      {cupom.ativo ? 'Desativar' : 'Ativar'}
-                    </button>
-                    <button
-                      onClick={() => setCupomParaExcluir(cupom)}
-                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-red-300 px-2 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Excluir
-                    </button>
+                  <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
+                    {cupom.totalDescontoAplicado + cupom.totalFreteConcedido > 0 ? (
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {formatarMoeda(
+                          cupom.totalDescontoAplicado + cupom.totalFreteConcedido,
+                        )}{' '}
+                        concedidos
+                      </span>
+                    ) : null}
+                    <MenuAcoes
+                      ariaLabel={`Ações do cupom ${cupom.codigo}`}
+                      items={acoesDoCupom(cupom)}
+                    />
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              )
+            })}
           </div>
         )}
       </section>
 
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
-        <p className="font-medium text-zinc-800 dark:text-zinc-100">Como configurar os principais tipos de cupom</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li><strong>Cupom de um pedido:</strong> marque <em>Uso único global</em> para permitir somente 1 uso total.</li>
-          <li><strong>Cupom de frete grátis:</strong> selecione <em>Frete grátis</em>; só funciona para entrega.</li>
-          <li><strong>Cupom limitado:</strong> defina limite total e/ou limite por cliente.</li>
-          <li><strong>Cupom só para combo:</strong> escolha aplicação em <em>Combo</em> e selecione o combo alvo.</li>
-          <li><strong>Cupom só para produto:</strong> escolha aplicação em <em>Produto</em> e selecione o produto alvo.</li>
-        </ul>
-      </div>
-
       <Dialog
-        open={modalFormularioAberto}
+        open={modalAberto}
         onOpenChange={(aberto) => {
-          if (!aberto) fecharModalFormulario()
+          if (!aberto) fecharModal()
         }}
       >
-        <DialogContent
-          showCloseButton={false}
-          className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
-        >
-          <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-zinc-200 px-4 py-3 text-left dark:border-zinc-800 sm:px-6 sm:py-4">
-            <div className="min-w-0">
-              <DialogTitle className="text-base font-semibold text-zinc-900 dark:text-white sm:text-lg">
-                {idCupomEditando ? 'Editar cupom' : 'Criar cupom'}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-zinc-500 dark:text-zinc-400 sm:text-sm">
-                Configure regras de desconto com validações, limite e validade.
-              </DialogDescription>
-            </div>
-            <button
-              type="button"
-              onClick={fecharModalFormulario}
-              aria-label="Fechar"
-              className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </DialogHeader>
-
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 [-webkit-overflow-scrolling:touch] sm:p-6">
-                <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-                  <section className="space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="min-w-0">
-                        <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Código</span>
-                        <Input
-                          value={formulario.codigo}
-                          onChange={(evento) => setFormulario((anterior) => ({ ...anterior, codigo: normalizarCodigoCupom(evento.target.value) }))}
-                          placeholder="EX: PRIMEIRA10"
-                          className={CLASSE_CAMPO}
-                        />
-                      </label>
-
-                      <label className="min-w-0">
-                        <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Nome interno</span>
-                        <Input
-                          value={formulario.nome}
-                          onChange={(evento) => setFormulario((anterior) => ({ ...anterior, nome: evento.target.value }))}
-                          placeholder="Campanha de boas-vindas"
-                          className={CLASSE_CAMPO}
-                        />
-                      </label>
-
-                      <label className="min-w-0 sm:col-span-2">
-                        <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Descrição</span>
-                        <textarea
-                          value={formulario.descricao}
-                          onChange={(evento) => setFormulario((anterior) => ({ ...anterior, descricao: evento.target.value }))}
-                          rows={2}
-                          placeholder="Anotação interna sobre objetivo do cupom."
-                          className={CLASSE_CAMPO}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
-                      <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-white">Regras de desconto</p>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Tipo de desconto</span>
-                          <select
-                            value={formulario.tipoDesconto}
-                            onChange={(evento) => setFormulario((anterior) => ({ ...anterior, tipoDesconto: evento.target.value as TipoDescontoCupom }))}
-                            className={CLASSE_CAMPO}
-                          >
-                            <option value="percentual">Percentual (%)</option>
-                            <option value="valor_fixo">Valor fixo (R$)</option>
-                            <option value="frete_gratis">Frete grátis</option>
-                          </select>
-                        </label>
-
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Valor do desconto</span>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            disabled={formulario.tipoDesconto === 'frete_gratis'}
-                            value={formulario.valorDesconto}
-                            onChange={(evento) => setFormulario((anterior) => ({ ...anterior, valorDesconto: evento.target.value }))}
-                            placeholder={formulario.tipoDesconto === 'percentual' ? 'Ex: 10' : 'Ex: 12.50'}
-                            className={`${CLASSE_CAMPO} disabled:cursor-not-allowed disabled:bg-zinc-100 dark:disabled:bg-zinc-700`}
-                          />
-                        </label>
-
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Pedido mínimo (R$)</span>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={formulario.pedidoMinimo}
-                            onChange={(evento) => setFormulario((anterior) => ({ ...anterior, pedidoMinimo: evento.target.value }))}
-                            className={CLASSE_CAMPO}
-                          />
-                        </label>
-
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Limite de desconto (R$)</span>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={formulario.limiteDesconto}
-                            onChange={(evento) => setFormulario((anterior) => ({ ...anterior, limiteDesconto: evento.target.value }))}
-                            placeholder="Opcional"
-                            className={CLASSE_CAMPO}
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
-                      <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-white">Escopo do cupom</p>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Aplicar em</span>
-                          <select
-                            value={formulario.aplicaEm}
-                            onChange={(evento) => setFormulario((anterior) => ({
-                              ...anterior,
-                              aplicaEm: evento.target.value as TipoAplicacaoCupom,
-                              produtoId: evento.target.value === 'produto' ? anterior.produtoId : '',
-                              comboId: evento.target.value === 'combo' ? anterior.comboId : '',
-                            }))}
-                            className={CLASSE_CAMPO}
-                          >
-                            <option value="pedido">Pedido inteiro</option>
-                            <option value="produto">Produto específico</option>
-                            <option value="combo">Combo específico</option>
-                          </select>
-                        </label>
-
-                        <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-700">
-                          <Input
-                            type="checkbox"
-                            checked={formulario.ativo}
-                            onChange={(evento) => setFormulario((anterior) => ({ ...anterior, ativo: evento.target.checked }))}
-                            className="h-4 w-4 rounded border-zinc-300 text-bordo-600"
-                          />
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300">Cupom ativo</span>
-                        </label>
-
-                        {formulario.aplicaEm === 'produto' && (
-                          <label className="min-w-0 sm:col-span-2">
-                            <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Produto alvo</span>
-                            <select
-                              value={formulario.produtoId}
-                              onChange={(evento) => setFormulario((anterior) => ({ ...anterior, produtoId: evento.target.value }))}
-                              className={CLASSE_CAMPO}
-                            >
-                              <option value="">Selecione um produto</option>
-                              {produtos.map((produto) => (
-                                <option key={produto.id} value={produto.id}>{produto.nome}</option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
-
-                        {formulario.aplicaEm === 'combo' && (
-                          <label className="min-w-0 sm:col-span-2">
-                            <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Combo alvo</span>
-                            <select
-                              value={formulario.comboId}
-                              onChange={(evento) => setFormulario((anterior) => ({ ...anterior, comboId: evento.target.value }))}
-                              className={CLASSE_CAMPO}
-                            >
-                              <option value="">Selecione um combo</option>
-                              {combos.map((combo) => (
-                                <option key={combo.id} value={combo.id}>{combo.nome}</option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
-                      <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-white">Limites e validade</p>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-700 sm:col-span-2">
-                          <Input
-                            type="checkbox"
-                            checked={formulario.usoUnico}
-                            onChange={(evento) => setFormulario((anterior) => ({
-                              ...anterior,
-                              usoUnico: evento.target.checked,
-                              usoMaximoTotal: evento.target.checked ? '1' : anterior.usoMaximoTotal,
-                            }))}
-                            className="h-4 w-4 rounded border-zinc-300 text-bordo-600"
-                          />
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300">Uso único global</span>
-                        </label>
-
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Limite total de usos</span>
-                          <Input
-                            type="number"
-                            min="1"
-                            disabled={formulario.usoUnico}
-                            value={formulario.usoMaximoTotal}
-                            onChange={(evento) => setFormulario((anterior) => ({ ...anterior, usoMaximoTotal: evento.target.value }))}
-                            placeholder="Opcional"
-                            className={`${CLASSE_CAMPO} disabled:cursor-not-allowed disabled:bg-zinc-100 dark:disabled:bg-zinc-700`}
-                          />
-                        </label>
-
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Limite por cliente</span>
-                          <Input
-                            type="number"
-                            min="1"
-                            value={formulario.usoMaximoPorCliente}
-                            onChange={(evento) => setFormulario((anterior) => ({ ...anterior, usoMaximoPorCliente: evento.target.value }))}
-                            placeholder="Opcional"
-                            className={CLASSE_CAMPO}
-                          />
-                        </label>
-
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Validade início</span>
-                          <Input
-                            type="datetime-local"
-                            value={formulario.validadeInicio}
-                            onChange={(evento) => setFormulario((anterior) => ({ ...anterior, validadeInicio: evento.target.value }))}
-                            className={`${CLASSE_CAMPO} min-w-0 max-w-full text-[13px] sm:text-sm`}
-                          />
-                        </label>
-
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Validade fim</span>
-                          <Input
-                            type="datetime-local"
-                            value={formulario.validadeFim}
-                            onChange={(evento) => setFormulario((anterior) => ({ ...anterior, validadeFim: evento.target.value }))}
-                            className={`${CLASSE_CAMPO} min-w-0 max-w-full text-[13px] sm:text-sm`}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  </section>
-
-                  <aside className="space-y-4">
-                    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-700 dark:bg-zinc-800/60">
-                      <p className="font-medium text-zinc-800 dark:text-zinc-100">Prévia rápida (pedido de exemplo)</p>
-                      <p className="mt-1 text-zinc-500 dark:text-zinc-400">
-                        Subtotal {formatarMoeda(previsaoDesconto.subtotalExemplo)} + frete {formatarMoeda(previsaoDesconto.freteExemplo)}.
-                      </p>
-                      <p className="mt-1 text-zinc-600 dark:text-zinc-300">
-                        Desconto estimado: {formatarMoeda(previsaoDesconto.desconto + previsaoDesconto.descontoFrete)}
-                      </p>
-                      <p className="mt-1 font-semibold text-zinc-900 dark:text-white">
-                        Total final estimado: {formatarMoeda(previsaoDesconto.total)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300">
-                      <p className="font-medium text-zinc-800 dark:text-zinc-100">Boas práticas</p>
-                      <ul className="mt-2 list-disc space-y-1 pl-5">
-                        <li>Use códigos simples e fáceis de lembrar.</li>
-                        <li>Defina validade para evitar cupons antigos ativos.</li>
-                        <li>Quando for promoção agressiva, limite uso por cliente.</li>
-                      </ul>
-                    </div>
-                  </aside>
-                </div>
-          </div>
-
-          <DialogFooter className="flex shrink-0 flex-col-reverse gap-2 border-t border-zinc-200 bg-zinc-50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:justify-end sm:gap-3 sm:p-5 sm:pb-5">
-                <Button
-                  variant="outline"
-                  onClick={fecharModalFormulario}
-                  className="w-full sm:w-auto"
-                >
-                  Cancelar
-                </Button>
-
-                <Button
-                  onClick={salvarCupom}
-                  disabled={salvando}
-                  className="w-full gap-2 sm:w-auto"
-                >
-                  {salvando ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : idCupomEditando ? (
-                    <>
-                      <Save className="h-4 w-4" />
-                      Atualizar cupom
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4" />
-                      Criar cupom
-                    </>
-                  )}
-                </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!cupomParaExcluir} onOpenChange={(open) => !open && setCupomParaExcluir(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Excluir cupom</DialogTitle>
-            <DialogDescription>
-              Deseja realmente excluir o cupom <span className="font-mono font-semibold">{cupomParaExcluir?.codigo}</span>? Esta ação não pode ser desfeita.
+        <DialogContent className="flex max-h-[92dvh] w-full max-w-md flex-col gap-0 overflow-hidden p-0 sm:max-h-[90dvh] sm:max-w-2xl lg:max-w-4xl">
+          <DialogHeader className="shrink-0 space-y-1 border-b border-border/60 px-5 pb-4 pt-5 text-left">
+            <DialogTitle className="text-[15px] font-semibold tracking-tight">
+              {idEditando ? 'Editar cupom' : 'Criar cupom'}
+            </DialogTitle>
+            <DialogDescription className="text-[13px] text-muted-foreground">
+              Escolha o desconto e confira o resultado antes de salvar.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-2">
-            <button
-              onClick={() => setCupomParaExcluir(null)}
-              className="inline-flex h-9 items-center px-4 rounded-md border border-border/70 bg-card text-sm font-medium text-foreground hover:bg-muted transition-colors"
+
+          {/*
+            Duas colunas a partir de `lg`: formulário à esquerda, resumo do
+            efeito à direita. No mobile o `Dialog` já vira Drawer e o resumo
+            aparece depois do formulário, sem competir com os campos.
+          */}
+          <div className="min-h-0 flex-1 overflow-y-auto lg:flex lg:overflow-hidden">
+            <div className="space-y-5 px-5 py-4 lg:min-w-0 lg:flex-1 lg:overflow-y-auto">
+              {!idEditando ? (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">
+                    <Sparkles className="size-3.5 text-primary" aria-hidden />
+                    Começar com
+                  </Label>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {PRESETS_CUPOM.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setFormulario((atual) => aplicarPreset(atual, preset.id))}
+                        className="rounded-lg border border-border/70 bg-background p-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                      >
+                        <p className="text-sm font-medium text-foreground">{preset.rotulo}</p>
+                        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                          {preset.descricao}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="space-y-2">
+                <Label>Tipo de desconto</Label>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {TIPOS_DESCONTO.map((tipo) => {
+                    const Icone = tipo.icone
+                    const selecionado = formulario.tipoDesconto === tipo.valor
+                    return (
+                      <button
+                        key={tipo.valor}
+                        type="button"
+                        onClick={() => trocarTipo(tipo.valor)}
+                        className={cn(
+                          'rounded-lg border p-3 text-left transition-colors',
+                          selecionado
+                            ? 'border-primary/30 bg-primary/[0.06]'
+                            : 'border-border/70 bg-background hover:bg-muted/40',
+                        )}
+                      >
+                        <Icone
+                          className={cn(
+                            'size-4',
+                            selecionado ? 'text-primary' : 'text-muted-foreground',
+                          )}
+                          strokeWidth={1.8}
+                        />
+                        <p className="mt-1.5 text-sm font-medium text-foreground">{tipo.rotulo}</p>
+                        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                          {tipo.ajuda}
+                        </p>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {formulario.tipoDesconto !== 'frete_gratis' ? (
+                <div className="space-y-2">
+                  <Label htmlFor="cupom-valor">
+                    {formulario.tipoDesconto === 'percentual'
+                      ? 'Porcentagem de desconto *'
+                      : 'Valor do desconto *'}
+                  </Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      {formulario.tipoDesconto === 'percentual' ? '%' : 'R$'}
+                    </span>
+                    <Input
+                      id="cupom-valor"
+                      inputMode="decimal"
+                      value={formulario.valorDesconto}
+                      onChange={(evento) => trocarValor(evento.target.value)}
+                      placeholder={formulario.tipoDesconto === 'percentual' ? '10' : '15,00'}
+                      className={cn(
+                        'h-11 border-border/70 pl-9 shadow-none',
+                        erroDe('valorDesconto') && 'border-destructive',
+                      )}
+                    />
+                  </div>
+                  {erroDe('valorDesconto') ? (
+                    <p className="text-xs text-destructive">{erroDe('valorDesconto')?.mensagem}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="cupom-codigo">Código *</Label>
+                  <Input
+                    id="cupom-codigo"
+                    value={formulario.codigo}
+                    onChange={(evento) =>
+                      atualizar({ codigo: normalizarCodigoCupom(evento.target.value) })
+                    }
+                    placeholder="DESCONTO10"
+                    className={cn(
+                      'h-11 border-border/70 font-mono uppercase tracking-wide shadow-none',
+                      erroDe('codigo') && 'border-destructive',
+                    )}
+                  />
+                  {erroDe('codigo') ? (
+                    <p className="text-xs text-destructive">{erroDe('codigo')?.mensagem}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">É o que o cliente digita.</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="cupom-nome">Nome interno *</Label>
+                  <Input
+                    id="cupom-nome"
+                    value={formulario.nome}
+                    onChange={(evento) => atualizar({ nome: evento.target.value })}
+                    placeholder="Desconto de boas-vindas"
+                    className={cn(
+                      'h-11 border-border/70 shadow-none',
+                      erroDe('nome') && 'border-destructive',
+                    )}
+                  />
+                  {erroDe('nome') ? (
+                    <p className="text-xs text-destructive">{erroDe('nome')?.mensagem}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Só você vê.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/60">
+                <button
+                  type="button"
+                  onClick={() => setMostrarAvancado((atual) => !atual)}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <SlidersHorizontal className="size-4 text-muted-foreground" strokeWidth={1.8} />
+                    Regras avançadas
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {mostrarAvancado ? 'Ocultar' : 'Opcional'}
+                  </span>
+                </button>
+
+                {mostrarAvancado ? (
+                  <div className="space-y-4 border-t border-border/50 p-3">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="cupom-minimo">Pedido mínimo</Label>
+                        <Input
+                          id="cupom-minimo"
+                          inputMode="decimal"
+                          value={formulario.pedidoMinimo}
+                          onChange={(evento) => atualizar({ pedidoMinimo: evento.target.value })}
+                          placeholder="Sem mínimo"
+                          className="h-11 border-border/70 shadow-none"
+                        />
+                      </div>
+
+                      {formulario.tipoDesconto === 'percentual' ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="cupom-teto">Desconto máximo</Label>
+                          <Input
+                            id="cupom-teto"
+                            inputMode="decimal"
+                            value={formulario.limiteDesconto}
+                            onChange={(evento) =>
+                              atualizar({ limiteDesconto: evento.target.value })
+                            }
+                            placeholder="Sem teto"
+                            className="h-11 border-border/70 shadow-none"
+                          />
+                        </div>
+                      ) : null}
+
+                      <div className="space-y-2">
+                        <Label htmlFor="cupom-validade">Vale até</Label>
+                        <Input
+                          id="cupom-validade"
+                          type="date"
+                          value={formulario.validadeFim}
+                          onChange={(evento) => atualizar({ validadeFim: evento.target.value })}
+                          className={cn(
+                            'h-11 border-border/70 shadow-none',
+                            erroDe('validadeFim') && 'border-destructive',
+                          )}
+                        />
+                        {erroDe('validadeFim') ? (
+                          <p className="text-xs text-destructive">
+                            {erroDe('validadeFim')?.mensagem}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="cupom-usos">Usos no total</Label>
+                        <Input
+                          id="cupom-usos"
+                          inputMode="numeric"
+                          value={formulario.usoMaximoTotal}
+                          onChange={(evento) => atualizar({ usoMaximoTotal: evento.target.value })}
+                          placeholder="Ilimitado"
+                          className="h-11 border-border/70 shadow-none"
+                        />
+                      </div>
+
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="cupom-usos-cliente">Usos por cliente</Label>
+                        <Input
+                          id="cupom-usos-cliente"
+                          inputMode="numeric"
+                          value={formulario.usoMaximoPorCliente}
+                          onChange={(evento) =>
+                            atualizar({ usoMaximoPorCliente: evento.target.value })
+                          }
+                          placeholder="Ilimitado"
+                          className="h-11 border-border/70 shadow-none"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Use 1 para cupom de uso único por pessoa.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 border-t border-border/50 pt-4">
+                      <Label>Onde vale</Label>
+                      <Select
+                        value={formulario.aplicaEm}
+                        onValueChange={(valor) =>
+                          atualizar({
+                            aplicaEm: valor as FormularioCupom['aplicaEm'],
+                            produtoId: valor === 'pedido' ? '' : formulario.produtoId,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="h-11 border-border/70 shadow-none">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pedido">No pedido inteiro</SelectItem>
+                          <SelectItem value="produto">Em um produto específico</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {formulario.aplicaEm === 'produto' ? (
+                        <div className="space-y-2 pt-2">
+                          <Label>Produto *</Label>
+                          <Select
+                            value={formulario.produtoId}
+                            onValueChange={(valor) => atualizar({ produtoId: valor })}
+                          >
+                            <SelectTrigger
+                              className={cn(
+                                'h-11 border-border/70 shadow-none',
+                                erroDe('produtoId') && 'border-destructive',
+                              )}
+                            >
+                              <SelectValue placeholder="Escolha o produto" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {produtos.map((produto) => (
+                                <SelectItem key={produto.id} value={produto.id}>
+                                  {produto.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {erroDe('produtoId') ? (
+                            <p className="text-xs text-destructive">
+                              {erroDe('produtoId')?.mensagem}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Ativo</p>
+                  <p className="text-xs text-muted-foreground">Clientes já podem usar</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={formulario.ativo}
+                  aria-label={formulario.ativo ? 'Desativar cupom' : 'Ativar cupom'}
+                  onClick={() => atualizar({ ativo: !formulario.ativo })}
+                  className={cn(
+                    'relative h-6 w-11 shrink-0 rounded-full transition-colors',
+                    formulario.ativo ? 'bg-primary' : 'bg-muted',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
+                      formulario.ativo && 'translate-x-5',
+                    )}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="border-t border-border/60 bg-muted/20 px-5 py-4 lg:w-[20rem] lg:shrink-0 lg:overflow-y-auto lg:border-l lg:border-t-0">
+              <ResumoCupom
+                formulario={formulario}
+                valorPedido={valorSimulacao}
+                onValorPedidoChange={setValorSimulacao}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="shrink-0 gap-2 border-t border-border/60 bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pb-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full shadow-none sm:h-9 sm:w-auto"
+              onClick={fecharModal}
+              disabled={salvando}
             >
               Cancelar
-            </button>
-            <button
-              onClick={() => cupomParaExcluir && excluirCupomConfirmado(cupomParaExcluir)}
-              className="inline-flex h-9 items-center px-4 rounded-md bg-destructive text-sm font-medium text-white hover:bg-destructive/90 transition-colors"
+            </Button>
+            <Button
+              type="button"
+              className="h-11 w-full sm:h-9 sm:w-auto"
+              onClick={() => void salvar()}
+              disabled={salvando}
             >
-              Excluir
-            </button>
+              {salvando ? 'Salvando…' : idEditando ? 'Salvar alterações' : 'Criar cupom'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(cupomParaExcluir)}
+        onOpenChange={(aberto) => !aberto && setCupomParaExcluir(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir cupom?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {cupomParaExcluir?.quantidadeUsosConfirmados
+                ? `O cupom ${cupomParaExcluir.codigo} já foi usado ${cupomParaExcluir.quantidadeUsosConfirmados}× — o histórico desses pedidos continua, mas o cupom some da lista.`
+                : `O cupom ${cupomParaExcluir?.codigo} será removido. Esta ação não pode ser desfeita.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void excluir()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

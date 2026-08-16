@@ -1,5 +1,38 @@
 # Progress
 
+## [2026-08-16] Tela de cupons reconstruída
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Objetivo:** criar um cupom deixar de exigir que a pessoa entenda o schema do banco.
+**Arquivos criados:** `src/lib/cupom-formulario.mjs`, `src/lib/cupom-formulario.d.mts`, `tests/cupom-formulario.test.mjs`, `src/components/admin/cupons/ResumoCupom.tsx`.
+**Arquivos alterados:** `src/components/admin/cupons/GerenciadorCupons.tsx` (reescrito), `UI.md`, `Progress.md`.
+
+**O que a auditoria encontrou:** o componente veio de outro sistema. `CLASSE_CAMPO`
+com `border-zinc-300 bg-white dark:bg-zinc-800` — cor fixa fora do design system,
+repetida em 12 campos; `<select>`/`<input>` crus em vez de `Select`/`Input` do
+projeto; 16 campos numa grade plana sem hierarquia; opção "aplicar em combo" com
+a tabela `combos` **vazia** e a rota legada; e nada que dissesse o que o cupom
+faria. Base atual: **0 cupons, 0 usos** — a tela nunca foi usada neste projeto.
+
+**O que foi feito:**
+- `cupom-formulario.mjs`: presets, `sugerirCodigo`, `descreverCupom`, `simularCupom`, validação por campo. 17 testes, RED antes.
+- `ResumoCupom`: a frase em português e o desconto em reais num pedido de exemplo ajustável. É a peça que faltava.
+- Formulário reorganizado — tipo de desconto em três cartões, valor, código e nome; tudo que é regra fina foi para "Regras avançadas", colapsado.
+- Lista com etiqueta de desconto em destaque, código copiável, selo de expirado, `MenuAcoes` e `ListaVazia` com CTA no estado zero.
+- Modal em duas colunas no `lg`, Drawer no mobile.
+
+**Decisões tomadas:** removi `combo` do formulário (opção morta) e o campo `descricao` (write-only, não aparecia para ninguém) — `descricao` continua gravada como `null`, sem mexer no schema. Validade virou data simples valendo até 23:59:59 do dia. O código sugerido só é reescrito enquanto ainda for sugestão: texto digitado pela pessoa não é sobrescrito. Tirei a subscription Realtime da tela — a publication deste projeto está vazia (PRD §Realtime), então o canal só consumia conexão sem nunca receber evento.
+
+**Verificação:** `node --test tests/*.test.mjs` **119/119** (17 novos) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · payload de INSERT conferido contra a tabela real em transação com rollback (0 cupons sobraram).
+
+**Pendências / próximos passos:**
+- Smoke visual em desktop largo e mobile; e criar um cupom de verdade para conferir o round-trip pela interface.
+- `cupons.editar` continua sem aplicação de permissão (está na dívida declarada em `tests/rbac-cobertura.test.mjs`).
+
+**Armadilhas descobertas:**
+- `uso_unico` é redundante com `uso_maximo_por_cliente = 1`. Mantive a coluna gravada em coerência com o outro campo em vez de expor os dois e deixar a pessoa criar estado contraditório.
+- Campo write-only (`descricao`) é pior que campo ausente: pede trabalho e não produz efeito nenhum.
+
 ## [2026-08-16] Modal de acessos redesenhado + WhatsApp unificado
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

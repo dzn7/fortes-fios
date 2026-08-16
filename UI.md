@@ -336,6 +336,30 @@ formulário são limpos e não há mais de onde tirar item, endereço ou observa
 Endereço só entra quando o tipo é entrega — em retirada esses campos trazem
 sobra do pedido anterior.
 
+## Cupons
+
+`/admin/cupons` — `GerenciadorCupons` + `ResumoCupom`. Domínio testável em
+`src/lib/cupom-formulario.mjs`.
+
+A versão anterior veio de outro sistema: 16 campos espelhando colunas do banco,
+`<select>` cru com `zinc` fixo fora do design system, e nenhuma pista do que o
+cupom faria — só se descobria o efeito quando um cliente usava.
+
+### O desenho
+
+1. **Receitas prontas** (10%, R$ 15, frete grátis) preenchem o formulário inteiro. É o caminho de três interações para o caso que representa quase todo o uso real.
+2. **Painel "Como vai funcionar"** ao lado: a frase em português (`descreverCupom`) e o efeito em reais num pedido de exemplo que o administrador ajusta (`simularCupom`). Conferir antes de salvar é o que a tela antiga não permitia.
+3. **Regras avançadas colapsadas** — pedido mínimo, teto, limites de uso, validade, produto específico. Abrem já expandidas ao editar cupom que usa alguma delas, senão a pessoa edita sem ver o que está configurado.
+
+### Regras
+
+- **Código sugerido do desconto** (`DESCONTO10`, `MENOS15`, `FRETEGRATIS`) e reescrito enquanto ainda for sugestão. Se a pessoa digitou o dela, manda ela — sobrescrever texto digitado é hostil.
+- **Erro por campo**, não um toast por vez que obriga a descobrir os problemas um a um. Só aparece depois da primeira tentativa de salvar.
+- **`combo` não existe na tela.** A tabela está vazia e `/admin/combos` é rota legada; opção morta em formulário é armadilha.
+- **`descricao` saiu do formulário** — era write-only, não aparecia para ninguém. Continua gravada como `null` para não mexer no schema.
+- Validade é **data**, não `datetime`, e vale até o fim do dia escolhido: quem digita 31/12 espera que o dia 31 conte.
+- Modal em duas colunas a partir de `lg`; abaixo de 768px o `Dialog` vira Drawer e o resumo desce para depois do formulário, sem competir com os campos.
+
 ## Padrões de layout
 
 ### Cardápio público
