@@ -24,6 +24,8 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import IconeWhatsApp from '@/components/icons/IconeWhatsApp'
+import { SeletorFollowUp } from '@/components/admin/clientes/SeletorFollowUp'
+import { linkWhatsApp, montarFollowUp } from '@/lib/whatsapp.mjs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -92,13 +94,9 @@ const mapearStatusPedido = (status: string | null) => {
   return { label: status || 'Sem status', classe: 'bg-muted text-muted-foreground' }
 }
 
-const construirLinkWhatsApp = (telefone: string, nome: string | null) => {
-  const digitos = telefone.replace(/\D/g, '')
-  const numero = digitos.startsWith('55') ? digitos : `55${digitos}`
-  const primeiroNome = (nome || 'cliente').trim().split(' ')[0]
-  const mensagem = `Olá, ${primeiroNome}! Sentimos sua falta na Fortes Fios. Quer ver as novidades da loja?`
-  return `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`
-}
+/** Mesma regra do resto do sistema — ver `src/lib/whatsapp.mjs`. */
+const construirLinkWhatsApp = (telefone: string, nome: string | null) =>
+  linkWhatsApp(telefone, montarFollowUp('retomada', { nome: nome ?? undefined }) ?? '')
 
 const diasSemPedido = (dataIso: string | null): number | null => {
   if (!dataIso) return null
@@ -310,7 +308,14 @@ export default function GerenciadorUsuariosClientes() {
   }
 
   const abrirWhatsApp = (usuario: UsuarioClienteMetrica) => {
-    window.open(construirLinkWhatsApp(usuario.telefone, usuario.nome), '_blank', 'noopener,noreferrer')
+    const url = construirLinkWhatsApp(usuario.telefone, usuario.nome)
+    if (!url) {
+      toast.error('Telefone inválido para WhatsApp', {
+        description: 'Confira o número cadastrado deste cliente.',
+      })
+      return
+    }
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   const usuariosFiltrados = useMemo(() => {
@@ -645,17 +650,11 @@ export default function GerenciadorUsuariosClientes() {
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
               {usuarioDetalhe ? (
                 <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 px-2 text-[#25D366] hover:bg-[#25D366]/10 hover:text-[#25D366]"
-                    onClick={() => abrirWhatsApp(usuarioDetalhe)}
-                    aria-label="Abrir WhatsApp"
-                  >
-                    <IconeWhatsApp className="size-3.5" />
-                    <span className="hidden sm:inline">WhatsApp</span>
-                  </Button>
+                  <SeletorFollowUp
+                    telefone={usuarioDetalhe.telefone}
+                    nome={usuarioDetalhe.nome}
+                    variante="compacto"
+                  />
                   <Button
                     type="button"
                     variant="ghost"
@@ -867,14 +866,11 @@ export default function GerenciadorUsuariosClientes() {
                       <DetailRow icon={<MapPin />} label="Endereço" value={usuarioDetalhe.endereco} />
                       <DetailRow label="Bairro" value={usuarioDetalhe.bairro} />
                     </dl>
-                    <Button
-                      type="button"
-                      className="mt-4 h-10 w-full gap-2 bg-[#25D366] text-white shadow-none hover:bg-[#1ebe57]"
-                      onClick={() => abrirWhatsApp(usuarioDetalhe)}
-                    >
-                      <IconeWhatsApp className="size-4" />
-                      Conversar no WhatsApp
-                    </Button>
+                    <SeletorFollowUp
+                      telefone={usuarioDetalhe.telefone}
+                      nome={usuarioDetalhe.nome}
+                      className="mt-4"
+                    />
                   </FieldGroup>
 
                   <FieldGroup title="Resumo">

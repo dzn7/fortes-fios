@@ -1,17 +1,17 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Lock, ShieldCheck, Wand2 } from 'lucide-react'
+import { Eraser, Lock, ShieldCheck, Wand2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import {
+  CHAVES_RBAC,
   MODULOS_ADMIN,
   PAPEIS,
   PRESET_ATENDENTE,
   SENSIBILIDADES,
   chave,
-  permissoesTotais,
   type PermissoesAdmin,
 } from '@/lib/rbac.mjs'
 
@@ -40,6 +40,7 @@ export function EditorPermissoes({ papel, permissoes, onChange }: EditorPermisso
     () => Object.values(permissoes).filter(Boolean).length,
     [permissoes],
   )
+  const totalDisponivel = CHAVES_RBAC.length
 
   if (papel === PAPEIS.ADMIN) {
     return (
@@ -87,42 +88,85 @@ export function EditorPermissoes({ papel, permissoes, onChange }: EditorPermisso
     onChange(proximas)
   }
 
+  const limparTudo = () => {
+    onChange(Object.fromEntries(CHAVES_RBAC.map((item) => [item, false])))
+  }
+
   const aplicarPreset = () => {
     // Parte de tudo desligado para o preset ser o retrato completo, não uma
     // camada por cima do que já estava marcado.
-    const zerado = Object.fromEntries(Object.keys(permissoesTotais()).map((k) => [k, false]))
+    const zerado = Object.fromEntries(CHAVES_RBAC.map((item) => [item, false]))
     onChange({ ...zerado, ...PRESET_ATENDENTE })
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <Label>Permissões</Label>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {totalConcedido === 0
-              ? 'Nenhuma permissão concedida'
-              : `${totalConcedido} ${totalConcedido === 1 ? 'permissão concedida' : 'permissões concedidas'}`}
-          </p>
+      {/*
+        Barra fixa no topo da coluna: com 15 módulos, sem ela o total e o botão
+        de restaurar padrão sobem junto com a rolagem e somem de vista.
+      */}
+      <div className="sticky top-0 z-10 -mx-5 -mt-4 mb-1 border-b border-border/60 bg-muted/20 px-5 pb-3 pt-4 backdrop-blur supports-[backdrop-filter]:bg-muted/30">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <Label>Permissões</Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              <span className="font-medium tabular-nums text-foreground">{totalConcedido}</span>
+              {' de '}
+              <span className="tabular-nums">{totalDisponivel}</span>
+              {totalConcedido === 0 ? ' — este acesso não abre nada' : ' liberadas'}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={limparTudo}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border/70 bg-background px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+            >
+              <Eraser className="h-3.5 w-3.5" />
+              Limpar
+            </button>
+            <button
+              type="button"
+              onClick={aplicarPreset}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              Padrão do atendente
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={aplicarPreset}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border/70 bg-background px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+
+        <div
+          className="mt-2.5 h-1 overflow-hidden rounded-full bg-border/70"
+          role="progressbar"
+          aria-valuenow={totalConcedido}
+          aria-valuemin={0}
+          aria-valuemax={totalDisponivel}
+          aria-label="Permissões liberadas"
         >
-          <Wand2 className="h-3.5 w-3.5" />
-          Padrão do atendente
-        </button>
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${Math.round((totalConcedido / totalDisponivel) * 100)}%` }}
+          />
+        </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="grid gap-2 xl:grid-cols-2">
         {MODULOS_ADMIN.map((modulo) => {
           const chaves = modulo.acoes.map((acao) => chave(modulo.id, acao.id))
           const marcadas = chaves.filter((item) => permissoes[item] === true).length
           const todas = marcadas === chaves.length
 
           return (
-            <div key={modulo.id} className="rounded-lg border border-border/60 p-3">
+            <div
+              key={modulo.id}
+              className={cn(
+                'rounded-lg border p-3 transition-colors',
+                marcadas > 0
+                  ? 'border-primary/25 bg-primary/[0.03]'
+                  : 'border-border/60 bg-background/40',
+              )}
+            >
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">{modulo.nome}</p>

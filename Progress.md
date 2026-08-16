@@ -1,5 +1,38 @@
 # Progress
 
+## [2026-08-16] Modal de acessos redesenhado + WhatsApp unificado
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Objetivo:** dar ao modal de acesso o porte da decisão que ele representa; follow-ups prontos na ficha do cliente; pedido do cliente terminando no WhatsApp da loja.
+**Arquivos criados:** `src/lib/whatsapp.mjs`, `src/lib/whatsapp.d.mts`, `tests/whatsapp.test.mjs`, `src/components/admin/clientes/SeletorFollowUp.tsx`.
+**Arquivos alterados:** `src/components/admin/GerenciadorUsuariosSistema.tsx`, `src/components/admin/acessos/EditorPermissoes.tsx`, `src/components/admin/GerenciadorUsuariosClientes.tsx`, `src/components/ModalCarrinho.tsx`, `src/components/Header.tsx`, `UI.md`, `Progress.md`.
+
+**Achado da investigação:** existiam **quatro** construções de link `wa.me`
+divergentes, e o `Header.tsx` tinha o número **fixo do projeto anterior**
+(`5586981428538`, DDD do Piauí) enquanto a loja é `(63)`. O botão de WhatsApp do
+cabeçalho mandava o cliente para uma conversa que não é da Fortes Fios.
+
+**O que foi feito:**
+- `whatsapp.mjs`: normalização de número, link, três follow-ups e a mensagem completa do pedido. 11 testes, RED antes.
+- Modal de acessos em duas colunas a partir de `lg` (`68rem`): identidade fixa à esquerda, permissões rolando à direita. Era `max-w-md` com tudo empilhado.
+- Editor com barra fixa (contador `14 de 41`, progresso, Limpar / Padrão do atendente) e módulos em duas colunas no `xl`, com destaque quando há algo liberado.
+- `SeletorFollowUp` na ficha do cliente: três mensagens prontas com rótulo e "quando usar", mais "conversa em branco". Substituiu os dois botões que abriam sempre o mesmo texto.
+- Carrinho: **Enviar pedido no WhatsApp** como ação principal da tela de sucesso, com nome, telefone, tipo, pagamento, troco, itens, dados de entrega, observações e total.
+- Cabeçalho da loja passou a usar o número configurado.
+
+**Decisões tomadas:** `api.whatsapp.com/send` em vez de `wa.me` — o `wa.me` redireciona e o Safari do iOS perde o texto ou cai em erro. O link é montado no render, não no handler: `window.open` depois de `await` é bloqueado como popup no iOS. Três follow-ups, não seis: lista longa vira uma segunda decisão antes da conversa.
+
+**Verificação:** `node --test tests/*.test.mjs` **102/102** (11 novos) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · mensagem gerada conferida linha a linha para entrega com troco e observações.
+
+**Pendências / próximos passos:**
+- Smoke visual do modal em desktop largo, notebook e mobile; e do envio real em Safari iOS e Chrome Android — a verificação desta sessão foi por código e teste.
+- `AjudaPedidoPublica` e `ModalLojaFechada` ainda montam o link por conta própria; podem migrar para `linkWhatsApp` numa limpeza.
+
+**Armadilhas descobertas:**
+- `wa.me` no Safari iOS: o redirecionamento come o `?text=` com alguma frequência. `api.whatsapp.com/send` resolve direto.
+- Capturar o retrato do pedido **depois** de `limparCarrinho()` produziria mensagem sem itens — o estado já foi zerado. Tem que ser no mesmo bloco do envio.
+- Em `Bairro`, `nome` é a **cidade** (a seleção tarifada); o bairro é entrada livre em outro estado. Trocar os dois manda o cliente para o endereço errado.
+
 ## [2026-08-15] Correção crítica — permissões que ninguém lia
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

@@ -816,17 +816,25 @@ export default function GerenciadorUsuariosSistema() {
           else setModalAberto(true)
         }}
       >
-        <DialogContent className="flex max-h-[92dvh] w-full max-w-md flex-col gap-0 overflow-hidden p-0 sm:max-h-[90dvh]">
+        <DialogContent className="flex max-h-[92dvh] w-full max-w-md flex-col gap-0 overflow-hidden p-0 sm:max-h-[90dvh] sm:max-w-2xl lg:max-w-[68rem]">
           <DialogHeader className="shrink-0 space-y-1 border-b border-border/60 px-5 pb-4 pt-5 text-left">
             <DialogTitle className="text-[15px] font-semibold tracking-tight">
               {editando ? 'Editar usuário' : 'Novo usuário do sistema'}
             </DialogTitle>
             <DialogDescription className="text-[13px] text-muted-foreground">
-              Defina nome, login e função de acesso.
+              Identidade e login à esquerda, o que essa pessoa alcança à direita.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {/*
+            Duas colunas a partir de `lg`: identidade à esquerda, permissões à
+            direita, cada uma com rolagem própria. Em coluna única a lista de 15
+            módulos empurrava nome e senha para fora da tela, e quem estava
+            configurando perdia de vista de quem era o acesso.
+            Abaixo de 768px o `Dialog` já vira Drawer e tudo empilha.
+          */}
+          <div className="min-h-0 flex-1 overflow-y-auto lg:flex lg:overflow-hidden">
+            <div className="space-y-4 px-5 py-4 lg:w-[22rem] lg:shrink-0 lg:overflow-y-auto lg:border-r lg:border-border/60">
             <div className="space-y-2">
               <Label htmlFor="usr-nome">Nome *</Label>
               <Input
@@ -906,12 +914,6 @@ export default function GerenciadorUsuariosSistema() {
                 })}
               </div>
             </div>
-
-            <EditorPermissoes
-              papel={formulario.papel}
-              permissoes={permissoes}
-              onChange={setPermissoes}
-            />
 
             <div className="space-y-2">
               <Label>Cor do avatar</Label>
@@ -1032,6 +1034,15 @@ export default function GerenciadorUsuariosSistema() {
                   )}
                 />
               </button>
+            </div>
+            </div>
+
+            <div className="border-t border-border/60 bg-muted/20 px-5 py-4 lg:min-w-0 lg:flex-1 lg:overflow-y-auto lg:border-t-0">
+              <EditorPermissoes
+                papel={formulario.papel}
+                permissoes={permissoes}
+                onChange={setPermissoes}
+              />
             </div>
           </div>
 

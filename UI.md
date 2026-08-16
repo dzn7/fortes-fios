@@ -271,6 +271,18 @@ continua a uma requisição de distância.
 
 ### Tela de Acessos
 
+O modal usa **duas colunas a partir de `lg`** (`lg:max-w-[68rem]`): identidade e
+login à esquerda em coluna fixa de `22rem`, permissões à direita com rolagem
+própria. Em coluna única a lista de 15 módulos empurrava nome e senha para fora
+da tela — quem configurava perdia de vista de quem era o acesso. Abaixo de 768px
+o `Dialog` vira Drawer e tudo empilha.
+
+O editor tem barra fixa no topo com contador `14 de 41`, barra de progresso e as
+ações de Limpar / Padrão do atendente; sem ela, esses controles rolavam para fora
+junto com os módulos. Cards de módulo em `xl:grid-cols-2`, com destaque suave
+quando há algo liberado.
+
+
 `GerenciadorUsuariosSistema` (aba **Acessos da equipe** em `/admin/usuarios`) com
 `EditorPermissoes` (`src/components/admin/acessos/`).
 
@@ -296,6 +308,33 @@ continua a uma requisição de distância.
 - Conceder permissão nova sem fechar o dado no servidor: vira teatro.
 - Devolver campo sensível zerado para quem não tem acesso. `receita: 0` inventa um faturamento de zero reais; o campo **ausente** diz a verdade. Ver `/api/admin/dashboard`.
 - Tratar valor de pedido e faturamento como a mesma permissão. `pedidos.ver_valor` é o R$ 85,00 que o atendente precisa cobrar; `dashboard.ver_receita` é o R$ 4.580 do dia.
+
+## WhatsApp
+
+Regra única em `src/lib/whatsapp.mjs`. Existiam quatro construções de link
+divergentes — inclusive um número fixo do projeto anterior no cabeçalho da loja,
+que mandava o cliente para uma conversa que não é da Fortes Fios.
+
+- **`api.whatsapp.com/send`, nunca `wa.me`.** No Safari do iOS o `wa.me` passa por um redirecionamento que perde o texto ou cai em "página não encontrada" quando aberto de dentro de handler. O endpoint direto resolve para o app e para o WhatsApp Web sem salto.
+- **Número inválido devolve `null`, não link torto.** Link torto abre uma conversa inexistente e o usuário acha que enviou.
+- **Abrir no clique, síncrono.** `window.open` depois de um `await` é tratado como popup e bloqueado no iOS: monte o link no render, não dentro do handler assíncrono.
+- Número da loja vem de `configuracoes_loja.whatsapp_numero` via `useStatusLoja()`. Nunca fixo no código.
+
+### Follow-ups do cliente
+
+`SeletorFollowUp` (`src/components/admin/clientes/`) — três mensagens prontas, e
+nada mais. Punhado se lê de relance; lista longa vira uma segunda decisão antes
+da conversa. Cada linha traz o rótulo **e** quando usar, senão a escolha vira
+adivinhação e o atendente escreve tudo do zero.
+
+### Pedido do cliente
+
+A tela de sucesso do carrinho tem **Enviar pedido no WhatsApp** como ação
+principal (verde) e "Entendi" como secundária. O retrato do pedido
+(`resumoWhatsApp`) é capturado **no envio**: logo depois o carrinho e o
+formulário são limpos e não há mais de onde tirar item, endereço ou observação.
+Endereço só entra quando o tipo é entrega — em retirada esses campos trazem
+sobra do pedido anterior.
 
 ## Padrões de layout
 

@@ -19,6 +19,9 @@ import { Button } from '@/components/ui/button'
 import { Drawer, DrawerContent, DrawerDescription, DrawerNested, DrawerTitle } from '@/components/ui/drawer'
 import { Separator } from '@/components/ui/separator'
 import { useAjusteTecladoVirtual } from '@/hooks/useAjusteTecladoVirtual'
+import { linkWhatsApp, mensagemPedidoParaLoja, type PedidoWhatsApp } from '@/lib/whatsapp.mjs'
+import { useStatusLoja } from '@/lib/useStatusLoja'
+import IconeWhatsApp from '@/components/icons/IconeWhatsApp'
 import {
   CHAVE_TEMPO_ENTREGA,
   CHAVE_TEMPO_RETIRADA,
@@ -149,6 +152,12 @@ type PedidoEnviado = {
   mesa?: number
   pagamentoOnlineAprovado?: boolean
   dataPrevistaEntrega?: string | null
+  /**
+   * Retrato para a mensagem do WhatsApp. Precisa ser capturado no envio: logo
+   * depois o carrinho e o formulário são limpos, e aí não há mais de onde tirar
+   * item, endereço ou observação.
+   */
+  resumoWhatsApp?: PedidoWhatsApp
 }
 
 type PontoLocalSelecionado = {
@@ -241,6 +250,9 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const [precisaTroco, setPrecisaTroco] = useState(false)
   const [trocoPara, setTrocoPara] = useState('')
   const [pedidoEnviado, setPedidoEnviado] = useState<PedidoEnviado | null>(null)
+  // Número da loja vem de `configuracoes_loja.whatsapp_numero`, o mesmo que o
+  // cabeçalho e a tela de loja fechada usam.
+  const { numeroWhatsApp } = useStatusLoja()
   const [bairros, setBairros] = useState<Bairro[]>([])
   const [bairroSelecionado, setBairroSelecionado] = useState<Bairro | null>(null)
   const [mostrarSeletorBairro, setMostrarSeletorBairro] = useState(false)
@@ -1499,6 +1511,26 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         mesa: mesaSelecionada || undefined,
         pagamentoOnlineAprovado: false,
         dataPrevistaEntrega,
+        resumoWhatsApp: {
+          numeroPedido: numeroPedidoFinal ?? proximoNumeroPedido,
+          nomeCliente: nomeClientePedido,
+          telefone: telefone.trim(),
+          tipoEntrega,
+          formaPagamento,
+          trocoPara: precisaTroco ? Number(String(trocoPara).replace(',', '.')) : null,
+          total: totalComTaxaPagamentoConfirmado,
+          taxaEntrega,
+          endereco: enderecoEntrega,
+          bairro,
+          cidade: bairroSelecionado?.nome || '',
+          pontoReferencia,
+          observacoes,
+          itens: itens.map((item) => ({
+            nome: item.produto.nome,
+            quantidade: item.quantidade,
+            subtotal: item.subtotal,
+          })),
+        },
       })
 
       // Salvar nome e telefone no localStorage para próximos pedidos
@@ -1628,6 +1660,22 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const estiloFeedbackCupom = feedbackCupom ? obterEstiloFeedbackCupom(feedbackCupom.tipo) : null
 
   // Tela de Pedido Enviado com Sucesso
+  /*
+   * O link é montado no render, não dentro do clique: no Safari do iOS,
+   * `window.open` só é permitido enquanto o gesto do usuário ainda está
+   * "quente". Qualquer trabalho assíncrono entre o toque e a abertura faz o
+   * navegador tratar como popup e bloquear.
+   */
+  const linkPedidoWhatsApp =
+    pedidoEnviado?.resumoWhatsApp && numeroWhatsApp
+      ? linkWhatsApp(numeroWhatsApp, mensagemPedidoParaLoja(pedidoEnviado.resumoWhatsApp))
+      : null
+
+  const enviarPedidoNoWhatsApp = () => {
+    if (!linkPedidoWhatsApp) return
+    window.open(linkPedidoWhatsApp, '_blank', 'noopener,noreferrer')
+  }
+
   if (pedidoEnviado) {
     return (
       <Drawer
@@ -1748,11 +1796,27 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
             </div>
             </div>
             <div className="shrink-0 border-t border-border bg-card/95 px-6 pt-4 [padding-bottom:max(env(safe-area-inset-bottom),1.5rem)] sm:px-8">
-            {/* Botão de fechar */}
+            {/*
+              Enviar o pedido pela conversa é a ação principal desta tela: é o
+              que coloca o cliente em contato com quem vai atender. Fechar vira
+              secundário.
+            */}
+            {linkPedidoWhatsApp ? (
+              <Button
+                type="button"
+                onClick={enviarPedidoNoWhatsApp}
+                className="h-12 w-full gap-2 bg-[#25D366] text-base font-semibold text-white hover:bg-[#1ebe57]"
+              >
+                <IconeWhatsApp className="size-5" />
+                Enviar pedido no WhatsApp
+              </Button>
+            ) : null}
+
             <Button
               type="button"
               onClick={onFechar}
-              className="h-12 w-full text-base font-semibold"
+              variant={linkPedidoWhatsApp ? 'outline' : 'default'}
+              className={`h-12 w-full text-base font-semibold${linkPedidoWhatsApp ? ' mt-2' : ''}`}
             >
               Entendi
             </Button>

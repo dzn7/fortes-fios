@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useStatusLoja } from '@/lib/useStatusLoja'
+import { linkWhatsApp } from '@/lib/whatsapp.mjs'
 import Image from 'next/image'
 import { useTheme } from 'next-themes'
 import {
@@ -50,6 +52,13 @@ export default function Header({
 }: HeaderProps) {
   const { theme, setTheme } = useTheme()
   const { quantidadeTotal } = useCarrinho()
+  // O número estava fixo no código, herdado do projeto anterior (DDD 86), e
+  // levava o cliente para uma conversa que não é da Fortes Fios.
+  const { numeroWhatsApp } = useStatusLoja()
+  const linkContatoWhatsApp = linkWhatsApp(
+    numeroWhatsApp,
+    'Olá! Vim pelo site da Fortes Fios.',
+  )
   const [mounted, setMounted] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [menuAberto, setMenuAberto] = useState(false)
@@ -167,15 +176,17 @@ export default function Header({
                   >
                     <Instagram className="size-6" strokeWidth={1.8} aria-hidden />
                   </a>
-                  <a
-                    href="https://wa.me/5586981428538"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex size-11 items-center justify-center rounded-full text-foreground transition-colors duration-150 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Conversar com a Fortes Fios pelo WhatsApp"
-                  >
-                    <IconeWhatsApp className="size-6" />
-                  </a>
+                  {linkContatoWhatsApp ? (
+                    <a
+                      href={linkContatoWhatsApp}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex size-11 items-center justify-center rounded-full text-foreground transition-colors duration-150 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Conversar com a Fortes Fios pelo WhatsApp"
+                    >
+                      <IconeWhatsApp className="size-6" />
+                    </a>
+                  ) : null}
                 </div>
 
                 <div className="mt-3 grid grid-cols-2 border-t border-border/60 pt-3">
