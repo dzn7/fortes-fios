@@ -36,6 +36,7 @@ import ModalComplementos from '@/components/ModalComplementos'
 import ModalLojaFechada from '@/components/ModalLojaFechada'
 import ModalNotificacao from '@/components/ModalNotificacao'
 import ModalPedidosCliente from '@/components/ModalPedidosCliente'
+import { LimiteDeErro } from '@/components/LimiteDeErro'
 import { AjudaPedidoPublica } from '@/components/AjudaPedidoPublica'
 import { Produto, supabase } from '@/lib/supabase'
 import { useStatusLoja } from '@/lib/useStatusLoja'
@@ -1071,10 +1072,16 @@ export default function Home() {
         lojaFechada={lojaFechada}
       />
 
-      <ModalPedidosCliente
-        aberto={modalPedidosClienteAberto}
-        onFechar={() => setModalPedidosClienteAberto(false)}
-      />
+      {/*
+        Contenção: um throw dentro da consulta de pedidos não pode apagar a loja
+        inteira. A causa continua sendo corrigida na origem — isto é a rede.
+      */}
+      <LimiteDeErro area="MeusPedidos">
+        <ModalPedidosCliente
+          aberto={modalPedidosClienteAberto}
+          onFechar={() => setModalPedidosClienteAberto(false)}
+        />
+      </LimiteDeErro>
 
       <ModalNotificacao
         aberto={modalNotificacao.aberto}

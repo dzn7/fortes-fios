@@ -318,6 +318,8 @@ que mandava o cliente para uma conversa que não é da Fortes Fios.
 - **`api.whatsapp.com/send`, nunca `wa.me`.** No Safari do iOS o `wa.me` passa por um redirecionamento que perde o texto ou cai em "página não encontrada" quando aberto de dentro de handler. O endpoint direto resolve para o app e para o WhatsApp Web sem salto.
 - **Número inválido devolve `null`, não link torto.** Link torto abre uma conversa inexistente e o usuário acha que enviou.
 - **Abrir no clique, síncrono.** `window.open` depois de um `await` é tratado como popup e bloqueado no iOS: monte o link no render, não dentro do handler assíncrono.
+- **Reservar aba: NUNCA com `noopener`.** A flag faz `window.open` devolver `null` por especificação — a aba abre e fica órfã em `about:blank`, sem ninguém para navegá-la ou fechá-la. Reserve sem a flag e zere `opener` depois de navegar.
+- Reserve a aba **depois** de todas as guardas de validação: pedido recusado com aba reservada deixa janela em branco aberta.
 - Número da loja vem de `configuracoes_loja.whatsapp_numero` via `useStatusLoja()`. Nunca fixo no código.
 
 ### Follow-ups do cliente
@@ -384,6 +386,29 @@ cupom faria — só se descobria o efeito quando um cliente usava.
 - **`descricao` saiu do formulário** — era write-only, não aparecia para ninguém. Continua gravada como `null` para não mexer no schema.
 - Validade é **data**, não `datetime`, e vale até o fim do dia escolhido: quem digita 31/12 espera que o dia 31 conte.
 - Modal em duas colunas a partir de `lg`; abaixo de 768px o `Dialog` vira Drawer e o resumo desce para depois do formulário, sem competir com os campos.
+
+## Frete grátis
+
+Fonte única em `src/lib/frete.mjs`. O cálculo estava inline no `ModalCarrinho`, e
+duplicar a regra é como o valor mostrado ao cliente diverge do gravado no pedido.
+
+- **Base do limite: subtotal de produtos, antes de frete e antes de cupom.** Mesmo critério do `valor_minimo_pedido` que já existia — duas definições de "valor do pedido" fariam "faltam R$ 18" e o frete zerando discordarem.
+- **Precedência:** cidade com `entrega_gratis` zera o frete sempre, inclusive com a regra global desligada. É decisão da loja sobre aquela cidade, não promoção.
+- **Configuração inválida vira regra desligada.** `ativo` só vale sendo booleano de verdade; `'sim'` no banco não pode ligar frete grátis universal.
+- Persiste em `configuracoes_loja` (chave/valor, já guarda JSON em outras chaves). Zero coluna nova.
+- No carrinho, o progresso deriva do **mesmo** subtotal do cálculo, então remover item recalcula os dois juntos.
+
+## Meus pedidos
+
+`ModalPedidosCliente` sobre o `Dialog` compartilhado. A versão anterior montava
+`fixed inset-0 z-[110]` + `backdrop-blur-sm` de viewport inteira à mão — burlava o
+`overlay-layer.tsx`, e `backdrop-filter` em tela cheia é fonte conhecida de
+pressão de memória no WebKit.
+
+- **Nada lança no render.** Apresentação por `pedidos-cliente.mjs`: data inválida vira texto, linha sem `id` é descartada, total inválido vira zero. `format()` do date-fns estoura com data ruim, e um throw no render apaga a página.
+- `new Date` diverge entre navegadores: `2026-08-16 13:38:03+00` (formato do Postgres) o Chrome aceita e o WebKit recusa. `formatarDataPedido` normaliza antes.
+- **Busca por número de sequência:** cada consulta invalida a anterior. Sem isso a resposta lenta sobrescreve a rápida, e uma resposta atrasada repovoa modal já fechado.
+- `LimiteDeErro` embrulha carrinho e pedidos: erro contido na área, resto do site de pé.
 
 ## Padrões de layout
 

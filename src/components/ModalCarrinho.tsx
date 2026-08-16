@@ -21,9 +21,17 @@ import { Separator } from '@/components/ui/separator'
 import { useAjusteTecladoVirtual } from '@/hooks/useAjusteTecladoVirtual'
 import { linkWhatsApp, mensagemPedidoParaLoja, type PedidoWhatsApp } from '@/lib/whatsapp.mjs'
 import { calcularTroco, sugerirValoresTroco, validarValorPago } from '@/lib/troco.mjs'
+import {
+  CONFIG_FRETE_GRATIS_PADRAO,
+  calcularFrete,
+  normalizarConfigFreteGratis,
+  progressoFreteGratis,
+  type ConfigFreteGratis,
+} from '@/lib/frete.mjs'
 import { useStatusLoja } from '@/lib/useStatusLoja'
 import IconeWhatsApp from '@/components/icons/IconeWhatsApp'
 import {
+  CHAVE_FRETE_GRATIS,
   CHAVE_TEMPO_ENTREGA,
   CHAVE_TEMPO_RETIRADA,
   TEMPO_ENTREGA_PADRAO,
@@ -274,15 +282,31 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const [tempoEntregaEstimado, setTempoEntregaEstimado] = useState(TEMPO_ENTREGA_PADRAO)
   const [tempoRetiradaEstimado, setTempoRetiradaEstimado] = useState(TEMPO_RETIRADA_PADRAO)
   const [entregasOnlineAtivas, setEntregasOnlineAtivas] = useState(true)
+  const [configFreteGratis, setConfigFreteGratis] = useState<ConfigFreteGratis>(
+    CONFIG_FRETE_GRATIS_PADRAO,
+  )
 
   // O Drawer do checkout tem formulário longo; medimos o teclado por conta própria
   // (ver `repositionInputs={false}` abaixo) para o painel encolher e voltar sozinho.
   const ajusteTeclado = useAjusteTecladoVirtual(aberto && !pedidoEnviado)
   const alturaTecladoAberto = ajusteTeclado?.altura ?? null
 
-  const taxaEntrega = tipoEntrega === 'entrega' && bairroSelecionado
-    ? (bairroSelecionado.entrega_gratis ? 0 : bairroSelecionado.taxa_entrega)
-    : 0
+  // Fonte única: `src/lib/frete.mjs`. A expressão inline anterior só conhecia a
+  // cidade, e duplicar a regra aqui faria o valor mostrado divergir do gravado.
+  const resultadoFrete = calcularFrete({
+    tipoEntrega,
+    cidade: bairroSelecionado,
+    subtotalProdutos: total,
+    configFreteGratis,
+  })
+  const taxaEntrega = resultadoFrete.valor
+
+  const progressoFrete = progressoFreteGratis({
+    subtotalProdutos: total,
+    configFreteGratis,
+    tipoEntrega,
+    cidade: bairroSelecionado,
+  })
   const valorMinimoEntrega = bairroSelecionado?.valor_minimo_pedido || 0
   const faltaParaMinimoEntrega = Math.max(0, valorMinimoEntrega - total)
   const atingiuMinimoEntrega = faltaParaMinimoEntrega <= 0
@@ -456,12 +480,15 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       if (chave === CHAVE_TEMPO_RETIRADA) {
         setTempoRetiradaEstimado(normalizarTempoEstimado(valor, TEMPO_RETIRADA_PADRAO))
       }
+      if (chave === CHAVE_FRETE_GRATIS) {
+        setConfigFreteGratis(normalizarConfigFreteGratis(valor))
+      }
     }
 
     supabase
       .from('configuracoes_loja')
       .select('chave, valor')
-      .in('chave', [CHAVE_TEMPO_ENTREGA, CHAVE_TEMPO_RETIRADA])
+      .in('chave', [CHAVE_TEMPO_ENTREGA, CHAVE_TEMPO_RETIRADA, CHAVE_FRETE_GRATIS])
       .then(({ data }) => {
         for (const configuracao of data || []) {
           aplicarTempo(configuracao.chave, configuracao.valor)
@@ -1248,18 +1275,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const enviarPedido = async () => {
     if (!validarEtapa(3)) return
 
-    /*
-     * A aba é reservada AQUI, ainda dentro do gesto do clique. Depois do
-     * `await` que grava o pedido, o navegador já não reconhece a ação como
-     * iniciada pelo usuário e trata qualquer `window.open` como popup — foi por
-     * isso que o WhatsApp não abria sozinho. Reservando antes, só resta trocar
-     * o endereço da aba quando a mensagem estiver pronta.
-     *
-     * Se o bloqueador recusar mesmo assim, `janelaWhatsApp` fica nulo e a tela
-     * de sucesso destaca o passo manual.
-     */
-    const janelaWhatsApp =
-      typeof window !== 'undefined' ? window.open('', '_blank', 'noopener,noreferrer') : null
+
     if (tipoEntrega === 'entrega' && !dadosEntregaPreenchidos) {
       if (!validarEtapa(2)) setEtapaAtual(2)
       return
@@ -1275,6 +1291,20 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       setBairro('')
       return
     }
+
+    /*
+     * A aba do WhatsApp é reservada aqui — depois de todas as guardas (senão um
+     * pedido recusado deixaria aba órfã) e ainda dentro do gesto do clique.
+     * Depois do `await` que grava o pedido o navegador já não reconhece a ação
+     * como iniciada pelo usuário e trata `window.open` como popup.
+     *
+     * SEM `noopener`: a flag faz `window.open` devolver `null` por especificação
+     * — é o que ela existe para fazer, cortar o vínculo com a aba criada. A aba
+     * abria mesmo assim e ficava órfã em `about:blank`, sem ninguém para
+     * navegá-la ou fechá-la. O desacoplamento é feito depois, zerando `opener`.
+     */
+    const janelaWhatsApp =
+      typeof window !== 'undefined' ? window.open('', '_blank') : null
 
     let cupomConfirmado: CupomAplicadoCheckout | null = cupomAplicado
     if (cupomAplicado) {
@@ -1554,12 +1584,19 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         ? linkWhatsApp(numeroWhatsApp, mensagemPedidoParaLoja(resumoParaEnvio))
         : null
 
-      if (janelaWhatsApp && urlWhatsApp) {
-        janelaWhatsApp.location.href = urlWhatsApp
+      if (janelaWhatsApp && !janelaWhatsApp.closed && urlWhatsApp) {
+        // `opener = null` recupera a proteção que o `noopener` daria, agora que
+        // já usamos a referência para navegar.
+        try {
+          janelaWhatsApp.opener = null
+        } catch {
+          // Alguns navegadores recusam a atribuição; não impede a navegação.
+        }
+        janelaWhatsApp.location.replace(urlWhatsApp)
         setEnvioWhatsAppAutomatico(true)
       } else {
-        // Sem aba reservada não dá para abrir depois do await; a tela de
-        // sucesso passa a pedir o clique.
+        // Sem aba utilizável não dá para abrir depois do await; a tela de
+        // sucesso passa a pedir o clique, e nenhuma aba em branco sobra.
         janelaWhatsApp?.close()
         setEnvioWhatsAppAutomatico(false)
       }
@@ -2590,9 +2627,39 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                   {tipoEntrega === 'entrega' && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Taxa de entrega</span>
-                      <span className={`font-medium ${bairroSelecionado?.entrega_gratis ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
-                        {bairroSelecionado?.entrega_gratis ? 'GRÁTIS!' : `R$ ${taxaEntrega.toFixed(2)}`}
+                      <span className={`font-medium ${resultadoFrete.gratis ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
+                        {resultadoFrete.gratis ? 'GRÁTIS' : `R$ ${taxaEntrega.toFixed(2)}`}
                       </span>
+                    </div>
+                  )}
+
+                  {/*
+                    Progresso do frete grátis. Deriva do mesmo `total` (subtotal
+                    de produtos) que o cálculo usa, então "faltam R$ 18" e o
+                    frete zerando concordam sempre — inclusive ao remover item.
+                  */}
+                  {progressoFrete.visivel && (
+                    <div className="rounded-lg border border-border/70 bg-muted/40 p-3">
+                      <p className="text-[13px] font-medium text-foreground">
+                        {progressoFrete.atingiu
+                          ? 'Você ganhou frete grátis!'
+                          : `Faltam R$ ${progressoFrete.faltam.toFixed(2)} para você ganhar frete grátis.`}
+                      </p>
+                      <div
+                        className="mt-2 h-1.5 overflow-hidden rounded-full bg-border/70"
+                        role="progressbar"
+                        aria-valuenow={progressoFrete.percentual}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label="Progresso para frete grátis"
+                      >
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            progressoFrete.atingiu ? 'bg-emerald-500' : 'bg-primary'
+                          }`}
+                          style={{ width: `${progressoFrete.percentual}%` }}
+                        />
+                      </div>
                     </div>
                   )}
 

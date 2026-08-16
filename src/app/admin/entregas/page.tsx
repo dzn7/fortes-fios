@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ConfigFreteGratis } from '@/components/admin/entregas/ConfigFreteGratis'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Truck, MapPin, Clock, User, CheckCircle2, XCircle, RefreshCw, BarChart3,
@@ -601,6 +602,8 @@ export default function EntregasPage() {
             </button>
           </div>
         </div>
+
+        <ConfigFreteGratis />
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <FiltroEntregasAdmin

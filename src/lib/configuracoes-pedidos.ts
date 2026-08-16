@@ -1,3 +1,10 @@
+/**
+ * Regra global de frete grátis. Mora em `configuracoes_loja` (tabela chave/valor
+ * que já guarda JSON em outras chaves) em vez de virar coluna nova — a estrutura
+ * existente comporta, e o formato é validado por `normalizarConfigFreteGratis`.
+ */
+export const CHAVE_FRETE_GRATIS = 'entrega_frete_gratis'
+
 export const CHAVE_TEMPO_ENTREGA = 'tempo_entrega_estimado'
 export const CHAVE_TEMPO_RETIRADA = 'tempo_retirada_estimado'
 

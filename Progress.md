@@ -1,5 +1,50 @@
 # Progress
 
+## [2026-08-16] about:blank, Meus Pedidos repaginado e frete grátis configurável
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Arquivos criados:** `src/lib/frete.mjs|.d.mts`, `src/lib/pedidos-cliente.mjs|.d.mts`, `src/components/LimiteDeErro.tsx`, `src/components/admin/entregas/ConfigFreteGratis.tsx`, `tests/frete.test.mjs`, `tests/pedidos-cliente.test.mjs`.
+**Arquivos alterados:** `src/components/ModalPedidosCliente.tsx` (reescrito), `src/components/ModalCarrinho.tsx`, `src/app/page.tsx`, `src/app/admin/entregas/page.tsx`, `src/lib/configuracoes-pedidos.ts`, `UI.md`, `Progress.md`.
+
+**🔴 `about:blank` — regressão minha, causa raiz confirmada.** Eu escrevi
+`window.open('', '_blank', 'noopener,noreferrer')`. A flag `noopener` faz o
+`window.open` **devolver `null` por especificação** — é o que ela existe para
+fazer, cortar o vínculo com a aba criada. A aba abria mesmo assim e ficava órfã
+em `about:blank`, sem referência para navegar nem fechar. Corrigido: reserva sem
+a flag, `opener = null` depois de navegar (recupera a proteção), `location.replace`
+no lugar de `href`, e a reserva movida para **depois** de todas as guardas —
+antes, pedido recusado por loja fechada também deixava aba órfã.
+
+**Safari — o que testei e descartei.** A hipótese mais provável era
+`format(new Date(created_at))` receber data em formato que o WebKit recusa.
+**Descartada com dado real:** a RPC devolve `2026-08-16T13:38:03.718152+00:00`,
+ISO válido. Não entreguei correção de data como se fosse a causa. O que tratei
+foram fragilidades verificadas: `format()` sem guarda (único ponto que lança no
+render daquele fluxo), overlay manual `fixed inset-0` + `backdrop-blur` de
+viewport inteira (fora do `overlay-layer.tsx`, e pressão de memória conhecida no
+WebKit), busca sem cancelamento, e ausência de error boundary. **Sem stack trace
+de Safari não afirmo causa raiz única.**
+
+**O que foi feito:**
+- `pedidos-cliente.mjs`: apresentação onde nada lança — data inválida vira texto, linha sem `id` é descartada, total inválido vira zero, e `2026-08-16 13:38:03+00` (formato do Postgres) é normalizado antes do `new Date`.
+- `ModalPedidosCliente` reescrito sobre o `Dialog` compartilhado (Drawer no mobile), zero hardcode: saíram `bg-white`, `dark:bg-zinc-950`, `border-zinc-200`, `text-zinc-900`, `bg-bordo-600`, `z-[110]`, `max-h-[55vh]`. Skeleton no lugar do spinner, estados vazio/erro/não-encontrado distintos, "Limpar busca", texto longo com `break-words`.
+- Busca com número de sequência: consulta antiga não sobrescreve a nova, e resposta atrasada não repovoa modal fechado.
+- `LimiteDeErro` embrulhando carrinho e pedidos.
+- `frete.mjs` como fonte única, com precedência explícita (cidade > regra global) e base do limite documentada: subtotal de produtos, antes de frete e cupom.
+- `ConfigFreteGratis` em `/admin/entregas`: liga/desliga, atalhos R$ 50/80/100/150/200 e campo livre, sem modal. Persiste em `configuracoes_loja` — nenhuma coluna nova.
+- Feedback no carrinho: "Faltam R$ 18,00 para você ganhar frete grátis" / "Você ganhou frete grátis!" com barra discreta, derivado do mesmo subtotal do cálculo.
+
+**Verificação:** `node --test tests/*.test.mjs` **155/155** (24 novos) · `npx tsc --noEmit` ✓ · `npm run build` ✓ 49 páginas · ciclo do frete conferido contra o banco real: admin grava → site lê → domínio decide (`82 → R$ 8, faltam R$ 18` · `100 → R$ 0, ganhou`). Chave de teste removida do banco.
+
+**Pendências / próximos passos:**
+- 🔴 Smoke em Safari macOS e iOS: a quebra relatada não foi reproduzida aqui, e a reserva de aba é justamente o mecanismo que só o dispositivo confirma. Se voltar a quebrar, o `LimiteDeErro` agora loga `[LimiteDeErro:MeusPedidos]` com component stack no console do cliente — é o rastro que faltava.
+- Realtime da config de frete não chega ao site (publication vazia, PRD §Realtime): mudar o valor mínimo exige recarregar a página do cliente.
+
+**Armadilhas descobertas:**
+- **`noopener` em `window.open` devolve `null`.** Reservar aba e passar a flag são mutuamente exclusivos.
+- Guarda de validação depois de reservar a aba deixa janela em branco a cada pedido recusado.
+- Buscar sem número de sequência: no mobile, com rede lenta, a resposta da busca anterior chega depois e sobrescreve a atual.
+
 ## [2026-08-16] Envio automático do pedido no WhatsApp + troco inteligente
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

@@ -1,24 +1,27 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { CalendarClock, Loader2, Phone, Receipt, Search, ShoppingBag, X, ChevronRight } from 'lucide-react'
-import { format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, Loader2, Phone, Receipt, Search, ShoppingBag } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import {
+  aparenciaStatusPedido,
+  formatarDataPedido,
+  normalizarPedidoConsulta,
+  telefoneEhConsultavel,
+} from '@/lib/pedidos-cliente.mjs'
 
-type PedidoConsulta = {
-  id: string
-  numero_pedido: number | null
-  nome_cliente: string | null
-  telefone: string | null
-  status: string | null
-  tipo_entrega: string | null
-  forma_pagamento: string | null
-  total: number
-  created_at: string
-  observacoes: string | null
-}
+type PedidoExibicao = NonNullable<ReturnType<typeof normalizarPedidoConsulta>>
 
 type ModalPedidosClienteProps = {
   aberto: boolean
@@ -27,16 +30,8 @@ type ModalPedidosClienteProps = {
 
 const CHAVE_TELEFONE_PEDIDOS = 'cliente_telefone_consulta_pedidos'
 
-const mapearStatus = (status: string | null) => {
-  const s = (status || '').toLowerCase()
-  if (s === 'pendente') return { label: 'Pendente', cor: 'bg-amber-500', classe: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20' }
-  if (s === 'confirmado') return { label: 'Confirmado', cor: 'bg-sky-500', classe: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/20' }
-  if (s === 'preparando') return { label: 'Preparando', cor: 'bg-indigo-500', classe: 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/20' }
-  if (s === 'pronto') return { label: 'Pronto', cor: 'bg-violet-500', classe: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/20' }
-  if (s === 'entregue') return { label: 'Entregue', cor: 'bg-emerald-500', classe: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20' }
-  if (s === 'cancelado') return { label: 'Cancelado', cor: 'bg-rose-500', classe: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/20' }
-  return { label: status || 'Sem status', cor: 'bg-zinc-400', classe: 'bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200 dark:bg-zinc-700/30 dark:text-zinc-300 dark:ring-zinc-600' }
-}
+const moeda = (valor: number) =>
+  valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 const formatarTelefone = (telefone: string) => {
   const digitos = telefone.replace(/\D/g, '')
@@ -45,271 +40,309 @@ const formatarTelefone = (telefone: string) => {
   return telefone
 }
 
+/**
+ * Meus pedidos.
+ *
+ * Reescrito sobre o `Dialog` compartilhado (que já vira Drawer abaixo de 768px)
+ * no lugar do overlay manual `fixed inset-0 z-[110]` + `backdrop-blur-sm` em
+ * tela cheia — que burlava o `overlay-layer.tsx`, único dono do empilhamento
+ * (UI.md), e cujo `backdrop-filter` de viewport inteira é uma fonte conhecida de
+ * pressão de memória no WebKit.
+ *
+ * Toda a apresentação passa por `pedidos-cliente.mjs`, onde nada lança: a versão
+ * anterior chamava `format()` do date-fns direto no JSX, e `format` estoura com
+ * data inválida — um throw no render apaga a página inteira.
+ *
+ * Cada busca cancela a anterior por número de sequência, então clicar duas vezes
+ * não deixa a resposta lenta sobrescrever a rápida.
+ */
 export default function ModalPedidosCliente({ aberto, onFechar }: ModalPedidosClienteProps) {
   const [telefone, setTelefone] = useState('')
   const [consultado, setConsultado] = useState(false)
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')
-  const [pedidos, setPedidos] = useState<PedidoConsulta[]>([])
-  const [pedidoExpandido, setPedidoExpandido] = useState<string | null>(null)
+  const [pedidos, setPedidos] = useState<PedidoExibicao[]>([])
+  const [expandido, setExpandido] = useState<string | null>(null)
+
+  const buscaRef = useRef(0)
 
   useEffect(() => {
     if (!aberto) return
 
     try {
       const salvo = window.localStorage.getItem(CHAVE_TELEFONE_PEDIDOS)
-      if (salvo) {
-        setTelefone(salvo)
-      }
+      if (salvo) setTelefone(salvo)
     } catch {
-      // Ignora falhas de storage
+      // Storage bloqueado (navegação privada no Safari): segue sem preencher.
     }
   }, [aberto])
 
   useEffect(() => {
-    if (!aberto) {
-      setConsultado(false)
-      setErro('')
-      setPedidos([])
-      setPedidoExpandido(null)
-    }
+    if (aberto) return
+
+    // Fechar zera a consulta, mas invalida também a busca em voo: sem isso, uma
+    // resposta atrasada repovoaria a lista de um modal já fechado.
+    buscaRef.current += 1
+    setConsultado(false)
+    setErro('')
+    setPedidos([])
+    setExpandido(null)
+    setCarregando(false)
   }, [aberto])
 
-  const resumo = useMemo(() => {
-    const totalPedidos = pedidos.length
-    const totalGasto = pedidos.reduce((acc, pedido) => acc + Number(pedido.total || 0), 0)
-    return { totalPedidos, totalGasto }
-  }, [pedidos])
+  const resumo = useMemo(
+    () => ({
+      quantidade: pedidos.length,
+      total: pedidos.reduce((soma, pedido) => soma + pedido.total, 0),
+    }),
+    [pedidos],
+  )
 
-  const consultarPedidos = async () => {
-    const telefoneLimpo = telefone.trim()
-    if (!telefoneLimpo) {
-      setErro('Informe seu telefone para buscar pedidos.')
+  const consultar = useCallback(async () => {
+    const informado = telefone.trim()
+
+    if (!telefoneEhConsultavel(informado)) {
+      setErro('Informe o telefone com DDD para buscar seus pedidos.')
       return
     }
 
+    const busca = ++buscaRef.current
     setCarregando(true)
     setConsultado(true)
     setErro('')
+    setExpandido(null)
 
     try {
       const { data, error } = await supabase.rpc('obter_pedidos_cliente_por_telefone', {
-        p_telefone: telefoneLimpo,
+        p_telefone: informado,
         p_limite: 30,
       })
 
+      // Resposta de uma busca que já foi substituída: descartar.
+      if (busca !== buscaRef.current) return
       if (error) throw error
 
-      const lista = ((data || []) as PedidoConsulta[]).map((pedido) => ({
-        ...pedido,
-        total: Number(pedido.total || 0),
-      }))
+      const lista = (Array.isArray(data) ? data : [])
+        .map(normalizarPedidoConsulta)
+        .filter((pedido): pedido is PedidoExibicao => pedido !== null)
 
       setPedidos(lista)
 
       try {
-        window.localStorage.setItem(CHAVE_TELEFONE_PEDIDOS, telefoneLimpo)
+        window.localStorage.setItem(CHAVE_TELEFONE_PEDIDOS, informado)
       } catch {
-        // Ignora falhas de storage
+        // Sem storage o histórico não persiste, e tudo bem.
       }
-    } catch (error) {
-      console.error('Erro ao consultar pedidos por telefone:', error)
-      setErro('Não foi possível buscar seus pedidos agora. Tente novamente.')
+    } catch (falha) {
+      if (busca !== buscaRef.current) return
+      console.error('[MeusPedidos] Falha ao consultar:', falha)
+      setErro('Não foi possível buscar seus pedidos agora. Tente de novo em instantes.')
       setPedidos([])
     } finally {
-      setCarregando(false)
+      if (busca === buscaRef.current) setCarregando(false)
     }
-  }
+  }, [telefone])
 
-  const enviarFormulario = (e: React.FormEvent) => {
-    e.preventDefault()
-    consultarPedidos()
+  const limpar = () => {
+    buscaRef.current += 1
+    setTelefone('')
+    setPedidos([])
+    setConsultado(false)
+    setErro('')
+    setExpandido(null)
+    setCarregando(false)
   }
 
   return (
-    <AnimatePresence>
-      {aberto && (
-        <div className="fixed inset-0 z-[110]">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onFechar}
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-          />
+    <Dialog
+      open={aberto}
+      onOpenChange={(proximo) => {
+        if (!proximo) onFechar()
+      }}
+    >
+      <DialogContent className="flex max-h-[88dvh] w-full flex-col gap-0 overflow-y-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="shrink-0 space-y-1 border-b border-border/70 px-5 pb-4 pt-5 text-left">
+          <DialogTitle className="text-[15px] font-semibold tracking-tight">
+            Meus pedidos
+          </DialogTitle>
+          <DialogDescription className="text-[13px] text-muted-foreground">
+            Consulte pelo telefone que você usou na compra.
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="relative flex min-h-full items-end justify-center sm:items-center sm:p-4">
-            <motion.div
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 40 }}
-              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              onClick={(e) => e.stopPropagation()}
-              className="relative w-full overflow-hidden rounded-t-2xl border-t border-zinc-200 bg-white shadow-2xl sm:max-w-lg sm:rounded-2xl sm:border dark:border-zinc-800 dark:bg-zinc-950"
+        <div className="shrink-0 border-b border-border/70 bg-muted/30 px-5 py-3">
+          <form
+            onSubmit={(evento) => {
+              evento.preventDefault()
+              void consultar()
+            }}
+            className="flex gap-2"
+          >
+            <div className="relative min-w-0 flex-1">
+              <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={telefone}
+                onChange={(evento) => setTelefone(evento.target.value)}
+                placeholder="(63) 98105-3014"
+                inputMode="tel"
+                autoComplete="tel"
+                aria-label="Telefone"
+                className="h-11 border-border/70 pl-9 shadow-none"
+              />
+            </div>
+
+            <Button type="submit" disabled={carregando} className="h-11 shrink-0 gap-2 px-4">
+              {carregando ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Search className="size-4" />
+              )}
+              <span className="hidden sm:inline">Buscar</span>
+            </Button>
+          </form>
+
+          {erro ? (
+            <p className="mt-2 flex items-start gap-1.5 text-[13px] text-destructive">
+              <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+              <span className="min-w-0">{erro}</span>
+            </p>
+          ) : null}
+
+          {consultado && !carregando ? (
+            <button
+              type="button"
+              onClick={limpar}
+              className="mt-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
             >
-              {/* Header */}
-              <div className="flex items-center justify-between p-4 pb-3">
-                <div>
-                  <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Meus pedidos</h3>
-                  <p className="mt-0.5 text-[13px] text-zinc-500 dark:text-zinc-400">
-                    Consulte pelo telefone
+              Limpar busca
+            </button>
+          ) : null}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 [-webkit-overflow-scrolling:touch]">
+          {carregando ? (
+            <div className="space-y-2.5">
+              {[0, 1, 2].map((indice) => (
+                <Skeleton key={indice} className="h-[72px] w-full rounded-xl" />
+              ))}
+            </div>
+          ) : !consultado ? (
+            <div className="flex min-h-52 flex-col items-center justify-center gap-3 text-center">
+              <span className="flex size-14 items-center justify-center rounded-full bg-muted">
+                <Receipt className="size-6 text-muted-foreground" strokeWidth={1.6} />
+              </span>
+              <p className="text-sm text-muted-foreground">
+                Informe seu telefone para ver seus pedidos.
+              </p>
+            </div>
+          ) : pedidos.length === 0 ? (
+            <div className="flex min-h-52 flex-col items-center justify-center gap-3 px-4 text-center">
+              <span className="flex size-14 items-center justify-center rounded-full bg-muted">
+                <ShoppingBag className="size-6 text-muted-foreground" strokeWidth={1.6} />
+              </span>
+              <div>
+                <p className="text-sm font-medium text-foreground">Nenhum pedido encontrado</p>
+                <p className="mt-1 text-[13px] text-muted-foreground">
+                  Confira se o telefone é o mesmo que você usou na compra.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mb-4 grid grid-cols-2 gap-2">
+                <div className="min-w-0 rounded-xl border border-border/70 bg-card p-3">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                    Pedidos
+                  </p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums text-foreground">
+                    {resumo.quantidade}
                   </p>
                 </div>
-                <button
-                  onClick={onFechar}
-                  className="rounded-xl p-2 text-zinc-400 transition-colors hover:bg-zinc-100 dark:text-zinc-500 dark:hover:bg-zinc-800 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
-                  aria-label="Fechar"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+                <div className="min-w-0 rounded-xl border border-border/70 bg-card p-3">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                    Total
+                  </p>
+                  <p className="mt-1 truncate text-xl font-semibold tabular-nums text-foreground">
+                    {moeda(resumo.total)}
+                  </p>
+                </div>
               </div>
 
-              {/* Busca */}
-              <div className="border-y border-zinc-100 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
-                <form onSubmit={enviarFormulario} className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-                    <input
-                      value={telefone}
-                      onChange={(e) => setTelefone(e.target.value)}
-                      placeholder="(63) 98105-3014"
-                      className="h-11 w-full rounded-xl border border-zinc-200 bg-white pl-10 pr-4 text-sm text-zinc-900 outline-none transition-all focus:border-bordo-500 focus:ring-2 focus:ring-bordo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-                    />
-                  </div>
+              <ul className="space-y-2.5">
+                {pedidos.map((pedido) => {
+                  const status = aparenciaStatusPedido(pedido.status)
+                  const estaExpandido = expandido === pedido.id
 
-                  <button
-                    type="submit"
-                    disabled={carregando}
-                    className="inline-flex h-11 min-w-[44px] items-center justify-center gap-2 rounded-xl bg-bordo-600 px-4 text-sm font-semibold text-white shadow-sm transition-all hover:bg-bordo-700 active:scale-[0.97] disabled:opacity-60 cursor-pointer"
-                  >
-                    {carregando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                    <span className="hidden sm:inline">Buscar</span>
-                  </button>
-                </form>
-
-                {erro && (
-                  <p className="mt-2 text-[13px] text-rose-600 dark:text-rose-400">{erro}</p>
-                )}
-              </div>
-
-              {/* Conteúdo */}
-              <div className="max-h-[55vh] overflow-y-auto p-4">
-                {/* Resumo */}
-                {consultado && !carregando && pedidos.length > 0 && (
-                  <div className="mb-4 grid grid-cols-2 gap-2">
-                    <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Pedidos</p>
-                      <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{resumo.totalPedidos}</p>
-                    </div>
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-500/20 dark:bg-emerald-500/5">
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Total gasto</p>
-                      <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">R$ {resumo.totalGasto.toFixed(2)}</p>
-                    </div>
-                  </div>
-                )}
-
-                {carregando ? (
-                  <div className="flex flex-col items-center justify-center gap-3 py-16">
-                    <Loader2 className="h-6 w-6 animate-spin text-bordo-500" />
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">Buscando pedidos...</p>
-                  </div>
-                ) : consultado && pedidos.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-                    <div className="rounded-full bg-zinc-100 p-4 dark:bg-zinc-800">
-                      <ShoppingBag className="h-8 w-8 text-zinc-400 dark:text-zinc-500" />
-                    </div>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">Nenhum pedido encontrado para esse telefone.</p>
-                  </div>
-                ) : !consultado ? (
-                  <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-                    <div className="rounded-full bg-zinc-100 p-4 dark:bg-zinc-800">
-                      <Receipt className="h-8 w-8 text-zinc-400 dark:text-zinc-500" />
-                    </div>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Informe seu telefone para ver seus pedidos.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {pedidos.map((pedido) => {
-                      const status = mapearStatus(pedido.status)
-                      const expandido = pedidoExpandido === pedido.id
-                      return (
+                  return (
+                    <li key={pedido.id}>
+                      <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
                         <button
-                          key={pedido.id}
                           type="button"
-                          onClick={() => setPedidoExpandido(expandido ? null : pedido.id)}
-                          className="w-full cursor-pointer rounded-xl border border-zinc-200 bg-white p-3 text-left transition-all hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+                          onClick={() => setExpandido(estaExpandido ? null : pedido.id)}
+                          aria-expanded={estaExpandido}
+                          className="flex w-full items-start justify-between gap-3 p-3.5 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                         >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-3">
-                              <div className={`h-2 w-2 flex-shrink-0 rounded-full ${status.cor}`} />
-                              <div>
-                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                                  Pedido #{pedido.numero_pedido ?? '--'}
-                                </p>
-                                <p className="mt-0.5 text-[11px] text-zinc-400 dark:text-zinc-500">
-                                  {format(new Date(pedido.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                                R$ {pedido.total.toFixed(2)}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="text-sm font-semibold text-foreground">
+                                Pedido {pedido.numeroExibicao}
                               </span>
-                              <ChevronRight className={`h-4 w-4 text-zinc-300 transition-transform dark:text-zinc-600 ${expandido ? 'rotate-90' : ''}`} />
+                              <span
+                                className={cn(
+                                  'rounded-full border px-2 py-0.5 text-[11px] font-medium',
+                                  status.classe,
+                                )}
+                              >
+                                {status.rotulo}
+                              </span>
                             </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {formatarDataPedido(pedido.criadoEm)}
+                            </p>
                           </div>
 
-                          <AnimatePresence>
-                            {expandido && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.2 }}
-                                className="overflow-hidden"
-                              >
-                                <div className="mt-3 space-y-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${status.classe}`}>
-                                      {status.label}
-                                    </span>
-                                  </div>
-
-                                  <div className="flex flex-wrap gap-1.5 text-[11px]">
-                                    <span className="rounded-lg bg-zinc-100 px-2 py-1 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                                      {pedido.tipo_entrega || 'Sem entrega'}
-                                    </span>
-                                    <span className="rounded-lg bg-zinc-100 px-2 py-1 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                                      {pedido.forma_pagamento || 'Sem pagamento'}
-                                    </span>
-                                    {pedido.telefone && (
-                                      <span className="rounded-lg bg-zinc-100 px-2 py-1 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                                        {formatarTelefone(pedido.telefone)}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {pedido.observacoes && (
-                                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                      <span className="font-medium">Obs:</span> {pedido.observacoes}
-                                    </p>
-                                  )}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
+                          <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                            {moeda(pedido.total)}
+                          </span>
                         </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </div>
+
+                        {estaExpandido ? (
+                          <div className="space-y-2 border-t border-border/60 px-3.5 pb-3.5 pt-3">
+                            <div className="flex flex-wrap gap-1.5">
+                              {[pedido.tipoEntrega, pedido.formaPagamento]
+                                .filter(Boolean)
+                                .map((etiqueta) => (
+                                  <span
+                                    key={etiqueta}
+                                    className="rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground"
+                                  >
+                                    {etiqueta}
+                                  </span>
+                                ))}
+                              {pedido.telefone ? (
+                                <span className="rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                                  {formatarTelefone(pedido.telefone)}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {pedido.observacoes ? (
+                              <p className="break-words text-xs leading-snug text-muted-foreground">
+                                <span className="font-medium text-foreground">Observações: </span>
+                                {pedido.observacoes}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          )}
         </div>
-      )}
-    </AnimatePresence>
+      </DialogContent>
+    </Dialog>
   )
 }
