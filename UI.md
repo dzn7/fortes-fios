@@ -87,7 +87,7 @@ Primitivos Kibo UI disponíveis:
 
 | Componente | Caminho | Responsabilidade |
 |---|---|---|
-| `Header` | `src/components/Header.tsx` | Cabeçalho público: marca e ações completas no desktop; no mobile, hambúrguer abre Sheet lateral com categorias reais, pedidos, ajuda e tema, enquanto o carrinho permanece direto na navbar |
+| `Header` | `src/components/Header.tsx` | Cabeçalho público: marca e ações completas no desktop; no mobile, hambúrguer abre Sheet lateral com categorias reais, pedidos, ajuda e tema, enquanto o carrinho permanece direto na navbar. O rodapé do Sheet reúne as redes na ordem Instagram · WhatsApp · TikTok, todas com alvo de 44 px |
 | `Footer` | `src/components/Footer.tsx` | Dock de navegação pública exclusiva do mobile: Início, Pedidos e Sacola; superfície flutuante compacta, estado atual inequívoco, badge de quantidade e safe-area integrada |
 | `FaixaRodape` | `src/components/FaixaRodape.tsx` | Faixa promocional fina acima da navegação pública: fundo oliva semântico, mensagem em Quiche Sans e movimento contínuo; respeita redução de movimento e nunca substitui regras reais de frete do checkout |
 | `HeroVitrine` | `src/components/HeroVitrine.tsx` | Carrossel público full-width com proporção fiel ao recorte salvo; usa art direction desktop/mobile, imagem integral, swipe, navegação acessível, pausa manual e redução de movimento |
@@ -98,7 +98,7 @@ Primitivos Kibo UI disponíveis:
 | `CartaoBebida` | `src/components/CartaoBebida.tsx` | Item de bebida |
 | `CartaoCombo` | `src/components/CartaoCombo.tsx` | Item de combo |
 | `ModalComplementos` | `src/components/ModalComplementos.tsx` | Quantidade, adicionais e observações |
-| `ModalCarrinho` | `src/components/ModalCarrinho.tsx` | Checkout completo; em entrega mostra recorrência e próxima data da cidade selecionada e repete a previsão na confirmação |
+| `ModalCarrinho` | `src/components/ModalCarrinho.tsx` | Checkout completo; em entrega mostra recorrência e próxima data da cidade selecionada e repete a previsão na confirmação. A etapa de Pagamento fecha com a nota permanente de parcelamento mínimo, puramente informativa |
 | `AjudaPedidoPublica` | `src/components/AjudaPedidoPublica.tsx` | Drawer de “Como pedir”, aberto somente pela navbar, com contato por WhatsApp |
 | `ModalSelecionarMesa` | `src/components/ModalSelecionarMesa.tsx` | Escolha do ponto local |
 | `ModalPedidosCliente` | `src/components/ModalPedidosCliente.tsx` | Consulta de pedidos por cliente |
@@ -586,10 +586,11 @@ próximo gravar.
 - A primeira visita ao sistema inicia em modo claro. A escolha manual de tema continua disponível e persistida; o tema do sistema operacional não deve substituir o padrão da loja automaticamente.
 - O checkout usa `repositionInputs={false}` no `Drawer` e mede o teclado virtual por `useAjusteTecladoVirtual` (`src/hooks/`), aplicando `height`/`maxHeight`/`bottom` em px no `DrawerContent`. O reposicionamento nativo do Vaul não serve para painel alto com formulário: ele alterna um booleano a cada `visualViewport.resize` e Safari/Chromium emitem vários por animação de teclado, congelando o painel em uma altura curta.
 - Ajuda abre o `AjudaPedidoPublica` exclusivamente pela navbar; WhatsApp aparece dentro desse Drawer quando estiver configurado.
-- O service worker do cardápio não roda em desenvolvimento e nunca armazena HTML nem payload RSC; misturar documentos e chunks de versões diferentes provoca divergência de hidratação.
-- O service worker do cardápio **não intercepta navegação**: `request.mode === 'navigate'` retorna sem `respondWith`, e essa checagem vem antes de todas as outras (inclusive a de `/api`). O documento é servido pelo navegador, pelo cache HTTP/bfcache dele. Interceptar não trazia ganho — o worker nunca guarda HTML — e transformava soluço de rede em falha definitiva.
-- O worker do cardápio não chama `clients.claim()`: aba que abriu sem controlador termina sem controlador. Reivindicá-la dispara `controllerchange` durante o carregamento.
-- Atualização de versão **avisa, não age**: o `controllerchange` só acende o banner "Nova versão disponível". Recarregar a página é consequência de clique, nunca de evento do worker. A decisão mora em `src/lib/atualizacao-pwa.mjs`, separada do componente para ser testável sem browser.
+- Ícone de marca (WhatsApp, TikTok) é SVG próprio em `src/components/icons/`, monocromático em `currentColor` — o `lucide-react` não traz marcas, e herdar a cor é o que faz os três links de rede reagirem juntos a hover, tema e foco. Instagram é exceção: o `lucide` tem o dele.
+- Aviso comercial no checkout é informativo e nunca altera cálculo, elegibilidade ou total — mesma regra da faixa promocional. O parcelamento mínimo na etapa de Pagamento é texto de política; o parcelamento por produto (`condicoesComerciaisProduto.ts`) é outro assunto, e o carrinho remove `parcelamento_ativo`/`parcelas_sem_juros` dos itens de propósito.
+- **O site não usa service worker.** `public/sw.js` é uma lápide: sem handler de `fetch`, ela apenas apaga os caches do site e chama `registration.unregister()`. O arquivo continua na mesma URL de propósito — worker mora no aparelho da pessoa, e apagar o arquivo destruiria o único canal capaz de desinstalar o que já foi entregue. O worker anterior não entregava nada que o cache HTTP do navegador já não fizesse (`/_next/static` vem com `max-age=31536000, immutable`), e ainda abortava requisição em 3 s.
+- A lápide apaga **somente** `fortes-fios-client-*` e `edienai-lanches-client-*`. `caches` é compartilhado pela origem, e admin, garçom e entregador usam `edienai-lanches-admin-*`, `-garcom-*` e `-entregador-*` — o worker anterior varria todo o prefixo `edienai-lanches-` e vinha apagando o cache dos outros três.
+- `manifest.json` e o `ManifestManager` permanecem: "adicionar à tela inicial" abre em tela cheia com o ícone certo e **não depende** de service worker.
 
 ### Administração desktop
 

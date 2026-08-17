@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import ThemeProvider from '@/providers/ThemeProvider'
 import { CarrinhoProvider } from '@/contexts/CarrinhoContext'
-import PWAManager from '@/components/PWAManager'
 import ManifestManager from '@/components/ManifestManager'
 import { AppToaster } from '@/components/AppToaster'
 import {
@@ -84,8 +83,11 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <CarrinhoProvider>
+            {/* Sem service worker: o site registrava um que não entregava nada
+                que o cache do navegador já não fizesse. `public/sw.js` virou
+                lápide e desinstala o que ficou nos aparelhos. O manifest
+                permanece — "adicionar à tela inicial" não depende de worker. */}
             <ManifestManager />
-            <PWAManager />
             <AppToaster />
             {children}
           </CarrinhoProvider>

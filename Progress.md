@@ -1,5 +1,47 @@
 # Progress
 
+## [2026-08-16] Service worker do site removido (worker-lápide)
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Arquivos criados:** `specs/remocao-pwa-cliente.md`.
+**Arquivos alterados:** `public/sw.js` (virou lápide), `src/app/layout.tsx`, `tests/service-worker-cliente.test.mjs` (reescrito para a lápide), `UI.md`, `Progress.md`.
+**Arquivos removidos:** `src/components/PWAManager.tsx`, `src/lib/atualizacao-pwa.mjs|.d.mts`, `tests/atualizacao-pwa.test.mjs`.
+
+**Decisão do usuário**, depois do levantamento abaixo: remover o PWA do site,
+mantendo o `manifest.json`.
+
+**O que o worker entregava: nada.** Verificado um a um — cache de `/_next/static`
+é redundante (o Next responde `Cache-Control: public, max-age=31536000, immutable`,
+conferido no build servido); não existe `beforeinstallprompt` no site, então
+ninguém era convidado a instalar; não existe `pushManager` no cliente (os
+`.subscribe()` são canais Realtime do Supabase, e o handler `push` era herança do
+restaurante); navegar offline nunca funcionou, porque o catálogo vem do Supabase e
+nunca foi cacheado. E cobrava preço: `networkFirstWithTimeout` abortava em 3 s,
+derrubando fonte e imagem em conexão lenta.
+
+**Por que lápide e não `rm`.** Service worker mora no navegador da pessoa, não no
+servidor. Apagar `public/sw.js` deixaria o worker antigo rodando indefinidamente
+em quem já visitou — e destruiria o único canal capaz de alcançá-lo. A lápide
+mantém a URL respondendo, sem handler de `fetch`, apaga os caches do site e chama
+`registration.unregister()`. Verificado ao vivo: `/sw.js` responde 200 com
+`Cache-Control: public, max-age=0`, então o navegador revalida o script a cada
+verificação e a lápide chega na navegação seguinte.
+
+**Defeito pré-existente descoberto no caminho:** o `activate` do worker do site
+apagava todo cache com prefixo `edienai-lanches-`. Os workers de admin, garçom e
+entregador usam exatamente esse prefixo — o site vinha apagando o cache dos três a
+cada ativação. `caches` é compartilhado pela origem. A lápide é cirúrgica
+(`fortes-fios-client-*` e `edienai-lanches-client-*`) e há teste que falha se
+alguém voltar a varrer demais.
+
+**Nada recarrega a página:** sem `clients.claim()` e sem `client.navigate()`. As
+abas abertas seguem como estão; a navegação seguinte já acontece sem worker.
+
+**Se um dia o fix do PWA do admin for autorizado**, o módulo
+`atualizacao-pwa.mjs` (decisão de `controllerchange` sem reload automático) foi
+removido junto com o `PWAManager` do cliente e precisa ser recriado — está na
+entrada anterior e no histórico do Git.
+
 ## [2026-08-16] Site não carregava na primeira entrada (tela de erro do Chrome)
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

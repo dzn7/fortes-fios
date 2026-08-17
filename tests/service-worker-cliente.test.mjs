@@ -6,50 +6,66 @@ import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 
 /**
- * O service worker do site é script clássico e roda num escopo que o Node não
- * tem. Em vez de simular o comportamento (o que testaria a simulação, não o
- * worker), o arquivo real é avaliado num contexto `vm` com o mínimo de globais
- * que ele usa. Assim o teste falha se `public/sw.js` mudar de ideia.
+ * O site não usa mais service worker. `public/sw.js` virou uma lápide: existe só
+ * para desinstalar o worker que versões anteriores deixaram no aparelho de quem
+ * já visitou a loja.
+ *
+ * O arquivo real é avaliado num contexto `vm` — não uma simulação dele — para
+ * que o teste falhe se a lápide voltar a fazer qualquer coisa.
  */
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const ORIGEM = 'https://fortesfios.exemplo'
 const CODIGO_DO_WORKER = readFileSync(path.join(RAIZ, 'public/sw.js'), 'utf8')
 
-const chaveDoCache = (requisicao) =>
-  typeof requisicao === 'string' ? new URL(requisicao, ORIGEM).toString() : requisicao.url
+const CACHES_DO_SITE = [
+  'fortes-fios-client-client-v3.0.0',
+  'fortes-fios-client-client-v2.10.12',
+  'edienai-lanches-client-v1',
+]
 
-const montarWorker = ({ aoBuscar, itensNoCache = new Map() } = {}) => {
+// `caches` é compartilhado pela origem — estes três não são do site e precisam
+// sobreviver. O worker anterior apagava todos: eles começam com o mesmo prefixo
+// que ele varria.
+const CACHES_DE_OUTROS_PERFIS = [
+  'edienai-lanches-admin-admin-v4.3.5',
+  'edienai-lanches-garcom-garcom-v1.5.0',
+  'edienai-lanches-entregador-entregador-v2.8.2',
+]
+
+const montarWorker = ({ cachesExistentes = [...CACHES_DO_SITE, ...CACHES_DE_OUTROS_PERFIS] } = {}) => {
   const ouvintes = new Map()
-  const espiao = { reivindicou: false, buscas: [], gravacoes: [] }
-
-  const cache = {
-    addAll: async () => {},
-    put: async (requisicao) => {
-      espiao.gravacoes.push(chaveDoCache(requisicao))
-    },
-    delete: async () => true,
-    match: async (requisicao) => itensNoCache.get(chaveDoCache(requisicao)),
+  const espiao = {
+    pulouEspera: false,
+    desregistrou: false,
+    reivindicou: false,
+    cachesApagados: [],
+    abasNavegadas: [],
   }
 
   const escopo = {
-    location: new URL(`${ORIGEM}/sw.js`),
+    location: new URL('https://fortesfios.exemplo/sw.js'),
     caches: {
-      open: async () => cache,
-      keys: async () => [],
-      delete: async () => true,
-      match: async (requisicao) => itensNoCache.get(chaveDoCache(requisicao)),
+      keys: async () => [...cachesExistentes],
+      delete: async (nome) => {
+        espiao.cachesApagados.push(nome)
+        return true
+      },
+      open: async () => ({ addAll: async () => {}, put: async () => {}, match: async () => undefined }),
+      match: async () => undefined,
     },
     clients: {
       claim: async () => {
         espiao.reivindicou = true
       },
-      matchAll: async () => [],
+      matchAll: async () => [
+        {
+          url: 'https://fortesfios.exemplo/',
+          navigate(destino) {
+            espiao.abasNavegadas.push(destino)
+          },
+        },
+      ],
     },
-    fetch: async (requisicao) => {
-      espiao.buscas.push(chaveDoCache(requisicao))
-      if (aoBuscar) return aoBuscar(requisicao)
-      return new Response('conteudo', { status: 200 })
-    },
+    fetch: async () => new Response('conteudo', { status: 200 }),
     Response,
     Headers,
     URL,
@@ -59,6 +75,15 @@ const montarWorker = ({ aoBuscar, itensNoCache = new Map() } = {}) => {
   }
 
   escopo.self = escopo
+  escopo.skipWaiting = () => {
+    espiao.pulouEspera = true
+  }
+  escopo.registration = {
+    unregister: async () => {
+      espiao.desregistrou = true
+      return true
+    },
+  }
   escopo.addEventListener = (tipo, ouvinte) => {
     if (!ouvintes.has(tipo)) ouvintes.set(tipo, [])
     ouvintes.get(tipo).push(ouvinte)
@@ -67,133 +92,74 @@ const montarWorker = ({ aoBuscar, itensNoCache = new Map() } = {}) => {
   vm.createContext(escopo)
   vm.runInContext(CODIGO_DO_WORKER, escopo)
 
-  const disparar = (tipo, evento) => {
-    for (const ouvinte of ouvintes.get(tipo) ?? []) ouvinte(evento)
+  const disparar = async (tipo) => {
+    const pendentes = []
+    for (const ouvinte of ouvintes.get(tipo) ?? []) {
+      ouvinte({ waitUntil: (promessa) => pendentes.push(promessa) })
+    }
+    await Promise.all(pendentes)
   }
 
   return { disparar, espiao, ouvintes }
 }
 
-const criarRequisicao = (caminho, { mode = 'no-cors', method = 'GET', headers = {} } = {}) => ({
-  url: new URL(caminho, ORIGEM).toString(),
-  method,
-  mode,
-  headers: new Headers(headers),
+// 1. A garantia mais forte: sem handler de fetch, o navegador nem consulta o
+//    worker. Ele não tem como derrubar navegação nem requisição nenhuma.
+test('a lápide não registra nenhum handler de fetch', () => {
+  const { ouvintes } = montarWorker()
+  assert.equal(ouvintes.has('fetch'), false, 'a lápide ainda intercepta requisição')
 })
 
-const dispararFetch = (worker, requisicao) => {
-  const registro = { respondeu: false, valor: undefined }
-  worker.disparar('fetch', {
-    request: requisicao,
-    respondWith(valor) {
-      registro.respondeu = true
-      registro.valor = valor
-    },
-    waitUntil() {},
-  })
-  return registro
-}
+test('a lápide não registra push nem notificationclick', () => {
+  const { ouvintes } = montarWorker()
+  assert.equal(ouvintes.has('push'), false)
+  assert.equal(ouvintes.has('notificationclick'), false)
+})
 
-// `/api/...` entra na lista de propósito: aquele ramo respondia com `fetch`
-// antes da checagem de navegação, e uma rejeição ali também derruba o documento.
-const CAMINHOS_DE_NAVEGACAO = ['/', '/contato', '/qualquer-coisa', '/api/qualquer']
-
-// 1. O núcleo do bug: o documento é assunto do navegador, nunca do worker.
-test('navegação normal não é interceptada pelo service worker', () => {
+// 2. Ativa sem esperar as abas fecharem — quanto antes ativar, antes some.
+test('install ativa sem esperar', async () => {
   const worker = montarWorker()
+  await worker.disparar('install')
 
-  for (const caminho of CAMINHOS_DE_NAVEGACAO) {
-    const registro = dispararFetch(worker, criarRequisicao(caminho, { mode: 'navigate' }))
-    assert.equal(registro.respondeu, false, `${caminho} foi interceptada`)
+  assert.equal(worker.espiao.pulouEspera, true)
+})
+
+// 3. O ponto da lápide: sumir.
+test('activate desregistra o próprio worker', async () => {
+  const worker = montarWorker()
+  await worker.disparar('activate')
+
+  assert.equal(worker.espiao.desregistrou, true)
+})
+
+test('activate apaga os caches do site', async () => {
+  const worker = montarWorker()
+  await worker.disparar('activate')
+
+  for (const nome of CACHES_DO_SITE) {
+    assert.ok(worker.espiao.cachesApagados.includes(nome), `${nome} não foi apagado`)
   }
 })
 
-// 2. É com a rede caída que o worker transformava soluço em falha definitiva.
-test('navegação com a rede caída também não é interceptada', () => {
-  const worker = montarWorker({
-    aoBuscar: async () => {
-      throw new TypeError('Failed to fetch')
-    },
-  })
+// 4. O defeito que o worker anterior tinha: levava junto o cache dos outros.
+test('activate não toca nos caches de admin, garçom e entregador', async () => {
+  const worker = montarWorker()
+  await worker.disparar('activate')
 
-  for (const caminho of CAMINHOS_DE_NAVEGACAO) {
-    const registro = dispararFetch(worker, criarRequisicao(caminho, { mode: 'navigate' }))
-    assert.equal(registro.respondeu, false, `${caminho} foi interceptada sem rede`)
+  for (const nome of CACHES_DE_OUTROS_PERFIS) {
+    assert.ok(
+      !worker.espiao.cachesApagados.includes(nome),
+      `${nome} foi apagado e não pertence ao site`,
+    )
   }
 })
 
-// 3. A tela "This page couldn't load" é exatamente uma Response.error() entregue
-//    a respondWith. Nenhum caminho pode produzi-la — nem `undefined`.
-test('nenhuma navegação recebe Response.error() nem undefined', async () => {
-  const worker = montarWorker({
-    aoBuscar: async () => {
-      throw new TypeError('Failed to fetch')
-    },
-    itensNoCache: new Map(),
-  })
-
-  const registro = dispararFetch(worker, criarRequisicao('/', { mode: 'navigate' }))
-
-  if (registro.respondeu) {
-    const resposta = await registro.valor
-    assert.notEqual(resposta, undefined, 'respondWith recebeu undefined')
-    assert.notEqual(resposta?.type, 'error', 'respondWith recebeu Response.error()')
-  }
-
-  assert.equal(registro.respondeu, false)
-})
-
-// 4. Reivindicar uma página que carregou sem controlador é o que dispara o
-//    controllerchange no meio do carregamento.
-test('activate não reivindica páginas já carregadas', async () => {
+// 5. Nada recarrega a página sozinho — nem por claim, nem navegando abas.
+test('a lápide não reivindica nem recarrega abas abertas', async () => {
   const worker = montarWorker()
-  const pendentes = []
+  await worker.disparar('install')
+  await worker.disparar('activate')
 
-  worker.disparar('activate', {
-    waitUntil: (promessa) => pendentes.push(promessa),
-  })
-  await Promise.all(pendentes)
-
-  assert.equal(worker.espiao.reivindicou, false)
-})
-
-// 5. Regressões do que o worker deve continuar fazendo (UI.md §service worker).
-test('payload RSC vai à rede e não entra no cache', async () => {
-  const worker = montarWorker()
-
-  const registro = dispararFetch(worker, criarRequisicao('/?_rsc=abc123'))
-  assert.equal(registro.respondeu, true, 'RSC deveria ser atendido pelo worker')
-
-  await registro.valor
-  assert.deepEqual(worker.espiao.gravacoes, [], 'RSC não pode ser gravado em cache')
-})
-
-test('requisição com header RSC também vai à rede sem cache', async () => {
-  const worker = montarWorker()
-
-  const registro = dispararFetch(worker, criarRequisicao('/contato', { headers: { RSC: '1' } }))
-  assert.equal(registro.respondeu, true)
-
-  await registro.valor
-  assert.deepEqual(worker.espiao.gravacoes, [])
-})
-
-test('estático do Next continua servido pelo worker', async () => {
-  const worker = montarWorker()
-
-  const registro = dispararFetch(worker, criarRequisicao('/_next/static/chunks/main-abc.js'))
-  assert.equal(registro.respondeu, true, 'o worker deve continuar cacheando estático')
-
-  await registro.valor
-  assert.ok(worker.espiao.buscas.some((url) => url.includes('/_next/static/')))
-})
-
-test('rota do admin é ignorada pelo worker do cliente', () => {
-  const worker = montarWorker()
-
-  const navegacao = dispararFetch(worker, criarRequisicao('/admin/pedidos', { mode: 'navigate' }))
-  const recurso = dispararFetch(worker, criarRequisicao('/admin/algum-dado.json'))
-
-  assert.equal(navegacao.respondeu, false)
-  assert.equal(recurso.respondeu, false)
+  assert.equal(worker.espiao.reivindicou, false, 'a lápide reivindicou abas')
+  assert.deepEqual(worker.espiao.abasNavegadas, [], 'a lápide recarregou abas')
 })

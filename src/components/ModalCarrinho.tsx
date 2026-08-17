@@ -85,6 +85,19 @@ const ETAPAS = [
   { numero: 3, titulo: 'Pagamento', descricao: 'Confirmar', icone: CreditCard },
 ]
 
+/**
+ * Regra comercial da loja, exibida na etapa de pagamento.
+ *
+ * É **apenas informativa**: não entra em cálculo, não valida e não bloqueia o
+ * envio do pedido — o parcelamento é combinado fora do site. O parcelamento por
+ * produto (`condicoesComerciaisProduto.ts`) é outra coisa, e o carrinho remove
+ * `parcelamento_ativo`/`parcelas_sem_juros` dos itens de propósito.
+ *
+ * Está aqui, e não em `configuracoes_loja`, porque foi pedido como aviso visual.
+ * Vira configuração no dia em que a loja precisar mudar o valor sem deploy.
+ */
+const VALOR_MINIMO_PARCELAMENTO = 200
+
 type TipoTaxaPagamento = 'nenhuma' | 'percentual' | 'fixa'
 
 type FormaPagamentoCheckout = {
@@ -2491,6 +2504,21 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                       O pedido será aprovado automaticamente após a confirmação do PIX Online.
                     </div>
                   )}
+
+                  {/*
+                    Sempre visível, em tom neutro: quem tem R$ 150 no carrinho e
+                    conta com parcelar precisa saber a regra **antes** de escolher
+                    o cartão, não depois. Fecha o bloco de pagamento como nota de
+                    rodapé — os avisos acima reagem à seleção, este é permanente.
+                  */}
+                  <p className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    <CreditCard
+                      className="mt-0.5 size-3.5 shrink-0 text-primary"
+                      strokeWidth={1.8}
+                      aria-hidden
+                    />
+                    <span>Compras parceladas apenas acima de R$ {VALOR_MINIMO_PARCELAMENTO}.</span>
+                  </p>
                 </div>
 
                 {/*

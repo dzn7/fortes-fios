@@ -28,6 +28,7 @@ import {
 import { useCarrinho } from '@/contexts/CarrinhoContext'
 import { cn } from '@/lib/utils'
 import IconeWhatsApp from '@/components/icons/IconeWhatsApp'
+import IconeTikTok from '@/components/icons/IconeTikTok'
 import { FaixaRodape } from '@/components/FaixaRodape'
 
 type HeaderProps = {
@@ -192,6 +193,15 @@ export default function Header({
                     aria-label="Conversar com a Fortes Fios pelo WhatsApp"
                   >
                     <IconeWhatsApp className="size-6" />
+                  </a>
+                  <a
+                    href="https://www.tiktok.com/@jamesfortes1"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex size-11 items-center justify-center rounded-full text-foreground transition-colors duration-150 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Abrir TikTok da Fortes Fios"
+                  >
+                    <IconeTikTok className="size-6" />
                   </a>
                 </div>
 
