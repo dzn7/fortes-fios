@@ -504,6 +504,14 @@ Ver `specs/icone-categoria.md`.
 
 ## Ordem das categorias (Admin › Produtos)
 
+> **Onde a ordem mora:** `categorias_cardapio.ordem` é a **fonte da verdade** —
+> é a coluna que `/api/vitrine/categorias` consulta e, portanto, a única que o
+> catálogo do cliente obedece. `configuracoes_loja.ordem_categorias_produtos` é
+> espelho legado, escrito no mesmo salvamento só enquanto o Admin ainda o usa
+> para ordenar a lista derivada dos produtos. **Salvar ordem sem escrever a
+> coluna não muda nada para o cliente** — foi exatamente esse o bug.
+> Ver `specs/ordem-categorias-persistencia.md`.
+
 Botão **"Ordenar categorias"** no cartão "Ordenação do catálogo", fora do
 "Detalhar": é a tarefa mais pedida das duas e não deveria depender de expandir
 uma seção.

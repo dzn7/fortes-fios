@@ -75,3 +75,67 @@ export const ordemMudou = (antes, depois) => {
   if (antes.length !== depois.length) return true
   return antes.some((item, indice) => item !== depois[indice])
 }
+
+// Faixa de marcas de acento separadas pelo NFD, escapada de propósito: colar os
+// combinantes crus quebra dependendo do editor. Mesmo critério de `categorias.mjs`.
+const DIACRITICOS = /[\u0300-\u036f]/g
+
+const chaveNome = (valor) =>
+  typeof valor === 'string'
+    ? valor.normalize('NFD').replace(DIACRITICOS, '').toLowerCase().replace(/\s+/g, ' ').trim()
+    : ''
+
+/**
+ * Converte a ordem escolhida no modal em atualizações de
+ * `categorias_cardapio.ordem` — a coluna que o catálogo do cliente realmente
+ * consulta.
+ *
+ * **Por que existe.** O modal gravava apenas
+ * `configuracoes_loja.ordem_categorias_produtos`, enquanto
+ * `/api/vitrine/categorias` ordena por `categorias_cardapio.ordem`. Duas
+ * gavetas: reordenar no Admin salvava de verdade, e o site continuava na
+ * sequência antiga. A chave em `configuracoes_loja` é herança da época em que
+ * categoria era só uma string no produto, antes da tabela existir.
+ *
+ * Nome sem linha correspondente é ignorado — não há o que atualizar, e inventar
+ * linha seria pior. A numeração sai contígua (1..N) sobre o que existe: buraco
+ * na sequência devolve empate para o `order by` resolver, que é o problema de
+ * origem.
+ *
+ * @param {string[]} nomes ordem escolhida
+ * @param {Array<{ id?: string, nome?: string }>} categorias linhas de `categorias_cardapio`
+ * @returns {Array<{ id: string, ordem: number }>}
+ */
+export const ordenarParaBanco = (nomes, categorias) => {
+  if (!ehLista(nomes) || !ehLista(categorias)) return []
+
+  const idPorNome = new Map()
+  for (const categoria of categorias) {
+    const chave = chaveNome(categoria?.nome)
+    if (!chave || typeof categoria?.id !== 'string' || !categoria.id) continue
+    if (!idPorNome.has(chave)) idPorNome.set(chave, categoria.id)
+  }
+
+  const usados = new Set()
+  const atualizacoes = []
+
+  for (const nome of nomes) {
+    const id = idPorNome.get(chaveNome(nome))
+    if (!id || usados.has(id)) continue
+    usados.add(id)
+    atualizacoes.push({ id, ordem: atualizacoes.length + 1 })
+  }
+
+  // Linha que existe na tabela e não veio na lista entra no fim, na ordem em
+  // que o banco a devolveu. Deixá-la com a `ordem` antiga criaria número
+  // repetido, e aí quem decide a posição no site é o desempate do `order by` —
+  // que é a origem deste bug, não a solução. Aconteceu de verdade: a tabela
+  // tinha 11 categorias e a lista salva pelo modal, 10.
+  for (const id of idPorNome.values()) {
+    if (usados.has(id)) continue
+    usados.add(id)
+    atualizacoes.push({ id, ordem: atualizacoes.length + 1 })
+  }
+
+  return atualizacoes
+}

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   moverItem,
+  ordenarParaBanco,
   moverParaBaixo,
   moverParaCima,
   ordemMudou,
@@ -120,4 +121,136 @@ test('mesmos nomes em ordem diferente contam como mudança', () => {
 test('ordemMudou tolera entrada inválida', () => {
   assert.equal(ordemMudou(null, null), false)
   assert.equal(ordemMudou(lista(), null), true)
+})
+
+// ------------------------------------------------- persistência no banco
+/*
+ * O modal gravava só `configuracoes_loja.ordem_categorias_produtos`, e o site
+ * ordena por `categorias_cardapio.ordem`. Duas gavetas: a ordem salva nunca
+ * chegava ao catálogo. `ordenarParaBanco` produz a atualização da coluna certa.
+ */
+const linhas = [
+  { id: 'a', nome: 'Kits e promopack' },
+  { id: 'b', nome: 'Hidratação' },
+  { id: 'c', nome: 'Cacheados e ondulados' },
+]
+
+test('a posição na lista vira ordem 1..N', () => {
+  assert.deepEqual(
+    ordenarParaBanco(['Hidratação', 'Kits e promopack', 'Cacheados e ondulados'], linhas),
+    [
+      { id: 'b', ordem: 1 },
+      { id: 'a', ordem: 2 },
+      { id: 'c', ordem: 3 },
+    ],
+  )
+})
+
+test('casa por nome sem acento e sem caixa', () => {
+  // Só a primeira posição interessa aqui; as demais linhas entram depois, na
+  // ordem do banco, e isso é coberto pelos testes de completude abaixo.
+  assert.deepEqual(ordenarParaBanco(['  hidratacao  '], linhas)[0], { id: 'b', ordem: 1 })
+  assert.deepEqual(ordenarParaBanco(['KITS E PROMOPACK'], linhas)[0], { id: 'a', ordem: 1 })
+})
+
+test('nome sem linha na tabela é ignorado, sem furo na numeração', () => {
+  assert.deepEqual(
+    ordenarParaBanco(['Inexistente', 'Hidratação', 'Outra que não existe', 'Kits e promopack'], linhas),
+    [
+      { id: 'b', ordem: 1 },
+      { id: 'a', ordem: 2 },
+      // `c` não foi citada e entra no fim, mantendo a numeração contígua.
+      { id: 'c', ordem: 3 },
+    ],
+  )
+})
+
+test('duplicado fica só com a primeira posição', () => {
+  assert.deepEqual(
+    ordenarParaBanco(['Hidratação', 'Kits e promopack', 'Hidratação'], linhas),
+    [
+      { id: 'b', ordem: 1 },
+      { id: 'a', ordem: 2 },
+      { id: 'c', ordem: 3 },
+    ],
+  )
+})
+
+test('entrada inválida não quebra o salvamento', () => {
+  assert.deepEqual(ordenarParaBanco(null, linhas), [])
+  assert.deepEqual(ordenarParaBanco(['Hidratação'], null), [])
+  // Sem nome utilizável, toda linha da tabela ainda recebe ordem contígua:
+  // devolver vazio aqui deixaria o banco com a numeração antiga e repetida.
+  assert.equal(ordenarParaBanco(['', '  '], linhas).length, linhas.length)
+})
+
+test('linha sem id ou sem nome é ignorada', () => {
+  const sujas = [{ id: 'x' }, { nome: 'Sem id' }, { id: 'y', nome: 'Boa' }]
+  assert.deepEqual(ordenarParaBanco(['Sem id', 'Boa'], sujas), [{ id: 'y', ordem: 1 }])
+})
+
+/*
+ * Reproduz o estado real do banco em 2026-08-18: o site mostrava Reconstrução
+ * em 2º porque `categorias_cardapio.ordem` dizia isso, enquanto o modal exibia
+ * Ofertas relâmpago em 2º, vindo do JSON.
+ */
+test('o caso real: a ordem do modal vira a ordem da tabela', () => {
+  const doBanco = [
+    { id: '1', nome: 'Kits e promopack' },
+    { id: '2', nome: 'Reconstrução' },
+    { id: '3', nome: 'Nutrição' },
+    { id: '4', nome: 'Ofertas relâmpago' },
+    { id: '5', nome: 'Hidratação' },
+  ]
+  const escolhidaNoModal = [
+    'Kits e promopack',
+    'Ofertas relâmpago',
+    'Hidratação',
+    'Nutrição',
+    'Reconstrução',
+  ]
+
+  assert.deepEqual(ordenarParaBanco(escolhidaNoModal, doBanco), [
+    { id: '1', ordem: 1 },
+    { id: '4', ordem: 2 },
+    { id: '5', ordem: 3 },
+    { id: '3', ordem: 4 },
+    { id: '2', ordem: 5 },
+  ])
+})
+
+/*
+ * Caso real do banco: `categorias_cardapio` tinha 11 linhas e a lista salva
+ * pelo modal, 10 — faltava "Mary Kay". Se a linha de fora mantivesse a `ordem`
+ * antiga, duas categorias ficariam com o mesmo número e o `order by` do site
+ * decidiria no desempate. Ela vai para o fim, com numeração contígua.
+ */
+test('categoria da tabela ausente da lista vai para o fim, sem ordem repetida', () => {
+  const doBanco = [
+    { id: '1', nome: 'Kits' },
+    { id: '2', nome: 'Mary Kay' },
+    { id: '3', nome: 'Nutrição' },
+  ]
+
+  const atualizacoes = ordenarParaBanco(['Nutrição', 'Kits'], doBanco)
+
+  assert.deepEqual(atualizacoes, [
+    { id: '3', ordem: 1 },
+    { id: '1', ordem: 2 },
+    { id: '2', ordem: 3 },
+  ])
+
+  const ordens = atualizacoes.map((a) => a.ordem)
+  assert.equal(new Set(ordens).size, ordens.length, 'ordem repetida')
+})
+
+test('toda linha da tabela recebe ordem, mesmo com a lista vazia', () => {
+  const doBanco = [
+    { id: 'a', nome: 'Um' },
+    { id: 'b', nome: 'Dois' },
+  ]
+  assert.deepEqual(ordenarParaBanco([], doBanco), [
+    { id: 'a', ordem: 1 },
+    { id: 'b', ordem: 2 },
+  ])
 })

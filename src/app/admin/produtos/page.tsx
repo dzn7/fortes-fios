@@ -28,6 +28,7 @@ import {
 import { SeletorIconeCategoria } from '@/components/admin/produtos/SeletorIconeCategoria'
 import { IconeCategoria } from '@/components/icons/IconeCategoria'
 import { ModalOrdemCategorias } from '@/components/admin/produtos/ModalOrdemCategorias'
+import { ordenarParaBanco } from '@/lib/ordem-categorias.mjs'
 import AdminLayout from '@/components/admin/AdminLayout'
 import { FiltrosAtivosChips, type ChipFiltroAtivo } from '@/components/admin/filtros/FiltrosAtivosChips'
 import { FiltroProdutosAdmin } from '@/components/admin/produtos/FiltroProdutosAdmin'
@@ -1028,7 +1029,48 @@ export default function ProdutosPage() {
       setOrdemCategoriasConfigurada(novaOrdem)
 
       try {
+        /*
+          Duas escritas, e a segunda é a que faz a ordem chegar ao cliente.
+
+          O modal gravava só a chave `ordem_categorias_produtos` de
+          `configuracoes_loja`, enquanto `/api/vitrine/categorias` ordena por
+          `categorias_cardapio.ordem`. Duas gavetas: o Admin salvava de verdade
+          e o site continuava na sequência antiga.
+
+          `categorias_cardapio.ordem` é a fonte da verdade. O JSON continua
+          sendo escrito porque esta tela ainda o usa para ordenar a lista
+          derivada dos produtos — enquanto o legado existir, os dois têm que
+          contar a mesma história.
+
+          Spec: specs/ordem-categorias-persistencia.md
+        */
+        const atualizacoes = ordenarParaBanco(novaOrdem, categoriasCardapio)
+
+        const respostas = await Promise.all(
+          atualizacoes.map((atualizacao) =>
+            supabase
+              .from('categorias_cardapio')
+              .update({ ordem: atualizacao.ordem })
+              .eq('id', atualizacao.id),
+          ),
+        )
+
+        const erroOrdem = respostas.find((resposta) => resposta.error)?.error
+        if (erroOrdem) throw erroOrdem
+
         await persistirOrdemCategorias(novaOrdem)
+
+        // Espelha no estado local para a tela não voltar à ordem antiga se algo
+        // recalcular a partir de `categoriasCardapio` antes do próximo refetch.
+        const ordemPorId = new Map(atualizacoes.map((item) => [item.id, item.ordem]))
+        setCategoriasCardapio((atual) =>
+          atual.map((categoria) =>
+            ordemPorId.has(categoria.id)
+              ? { ...categoria, ordem: ordemPorId.get(categoria.id) as number }
+              : categoria,
+          ),
+        )
+
         setModalNotificacao({
           aberto: true,
           tipo: 'sucesso',
@@ -1047,7 +1089,7 @@ export default function ProdutosPage() {
         throw erro
       }
     },
-    [ordemCategoriasConfigurada, persistirOrdemCategorias],
+    [categoriasCardapio, ordemCategoriasConfigurada, persistirOrdemCategorias],
   )
 
   const obterIdsOrdenadosDaCategoria = useCallback((categoria: string) => {

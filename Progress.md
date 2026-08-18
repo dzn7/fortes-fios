@@ -1,5 +1,73 @@
 # Progress
 
+## [2026-08-18] A ordem das categorias salva no Admin não chegava ao site
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Spec:** `specs/ordem-categorias-persistencia.md`
+**Arquivos alterados:** `src/lib/ordem-categorias.mjs`, `src/app/admin/produtos/page.tsx`, `tests/ordem-categorias.test.mjs`, `UI.md`, `Progress.md`. **Criado:** `specs/ordem-categorias-persistencia.md`.
+
+**O diagnóstico veio dos três prints do usuário — três ordens diferentes.** As
+duas fontes, lidas no banco:
+
+| `categorias_cardapio.ordem` (site lê) | `configuracoes_loja` JSON (modal grava) |
+|---|---|
+| 1 Kits · 2 Reconstrução · 3 Nutrição · 4 Mary Kay | 1 Kits · 2 Ofertas relâmpago · 3 Hidratação · 4 Nutrição |
+
+A primeira bate exatamente com o print do carrossel; a segunda, exatamente com o
+print do modal. **Duas gavetas** — o modal salvava de verdade, numa que o site
+nunca abre. A chave `ordem_categorias_produtos` é herança da época em que
+categoria era só uma string no produto, antes da tabela existir.
+
+Correção: o modal passa a gravar `categorias_cardapio.ordem` (via
+`ordenarParaBanco`, testado) e segue atualizando o JSON no mesmo salvamento,
+para os dois não divergirem enquanto o legado existir.
+
+**A borda que os dados revelaram:** a tabela tinha **11** categorias e a lista
+do modal, **10** — faltava "Mary Kay". Se a linha de fora mantivesse a `ordem`
+antiga, duas categorias ficariam com o mesmo número e quem decidiria a posição
+no site seria o desempate do `order by`, que é a doença de origem. Toda linha da
+tabela recebe numeração contígua; as não citadas entram no fim.
+
+**Decisões tomadas:**
+- **`categorias_cardapio.ordem` é a fonte da verdade**, não o JSON. É coluna da
+  tabela real e é o que a API pública já consulta; ensinar o site a ler a chave
+  de configuração manteria a coluna como segunda verdade desatualizada.
+- **Escrita client-side**, como o resto da tela: `categorias_cardapio` já é
+  criada, renomeada e apagada pelo cliente ali, e `anon` já tem `UPDATE`. Mover
+  só a ordenação para route handler não reduziria exposição e deixaria dois
+  padrões na mesma tela.
+- **Corrigi o dado de produção** aplicando a ordem que o usuário já havia
+  escolhido no modal — o estado inconsistente era artefato do bug. 11 linhas,
+  1..11, sem repetição, conferido depois.
+
+**Sobre o ícone no mesmo relato:** já estava corrigido no commit `3dc7e3d`, que
+**não tinha sido publicado** quando os prints foram tirados. Confere: o
+carrossel mostrava `Tag` para "Reconstrução" (palpite por nome antigo) enquanto
+o menu do Header — que já lia o valor gravado — mostrava o ícone certo. Os dados
+de `icone` estavam corretos o tempo todo.
+
+**Verificação:** RED→GREEN em duas rodadas (a segunda descobriu a borda do
+"Mary Kay") · `node --test tests/*.test.mjs` **293/293** · `npx tsc --noEmit` ✓ ·
+`npm run build` ✓ · `ordenarParaBanco` rodado contra as 11 linhas reais do banco:
+cobertura total e zero ordem repetida · ordem aplicada e reconferida no banco.
+
+**Pendências / próximos passos:**
+- 🟡 `configuracoes_loja.ordem_categorias_produtos` continua sendo escrita como
+  espelho. Aposentá-la exige tirar `ordenarCategoriasPorPreferencia` do
+  `page.tsx` do Admin — tarefa própria.
+- 🟡 Categoria ativa **sem produto** aparece no site (a API lista todas as
+  ativas) e **não** aparece no modal (a lista do Admin deriva dos produtos).
+  Não é o bug relatado, mas é a mesma família.
+
+**Armadilhas descobertas:**
+- **Dois armazenamentos para o mesmo conceito só aparecem quando um dos dois
+  muda.** O modal "funcionava" — gravava, relia, exibia. Só comparando com o
+  que o *site* lê é que a divergência apareceu.
+- Teste que codifica contrato incompleto vira obstáculo: quatro asserções
+  minhas afirmavam que categoria fora da lista era omitida, e precisaram ser
+  corrigidas quando a completude virou requisito.
+
+
 ## [2026-08-18] Ícone da categoria não aparecia no site + catálogo de 12 para 24
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)
