@@ -1,5 +1,69 @@
 # Progress
 
+## [2026-08-18] Ícone da categoria não aparecia no site + catálogo de 12 para 24
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Spec:** `specs/icone-categoria.md`
+**Arquivos criados:** `src/components/icons/IconeCategoria.tsx`, `specs/icone-categoria.md`.
+**Arquivos alterados:** `src/app/page.tsx`, `src/lib/categorias.mjs`, `src/components/admin/produtos/SeletorIconeCategoria.tsx`, `src/components/Header.tsx`, `src/components/admin/produtos/ModalOrdemCategorias.tsx`, `src/app/admin/produtos/page.tsx`, `tests/categorias.test.mjs`, `UI.md`, `Progress.md`.
+
+**O bug.** O Admin gravava `categorias_cardapio.icone`, a API devolvia o campo, e
+o carrossel do site **não olhava para ele**: chamava um `obterIconeCategoria`
+que adivinhava pelo NOME. O mesmo arquivo já tinha o memo certo — com o
+comentário "para o menu mostrar o mesmo símbolo escolhido no Admin" — mas ele só
+ia para o `Header`. Trocar o ícone mudava o menu hambúrguer e não mudava o
+carrossel, que é a tela que o cliente vê.
+
+Correção: o valor gravado vence, e `sugerirIconePorNome` (que já existia no
+domínio) vira a rede para categoria sem escolha. `obterIconeCategoria` saiu.
+
+**O catálogo.** De 12 para 24 ícones, e os dados de produção mostravam por que:
+"Hidratação" estava com `etiqueta` (a etiqueta genérica), "Finalizadores" e
+"Acessórios" com `maquiagem`, "Cabelos oleosos, caspa, antiqueda" com `liso`.
+Havia ainda `pele` mapeado para o ícone **`Gift`** (presente) — sem relação
+nenhuma. Só `lucide-react`, que já é dependência.
+
+**Decisões tomadas:**
+- **Nenhum id antigo removido.** Há categorias no banco apontando para os 12
+  originais; sumir com um faria `iconeValido` devolver o padrão e a categoria
+  perderia o ícone em silêncio. Tem teste para isso.
+- **Específico antes do genérico no catálogo**, porque `sugerirIconePorNome`
+  devolve o primeiro que casar — senão "Hidratação" continuaria caindo em
+  `tratamento` e o ícone novo nunca seria sugerido. O comentário que descrevia a
+  ordem estava invertido em relação ao que o código fazia; corrigido.
+- **`IconeCategoria` mudou de `admin/produtos/` para `components/icons/`.** O
+  `Header` do site importava de dentro da pasta do Admin — sintoma de que a peça
+  estava no lugar errado.
+- **Removi `normalizarCategoriaFortesFios` de `page.tsx`**, que ficou sem
+  chamador: a filtragem passou para `chaveTexto` na task dos filtros, e o
+  palpite de ícone saiu agora.
+
+**Verificação:** RED nos 4 testes novos → GREEN, com os 11 antigos intactos ·
+`node --test tests/*.test.mjs` **284/284** · `npx tsc --noEmit` ✓ ·
+`npm run build` ✓ · um teste percorre as **11 categorias reais da loja** lidas do
+banco · os 24 ícones renderizados pelos componentes React reais e
+**inspecionados visualmente** (a primeira tentativa, que extraía o SVG na mão,
+desenhou vários ícones quebrados — foi descartada por isso).
+
+**Pendências / próximos passos:**
+- 🟡 Seis categorias reais ainda têm gravado o ícone que o catálogo antigo
+  forçou (Hidratação → `etiqueta`, Finalizadores/Acessórios → `maquiagem`,
+  oleosos/caspa → `liso`, Reconstrução/Nutrição → `tratamento`). O código já
+  exibe o valor gravado corretamente; o valor é que está ruim. Repicar é decisão
+  de conteúdo — não mexi nos dados.
+- 🟡 `Acessórios` (Gem) e `Pele e corpo` (Hand) são os dois em que menos confio
+  depois de ver renderizados; os outros 22 ficaram claros.
+
+**Armadilhas descobertas:**
+- **Componente lucide não é função**, é `forwardRef` — `Comp({})` explode. Para
+  renderizar fora do React, `renderToStaticMarkup(createElement(Icone))`.
+- **Extrair `d` de SVG com regex desenha ícone errado sem avisar.** A primeira
+  grade saiu com Cachos em branco e Etiqueta virando um ponto; se eu tivesse
+  julgado por ela, teria trocado ícones que estavam certos.
+- **`qlmanage -s` corta a última coluna** de um SVG largo. Conferir o conteúdo do
+  arquivo, não só a imagem.
+
+
 ## [2026-08-18] 🔴 Crash do Realtime na home + modal de ordem das categorias
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

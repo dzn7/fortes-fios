@@ -25,10 +25,8 @@ import {
   sugerirIconePorNome,
   validarCategoria,
 } from '@/lib/categorias.mjs'
-import {
-  IconeCategoria,
-  SeletorIconeCategoria,
-} from '@/components/admin/produtos/SeletorIconeCategoria'
+import { SeletorIconeCategoria } from '@/components/admin/produtos/SeletorIconeCategoria'
+import { IconeCategoria } from '@/components/icons/IconeCategoria'
 import { ModalOrdemCategorias } from '@/components/admin/produtos/ModalOrdemCategorias'
 import AdminLayout from '@/components/admin/AdminLayout'
 import { FiltrosAtivosChips, type ChipFiltroAtivo } from '@/components/admin/filtros/FiltrosAtivosChips'

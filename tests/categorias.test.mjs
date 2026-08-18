@@ -33,6 +33,79 @@ test('ícone fora do catálogo cai no padrão', () => {
   assert.equal(iconeValido(ICONES_CATEGORIA[1].id), ICONES_CATEGORIA[1].id)
 })
 
+/*
+ * As categorias REAIS desta loja, lidas do banco em 2026-08-18. É o teste que
+ * importa: o catálogo antigo tinha 12 ícones e obrigava escolhas ruins —
+ * "Hidratação" ficou com `etiqueta` (a etiqueta genérica) e "Finalizadores" e
+ * "Acessórios" ficaram com `maquiagem`, por falta de opção melhor.
+ */
+test('cada categoria real da loja tem um ícone que faz sentido', () => {
+  const esperado = {
+    'Kits e promopack': 'kit',
+    'Reconstrução': 'reconstrucao',
+    'Nutrição': 'nutricao',
+    'Mary Kay': 'maquiagem',
+    'Infantil': 'infantil',
+    'Outros': 'etiqueta',
+    'Acessórios': 'acessorio',
+    'Cacheados e ondulados': 'cachos',
+    'Cabelos oleosos, caspa, antiqueda, crescimento': 'couro',
+    'Hidratação': 'hidratacao',
+    'Finalizadores': 'finalizador',
+  }
+
+  for (const [nome, icone] of Object.entries(esperado)) {
+    assert.equal(sugerirIconePorNome(nome), icone, `"${nome}"`)
+  }
+})
+
+test('o específico vence o genérico: hidratação e nutrição não caem em tratamento', () => {
+  assert.equal(sugerirIconePorNome('Hidratação profunda'), 'hidratacao')
+  assert.equal(sugerirIconePorNome('Nutrição capilar'), 'nutricao')
+  assert.equal(sugerirIconePorNome('Reconstrução total'), 'reconstrucao')
+  // O genérico continua existindo para o que não é nenhum dos três.
+  assert.equal(sugerirIconePorNome('Tratamento pós-química'), 'tratamento')
+})
+
+test('o catálogo cobre o vocabulário de uma loja de cabelo', () => {
+  const esperado = {
+    'Leave-in e finalizadores': 'finalizador',
+    'Óleos capilares': 'oleo',
+    'Matizador': 'matizador',
+    'Coloração': 'coloracao',
+    'Protetor térmico': 'protecao',
+    'Escovas e pentes': 'escova',
+    'Perfumaria': 'perfume',
+    'Linha profissional': 'premium',
+  }
+
+  for (const [nome, icone] of Object.entries(esperado)) {
+    assert.equal(sugerirIconePorNome(nome), icone, `"${nome}"`)
+  }
+})
+
+/*
+ * Ids gravados no banco não podem sumir do catálogo: `iconeValido` devolveria o
+ * padrão e a categoria perderia em silêncio o ícone que alguém escolheu.
+ */
+test('nenhum id do catálogo antigo foi removido', () => {
+  const antigos = [
+    'etiqueta', 'banho', 'cachos', 'liso', 'tratamento', 'kit',
+    'coloracao', 'infantil', 'ferramenta', 'maquiagem', 'pele', 'promocao',
+  ]
+
+  for (const id of antigos) {
+    assert.equal(iconeValido(id), id, `o id "${id}" sumiu do catálogo`)
+  }
+})
+
+test('o catálogo cresceu o suficiente para não forçar escolha ruim', () => {
+  assert.ok(
+    ICONES_CATEGORIA.length >= 20,
+    `só ${ICONES_CATEGORIA.length} ícones — o problema relatado era justamente a falta de opção`,
+  )
+})
+
 // 2. sugestão pelo nome — o que evita o trabalho de escolher
 test('o nome da categoria sugere um ícone coerente', () => {
   assert.equal(sugerirIconePorNome('Shampoo e condicionador'), 'banho')

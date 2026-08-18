@@ -478,6 +478,30 @@ jogou fora. Por isso o original precisa chegar íntegro ao servidor.
 - Escolher a imagem **já cria** o depoimento; nome e formato editam no card. Modal para uma informação que cabe numa linha é passo a mais.
 - O formato é sugerido pela proporção do arquivo e continua trocável.
 
+## Ícone da categoria
+
+Fonte única: `src/components/icons/IconeCategoria.tsx` — mapa id → componente
+`lucide-react`. Usado pelo seletor do Admin **e** pelo catálogo do cliente; não
+duplicar o mapa em outro lugar.
+
+O catálogo de ids fica em `src/lib/categorias.mjs` (24 opções), separado do mapa
+de componentes porque `src/lib/*.mjs` está fora do `content` do Tailwind — classe
+declarada lá não seria gerada.
+
+**Regra de exibição:** o ícone **gravado** na categoria vence; `sugerirIconePorNome`
+é só a rede para categoria ainda sem escolha. Nunca adivinhar pelo nome quando há
+valor gravado — foi exatamente esse o bug: o carrossel do site adivinhava e o
+menu do Header lia o valor, então trocar o ícone no Admin só mudava metade da tela.
+
+**Ordem do catálogo importa:** `sugerirIconePorNome` devolve o primeiro id cuja
+palavra aparecer no nome, então o específico vem antes do genérico
+(`hidratacao`/`nutricao`/`reconstrucao` antes de `tratamento`).
+
+**Nunca remover um id do catálogo** — há categorias no banco apontando para eles,
+e `iconeValido` devolveria o padrão, apagando a escolha em silêncio.
+
+Ver `specs/icone-categoria.md`.
+
 ## Ordem das categorias (Admin › Produtos)
 
 Botão **"Ordenar categorias"** no cartão "Ordenação do catálogo", fora do

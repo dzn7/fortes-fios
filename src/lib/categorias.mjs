@@ -22,17 +22,49 @@ export const ICONE_CATEGORIA_PADRAO = 'etiqueta'
  */
 export const ICONES_CATEGORIA = [
   { id: 'etiqueta', rotulo: 'Etiqueta', palavras: ['outros', 'geral', 'diversos'] },
-  { id: 'banho', rotulo: 'Banho', palavras: ['shampoo', 'condicionador', 'banho', 'lavagem'] },
+
+  // Lavagem e dia a dia
+  { id: 'banho', rotulo: 'Shampoo e banho', palavras: ['shampoo', 'condicionador', 'banho', 'lavagem', 'co-wash'] },
+
+  // Tipo de cabelo
   { id: 'cachos', rotulo: 'Cachos', palavras: ['cacho', 'cacheado', 'crespo', 'ondulado'] },
-  { id: 'liso', rotulo: 'Liso', palavras: ['liso', 'progressiva', 'alisamento', 'escova'] },
-  { id: 'tratamento', rotulo: 'Tratamento', palavras: ['tratamento', 'reconstrucao', 'hidratacao', 'nutricao', 'ressecado', 'pos-quimica', 'quimica'] },
+  { id: 'liso', rotulo: 'Liso e escova', palavras: ['liso', 'progressiva', 'alisamento', 'selagem', 'botox'] },
+
+  // Tratamento — os três específicos vêm ANTES do genérico, senão
+  // "Hidratação" cairia em `tratamento` e o ícone específico nunca seria usado.
+  { id: 'hidratacao', rotulo: 'Hidratação', palavras: ['hidratacao', 'hidratante', 'umectacao'] },
+  { id: 'nutricao', rotulo: 'Nutrição', palavras: ['nutricao', 'nutritivo', 'ressecado'] },
+  { id: 'reconstrucao', rotulo: 'Reconstrução', palavras: ['reconstrucao', 'queratina', 'fortalecimento', 'quebra'] },
+  { id: 'tratamento', rotulo: 'Tratamento', palavras: ['tratamento', 'pos-quimica', 'quimica', 'cronograma'] },
+  { id: 'couro', rotulo: 'Couro cabeludo', palavras: ['couro cabeludo', 'caspa', 'antiqueda', 'queda', 'crescimento', 'oleosos', 'oleosidade'] },
+
+  // Finalização
+  { id: 'finalizador', rotulo: 'Finalizadores', palavras: ['finalizador', 'leave-in', 'leave in', 'creme de pentear', 'modelador', 'pomada', 'gel'] },
+  { id: 'oleo', rotulo: 'Óleos e séruns', palavras: ['oleo', 'serum', 'ampola'] },
+  { id: 'protecao', rotulo: 'Proteção térmica', palavras: ['protetor termico', 'protecao termica', 'termico'] },
+
+  // Cor
+  { id: 'coloracao', rotulo: 'Coloração', palavras: ['tintura', 'coloracao', 'cor', 'tonalizante', 'descolorante'] },
+  { id: 'matizador', rotulo: 'Matizador', palavras: ['matizador', 'matizacao', 'loiro', 'platinado'] },
+
+  // Embalagem e apelo comercial
   { id: 'kit', rotulo: 'Kit', palavras: ['kit', 'promopack', 'combo', 'pack'] },
-  { id: 'coloracao', rotulo: 'Coloração', palavras: ['tintura', 'coloracao', 'cor', 'matizador', 'tonalizante'] },
-  { id: 'infantil', rotulo: 'Infantil', palavras: ['infantil', 'kids', 'crianca', 'baby'] },
-  { id: 'ferramenta', rotulo: 'Ferramentas', palavras: ['ferramenta', 'acessorio', 'escova', 'pente', 'secador'] },
-  { id: 'maquiagem', rotulo: 'Maquiagem', palavras: ['maquiagem', 'make', 'batom', 'mary kay', 'perfumaria'] },
-  { id: 'pele', rotulo: 'Pele', palavras: ['pele', 'skin', 'facial', 'corporal', 'hidratante'] },
   { id: 'promocao', rotulo: 'Promoção', palavras: ['promocao', 'oferta', 'desconto', 'liquidacao'] },
+  { id: 'premium', rotulo: 'Linha premium', palavras: ['premium', 'profissional', 'salao'] },
+
+  // Público
+  { id: 'infantil', rotulo: 'Infantil', palavras: ['infantil', 'kids', 'crianca', 'baby'] },
+
+  // Ferramentas e acessórios — `ferramenta` antes de `acessorio` para
+  // "Ferramentas e acessórios" continuar caindo em ferramenta.
+  { id: 'ferramenta', rotulo: 'Ferramentas', palavras: ['ferramenta', 'tesoura', 'maquina', 'secador', 'chapinha', 'prancha'] },
+  { id: 'escova', rotulo: 'Escovas e pentes', palavras: ['escova', 'pente'] },
+  { id: 'acessorio', rotulo: 'Acessórios', palavras: ['acessorio', 'presilha', 'tiara', 'elastico', 'touca'] },
+
+  // Beleza além do cabelo
+  { id: 'maquiagem', rotulo: 'Maquiagem', palavras: ['maquiagem', 'make', 'batom', 'mary kay'] },
+  { id: 'pele', rotulo: 'Pele e corpo', palavras: ['pele', 'skin', 'facial', 'corporal', 'sabonete'] },
+  { id: 'perfume', rotulo: 'Perfumaria', palavras: ['perfume', 'perfumaria', 'colonia', 'fragrancia'] },
 ]
 
 const IDS_VALIDOS = new Set(ICONES_CATEGORIA.map((icone) => icone.id))
@@ -61,9 +93,11 @@ export const normalizarNomeCategoria = (nome) =>
  * digita "Cabelos cacheados" e o ícone de cachos já vem marcado — continua
  * trocável, mas ninguém precisa procurar.
  *
- * A ordem importa: o primeiro ícone cuja palavra aparecer no nome vence, e o
- * catálogo está ordenado do mais genérico para o mais específico, de modo que
- * o específico não seja engolido.
+ * A ordem importa: o **primeiro** ícone cuja palavra aparecer no nome vence.
+ * Por isso o catálogo lista o específico ANTES do genérico dentro de cada
+ * família — `hidratacao`, `nutricao` e `reconstrucao` vêm antes de
+ * `tratamento`, senão as três cairiam no genérico e os ícones específicos
+ * nunca seriam sugeridos.
  *
  * @param {unknown} nome
  */

@@ -9,21 +9,13 @@ import {
 } from 'react'
 import {
   ArrowRight,
-  Baby,
-  Droplets,
-  Gem,
   Grid2X2,
-  MoreHorizontal,
-  PackageOpen,
   PackageCheck,
   Search,
-  ShieldCheck,
   ShoppingBag,
   Tag,
   Truck,
-  Waves,
   X as XIcon,
-  type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Header from '@/components/Header'
@@ -38,7 +30,8 @@ import ModalLojaFechada from '@/components/ModalLojaFechada'
 import ModalNotificacao from '@/components/ModalNotificacao'
 import ModalPedidosCliente from '@/components/ModalPedidosCliente'
 import { LimiteDeErro } from '@/components/LimiteDeErro'
-import { ICONE_CATEGORIA_PADRAO } from '@/lib/categorias.mjs'
+import { ICONE_CATEGORIA_PADRAO, sugerirIconePorNome } from '@/lib/categorias.mjs'
+import { IconeCategoria } from '@/components/icons/IconeCategoria'
 import { AjudaPedidoPublica } from '@/components/AjudaPedidoPublica'
 import { Produto, supabase } from '@/lib/supabase'
 import { useStatusLoja } from '@/lib/useStatusLoja'
@@ -46,7 +39,6 @@ import { useCarrinho } from '@/contexts/CarrinhoContext'
 import { produtoDisponivelParaCompra } from '@/lib/estoque-produto.mjs'
 import { cn } from '@/lib/utils'
 import {
-  normalizarNomeCategoria,
 } from '@/lib/categoriasCardapio'
 import {
   CHAVE_ROTULO_CATEGORIA_TODOS,
@@ -114,26 +106,6 @@ type RespostaCategorias = {
   sucesso: boolean
   categorias?: CategoriaPublica[]
   rotuloTodos?: string
-}
-
-const normalizarCategoriaFortesFios = (categoria: string | null | undefined) =>
-  normalizarNomeCategoria(categoria)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('pt-BR')
-
-const obterIconeCategoria = (categoria: string): LucideIcon => {
-  const categoriaNormalizada = normalizarCategoriaFortesFios(categoria)
-
-  if (categoriaNormalizada.startsWith('todos')) return Grid2X2
-  if (categoriaNormalizada.includes('kit')) return PackageOpen
-  if (categoriaNormalizada.includes('pos-quimica')) return ShieldCheck
-  if (categoriaNormalizada.includes('cachead')) return Waves
-  if (categoriaNormalizada.includes('ressecad')) return Droplets
-  if (categoriaNormalizada.includes('mary kay')) return Gem
-  if (categoriaNormalizada.includes('infantil')) return Baby
-  if (categoriaNormalizada.includes('outro')) return MoreHorizontal
-  return Tag
 }
 
 const calcularProgressoTrilha = (trilha: HTMLDivElement) => {
@@ -536,6 +508,20 @@ export default function Home() {
     [categoriasBanco],
   )
 
+  /**
+   * O ícone que o Admin gravou vence; o palpite pelo nome é só a rede para
+   * categoria ainda sem escolha.
+   *
+   * Era aqui que o bug morava: o carrossel chamava um `obterIconeCategoria`
+   * que adivinhava pelo NOME e nunca olhava `categoria.icone`. Trocar o ícone
+   * no Admin mudava o menu do Header (que já lia o valor gravado) e não mudava
+   * o carrossel — a tela que o cliente realmente vê.
+   */
+  const iconeDaCategoria = useCallback(
+    (categoria: string) => iconesCategoria[categoria] ?? sugerirIconePorNome(categoria),
+    [iconesCategoria],
+  )
+
   const selecionarCategoria = useCallback((categoria: string) => {
     setCategoriaAtiva(categoria)
     window.requestAnimationFrame(() => {
@@ -559,8 +545,8 @@ export default function Home() {
    * mora em `filtros-catalogo.mjs`, testada com `node --test`: aqui ficaria
    * fora do alcance de qualquer teste que este projeto aceita.
    *
-   * A categoria é comparada pelo módulo (sem acento, sem caixa), que é o mesmo
-   * critério de `normalizarCategoriaFortesFios` para os nomes reais do catálogo.
+   * A categoria é comparada pelo módulo, sem acento e sem caixa — critério
+   * conferido contra as 9 categorias reais do banco, com zero divergência.
    */
   const produtosFiltrados = useMemo(
     () =>
@@ -774,7 +760,7 @@ export default function Home() {
                 <div className="inline-flex min-w-max gap-3 sm:flex sm:min-w-0 sm:flex-wrap sm:gap-4">
                   {categorias.map((categoria) => {
                     const ativo = categoriaAtiva === categoria
-                    const Icone = obterIconeCategoria(categoria)
+                    const ehTodos = categoria === rotuloCategoriaTodos
 
                     return (
                       <button
@@ -791,7 +777,16 @@ export default function Home() {
                               : 'border-border bg-card text-muted-foreground group-hover:border-primary/50 group-hover:text-primary'
                           }`}
                         >
-                          <Icone className="size-6" strokeWidth={1.6} aria-hidden />
+                          {/* "Todos" é pseudo-categoria: não tem linha no banco para guardar ícone. */}
+                          {ehTodos ? (
+                            <Grid2X2 className="size-6" strokeWidth={1.6} aria-hidden />
+                          ) : (
+                            <IconeCategoria
+                              icone={iconeDaCategoria(categoria)}
+                              className="size-6"
+                              strokeWidth={1.6}
+                            />
+                          )}
                         </span>
                         <span
                           className={`line-clamp-2 min-h-8 text-xs font-medium leading-4 ${

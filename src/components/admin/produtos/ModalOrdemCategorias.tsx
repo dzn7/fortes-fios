@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { IconeCategoria } from '@/components/admin/produtos/SeletorIconeCategoria'
+import { IconeCategoria } from '@/components/icons/IconeCategoria'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import {
   moverItem,

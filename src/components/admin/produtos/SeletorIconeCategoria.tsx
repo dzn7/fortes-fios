@@ -1,56 +1,9 @@
 'use client'
 
-import {
-  Baby,
-  Bath,
-  Gift,
-  Package,
-  Palette,
-  Scissors,
-  Sparkles,
-  Tag,
-  Waves,
-  Wind,
-  Droplets,
-  Percent,
-  type LucideIcon,
-} from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import { ICONES_CATEGORIA, ICONE_CATEGORIA_PADRAO, iconeValido } from '@/lib/categorias.mjs'
-
-/**
- * Mapa id → componente.
- *
- * Fica aqui, e não em `src/lib/categorias.mjs`, porque import de ícone é
- * apresentação — e porque `src/lib/*.mjs` está fora do `content` do Tailwind,
- * então qualquer classe declarada lá não seria gerada.
- */
-const COMPONENTES: Record<string, LucideIcon> = {
-  etiqueta: Tag,
-  banho: Bath,
-  cachos: Waves,
-  liso: Wind,
-  tratamento: Droplets,
-  kit: Package,
-  coloracao: Palette,
-  infantil: Baby,
-  ferramenta: Scissors,
-  maquiagem: Sparkles,
-  pele: Gift,
-  promocao: Percent,
-}
-
-export const IconeCategoria = ({
-  icone,
-  className,
-}: {
-  icone: string | null | undefined
-  className?: string
-}) => {
-  const Componente = COMPONENTES[iconeValido(icone)] ?? COMPONENTES[ICONE_CATEGORIA_PADRAO]
-  return <Componente className={className} strokeWidth={1.8} aria-hidden />
-}
+import { ICONES_CATEGORIA, iconeValido } from '@/lib/categorias.mjs'
+import { IconeCategoria } from '@/components/icons/IconeCategoria'
 
 type SeletorIconeCategoriaProps = {
   valor: string
@@ -60,10 +13,10 @@ type SeletorIconeCategoriaProps = {
 /**
  * Grade de ícones, tudo à vista.
  *
- * Doze opções cabem numa grade que se lê de uma vez — um `Select` esconderia a
- * escolha atrás de um clique e de uma lista, para uma decisão que é visual por
- * natureza. O ícone é o que o cliente reconhece no filtro da loja antes de ler
- * o nome.
+ * Um `Select` esconderia atrás de um clique e de uma lista uma decisão que é
+ * visual por natureza — o ícone é o que o cliente reconhece no filtro da loja
+ * antes de ler o nome. A grade cresceu de 12 para 24 opções: com doze, faltava
+ * vocabulário de loja de cabelo e "Hidratação" acabava com a etiqueta genérica.
  */
 export function SeletorIconeCategoria({ valor, onChange }: SeletorIconeCategoriaProps) {
   const selecionado = iconeValido(valor)
@@ -73,7 +26,6 @@ export function SeletorIconeCategoria({ valor, onChange }: SeletorIconeCategoria
       <Label>Ícone</Label>
       <div className="grid grid-cols-6 gap-1.5">
         {ICONES_CATEGORIA.map((icone) => {
-          const Componente = COMPONENTES[icone.id] ?? Tag
           const ativo = selecionado === icone.id
 
           return (
@@ -91,7 +43,7 @@ export function SeletorIconeCategoria({ valor, onChange }: SeletorIconeCategoria
                   : 'border-border/70 bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground',
               )}
             >
-              <Componente className="size-[18px]" strokeWidth={1.8} />
+              <IconeCategoria icone={icone.id} className="size-[18px]" />
             </button>
           )
         })}

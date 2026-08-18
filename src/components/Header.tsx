@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useStatusLoja } from '@/lib/useStatusLoja'
 import { linkWhatsApp } from '@/lib/whatsapp.mjs'
-import { IconeCategoria } from '@/components/admin/produtos/SeletorIconeCategoria'
+import { IconeCategoria } from '@/components/icons/IconeCategoria'
 import Image from 'next/image'
 import { useTheme } from 'next-themes'
 import {
