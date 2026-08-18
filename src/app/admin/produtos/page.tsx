@@ -15,6 +15,7 @@ import {
   Tag,
   GripVertical,
   Search,
+  ArrowUpDown,
 } from 'lucide-react'
 import ProtectedRoute from '@/components/admin/ProtectedRoute'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
@@ -28,6 +29,7 @@ import {
   IconeCategoria,
   SeletorIconeCategoria,
 } from '@/components/admin/produtos/SeletorIconeCategoria'
+import { ModalOrdemCategorias } from '@/components/admin/produtos/ModalOrdemCategorias'
 import AdminLayout from '@/components/admin/AdminLayout'
 import { FiltrosAtivosChips, type ChipFiltroAtivo } from '@/components/admin/filtros/FiltrosAtivosChips'
 import { FiltroProdutosAdmin } from '@/components/admin/produtos/FiltroProdutosAdmin'
@@ -211,6 +213,7 @@ export default function ProdutosPage() {
   const [salvandoConfiguracaoOrdenacao, setSalvandoConfiguracaoOrdenacao] = useState(false)
   const [salvandoOrdenacaoManual, setSalvandoOrdenacaoManual] = useState(false)
   const [secaoOrdenacaoAberta, setSecaoOrdenacaoAberta] = useState(false)
+  const [modalOrdemCategoriasAberto, setModalOrdemCategoriasAberto] = useState(false)
   const [salvandoCategoria, setSalvandoCategoria] = useState(false)
   const [categoriaEmProcesso, setCategoriaEmProcesso] = useState<string | null>(null)
   const [buscaProdutos, setBuscaProdutos] = useState('')
@@ -1007,6 +1010,48 @@ export default function ProdutosPage() {
     return new Map(produtos.map((produtoAtual) => [produtoAtual.id, produtoAtual]))
   }, [produtos])
 
+  const iconeDaCategoria = useCallback(
+    (categoria: string) =>
+      categoriasCardapio.find((item) => item.nome === categoria)?.icone ?? null,
+    [categoriasCardapio],
+  )
+
+  /**
+   * Salvamento do modal de ordem das categorias.
+   *
+   * Grava só a ordem das categorias — a dos produtos continua com
+   * `salvarOrdenacaoManual`, que é outro botão e outro escopo. Atualiza o
+   * estado antes de persistir para a lista não piscar na ordem antiga enquanto
+   * a requisição volta; se falhar, o `catch` restaura o retrato anterior.
+   */
+  const salvarOrdemDasCategorias = useCallback(
+    async (novaOrdem: string[]) => {
+      const ordemAnterior = ordemCategoriasConfigurada
+      setOrdemCategoriasConfigurada(novaOrdem)
+
+      try {
+        await persistirOrdemCategorias(novaOrdem)
+        setModalNotificacao({
+          aberto: true,
+          tipo: 'sucesso',
+          titulo: 'Ordem salva',
+          mensagem: 'A nova ordem das categorias já está ativa no site.',
+        })
+      } catch (erro) {
+        console.error('Erro ao salvar ordem das categorias:', erro)
+        setOrdemCategoriasConfigurada(ordemAnterior)
+        setModalNotificacao({
+          aberto: true,
+          tipo: 'erro',
+          titulo: 'Erro ao salvar',
+          mensagem: 'Não foi possível salvar a ordem das categorias. Tente novamente.',
+        })
+        throw erro
+      }
+    },
+    [ordemCategoriasConfigurada, persistirOrdemCategorias],
+  )
+
   const obterIdsOrdenadosDaCategoria = useCallback((categoria: string) => {
     const idsNoEstado = ordemIdsPorCategoria[categoria] || []
     if (idsNoEstado.length > 0) return idsNoEstado
@@ -1040,11 +1085,6 @@ export default function ProdutosPage() {
 
     return [...itensMapeados, ...itensRestantes]
   }, [obterIdsOrdenadosDaCategoria, ordenarProdutosPorModo, produtos, produtosPorId, tipoOrdenacaoSite])
-
-  const aoReordenarCategorias = (novaOrdemCategorias: string[]) => {
-    setOrdemCategoriasConfigurada(novaOrdemCategorias)
-    setPossuiMudancasNaOrdenacaoManual(true)
-  }
 
   const aoReordenarProdutosDaCategoria = (categoria: string, novaOrdemIds: string[]) => {
     setOrdemIdsPorCategoria((estadoAtual) => ({
@@ -1819,6 +1859,22 @@ export default function ProdutosPage() {
                     <SelectItem value="preco_decrescente">Preço decrescente</SelectItem>
                   </SelectContent>
                 </Select>
+                {/*
+                  Fora do "Detalhar" de propósito: ordenar categorias é a tarefa
+                  mais pedida das duas e não deveria depender de expandir uma
+                  seção. A ordem das categorias também não depende do modo de
+                  ordenação dos produtos, então o botão vale nos três modos.
+                */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setModalOrdemCategoriasAberto(true)}
+                  disabled={categoriasOrdenadas.length === 0}
+                  className="h-9 gap-2 shadow-none"
+                >
+                  <ArrowUpDown className="h-4 w-4" />
+                  Ordenar categorias
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1838,7 +1894,16 @@ export default function ProdutosPage() {
               <div className="mt-4 space-y-3 border-t border-border/60 pt-4">
                 <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-2 bg-card/95 px-1 py-2 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-muted-foreground">
-                    Arraste categorias e produtos para ajustar a ordem exibida no cliente.
+                    Arraste os produtos para ajustar a ordem dentro de cada categoria. Para
+                    reordenar as categorias, use{' '}
+                    <button
+                      type="button"
+                      onClick={() => setModalOrdemCategoriasAberto(true)}
+                      className="font-medium text-foreground underline underline-offset-2 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      Ordenar categorias
+                    </button>
+                    .
                   </p>
                   <Button
                     size="sm"
@@ -1851,18 +1916,22 @@ export default function ProdutosPage() {
                   </Button>
                 </div>
 
-                <Reorder.Group
-                  axis="y"
-                  values={categorias}
-                  onReorder={aoReordenarCategorias}
-                  className="grid max-h-[min(60dvh,520px)] gap-2 overflow-y-auto overscroll-contain pr-0.5 lg:grid-cols-2 lg:max-h-none lg:overflow-visible"
-                >
+                {/*
+                  Lista comum, não `Reorder.Group`.
+                  A ordem das categorias mora no modal `ModalOrdemCategorias`, e
+                  isso conserta dois defeitos de uma vez: (1) havia um grupo de
+                  arrasto de produtos DENTRO de um item arrastável de categoria,
+                  então arrastar um produto arrastava a categoria junto; (2) o
+                  `axis="y"` convivia com `lg:grid-cols-2`, e arrastar entre
+                  colunas lado a lado num eixo vertical dá resultado
+                  imprevisível. Sem o grupo externo, o arrasto dos produtos
+                  passa a ser o único da tela.
+                */}
+                <div className="grid max-h-[min(60dvh,520px)] gap-2 overflow-y-auto overscroll-contain pr-0.5 lg:grid-cols-2 lg:max-h-none lg:overflow-visible">
                   {categorias.map((categoria) => (
-                    <Reorder.Item
+                    <div
                       key={categoria}
-                      value={categoria}
-                      as="div"
-                      className="touch-none rounded-xl border border-border/70 bg-muted/20 p-2.5"
+                      className="rounded-xl border border-border/70 bg-muted/20 p-2.5"
                     >
                       <div className="flex items-center gap-2">
                         <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1930,9 +1999,9 @@ export default function ProdutosPage() {
                           )
                         })}
                       </Reorder.Group>
-                    </Reorder.Item>
+                    </div>
                   ))}
-                </Reorder.Group>
+                </div>
               </div>
             ) : null}
           </div>
@@ -2428,6 +2497,15 @@ export default function ProdutosPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ModalOrdemCategorias
+          aberto={modalOrdemCategoriasAberto}
+          aoFechar={() => setModalOrdemCategoriasAberto(false)}
+          categorias={categoriasOrdenadas}
+          contarProdutos={(categoria) => obterProdutosDaCategoria(categoria).length}
+          iconeDaCategoria={iconeDaCategoria}
+          aoSalvar={salvarOrdemDasCategorias}
+        />
 
         <AlertDialog
           open={modalNotificacao.aberto && modalNotificacao.tipo === 'confirmacao'}

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './supabase'
+import type { RealtimeChannel } from '@supabase/supabase-js'
+import { topicoUnico } from '@/lib/canal-realtime.mjs'
 
 const FUSO_HORARIO = 'America/Sao_Paulo'
 
@@ -498,29 +500,53 @@ export function useStatusLoja(): StatusLojaRetorno {
       'loja_fechamento_estendido_ate'
     ])
 
-    const canal = supabase
-      .channel(`configuracoes-loja-${Date.now()}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'configuracoes_loja'
-        },
-        (payload) => {
-          if (!payload.new || typeof payload.new !== 'object') return
+    /*
+      `topicoUnico` e não `configuracoes-loja-${Date.now()}`.
 
-          const configAtualizada = payload.new as ConfiguracaoLoja
-          if (!chavesRelevantes.has(configAtualizada.chave)) return
+      Este hook tem quatro consumidores, e TRÊS montam juntos na home do site
+      (`page.tsx`, `Header`, `ModalCarrinho`). Como os efeitos rodam no mesmo
+      commit do React, `Date.now()` devolvia o mesmo número para os três; o
+      `supabase.channel()` então devolvia o canal do primeiro — já em
+      `joining` — e o `.on('postgres_changes')` do segundo lançava:
 
-          aplicarConfigs([configAtualizada])
-        }
-      )
-      .subscribe()
+        cannot add `postgres_changes` callbacks for realtime:… after `subscribe()`
+
+      O erro subia de dentro do efeito, sem ninguém para pegá-lo, e desmontava
+      a árvore inteira: a loja abria em branco.
+    */
+    let canal: RealtimeChannel | null = null
+
+    try {
+      canal = supabase
+        .channel(topicoUnico('configuracoes-loja'))
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'configuracoes_loja'
+          },
+          (payload) => {
+            if (!payload.new || typeof payload.new !== 'object') return
+
+            const configAtualizada = payload.new as ConfiguracaoLoja
+            if (!chavesRelevantes.has(configAtualizada.chave)) return
+
+            aplicarConfigs([configAtualizada])
+          }
+        )
+        .subscribe()
+    } catch (erro) {
+      // Rede de segurança, não desculpa para o bug acima: as configurações já
+      // foram lidas por `carregarConfiguracoes`, então sem realtime a loja
+      // apenas deixa de receber atualização ao vivo. Derrubar a vitrine inteira
+      // por causa de um canal é a troca errada.
+      console.error('[StatusLoja] Realtime indisponível; seguindo sem atualização ao vivo:', erro)
+    }
 
     return () => {
       if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current)
-      supabase.removeChannel(canal)
+      if (canal) supabase.removeChannel(canal)
     }
   }, [aplicarConfigs, carregarConfiguracoes])
 

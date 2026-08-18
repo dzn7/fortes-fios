@@ -478,6 +478,38 @@ jogou fora. Por isso o original precisa chegar íntegro ao servidor.
 - Escolher a imagem **já cria** o depoimento; nome e formato editam no card. Modal para uma informação que cabe numa linha é passo a mais.
 - O formato é sugerido pela proporção do arquivo e continua trocável.
 
+## Ordem das categorias (Admin › Produtos)
+
+Botão **"Ordenar categorias"** no cartão "Ordenação do catálogo", fora do
+"Detalhar": é a tarefa mais pedida das duas e não deveria depender de expandir
+uma seção.
+
+`Dialog variant="responsive"` — Radix no desktop, Drawer vaul no mobile. Linha
+no formato `punho · posição · ícone · nome · contagem · ↑ ↓`.
+
+| Ambiente | Como se reordena |
+|---|---|
+| Mobile | **só setas** |
+| Desktop | setas **e** arrastar pelo punho |
+
+**Sem arrasto no mobile** porque a superfície ali é um Drawer com gesto próprio
+de arrastar para fechar; lista arrastável dentro dele disputa o mesmo gesto com
+o drawer e com a rolagem.
+
+No desktop o arrasto usa `useDragControls` com **`dragListener={false}`**. Não é
+preferência: o framer-motion só escreve `touch-action: pan-*` no item quando
+`dragListener !== false` (`render/html/use-props.mjs`), e é esse `touch-action`
+que impede a lista de rolar no toque. Com o listener desligado, o arrasto nasce
+só do punho.
+
+A confirmação de descarte vive **no rodapé do próprio modal**, nunca num
+`AlertDialog` por cima — empilhar diálogo sobre Drawer é a origem clássica de
+bug de overlay.
+
+**Anti-padrão registrado:** `Reorder.Group` dentro de `Reorder.Item` (era o caso
+da seção "Detalhar": arrastar um produto arrastava a categoria junto), e
+`axis="y"` em container `grid-cols-2`. Ver `specs/ordem-categorias-modal.md`.
+
 ## Filtros do catálogo (cliente)
 
 Barra na mesma linha da contagem de resultados — ordenar e filtrar são a

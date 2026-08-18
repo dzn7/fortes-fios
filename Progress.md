@@ -1,5 +1,110 @@
 # Progress
 
+## [2026-08-18] 🔴 Crash do Realtime na home + modal de ordem das categorias
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Specs:** `specs/canal-realtime-unico.md` · `specs/ordem-categorias-modal.md`
+**Arquivos criados:** `src/lib/canal-realtime.mjs`, `src/lib/ordem-categorias.mjs`, `src/components/admin/produtos/ModalOrdemCategorias.tsx`, `tests/canal-realtime.test.mjs`, `tests/ordem-categorias.test.mjs`, as 2 specs.
+**Arquivos alterados:** `src/lib/useStatusLoja.ts`, `src/app/admin/produtos/page.tsx`, `UI.md`, `Progress.md`.
+
+### 1. 🔴 O erro que derrubava a loja (reportado pelo usuário)
+
+```
+Uncaught Error: cannot add `postgres_changes` callbacks for
+realtime:configuracoes-loja-1787062157414 after `subscribe()`.
+```
+
+Duas peças do `supabase-js` 2.112.2, transcritas do bundle:
+
+```js
+channel(nome) { const t = `realtime:${nome}`
+                const existente = this.getChannels().find((c) => c.topic === t)
+                if (existente) return existente }        // ← reaproveita
+on(evento)    { if ((isJoined() || isJoining()) && evento === 'postgres_changes')
+                  throw Error('cannot add …') }          // ← recusa
+```
+
+`useStatusLoja` nomeava o canal `configuracoes-loja-${Date.now()}`. O sufixo
+**não** garante unicidade: o hook tem 4 consumidores e **3 montam juntos na
+home** (`page.tsx`, `Header`, `ModalCarrinho`), no mesmo commit do React, logo
+no mesmo milissegundo. O segundo `.on()` recebia o canal do primeiro, já em
+`joining`, e lançava de dentro do efeito — sem captura, o React desmontava a
+árvore.
+
+**Não é corrida, é determinístico.** E explica por que só o site do cliente
+quebrava: no admin há um único consumidor (`ControleStatusLoja`).
+
+Correção: `topicoUnico()` com contador de módulo — não depende da resolução do
+relógio. Mais `try/catch` na criação do canal: as configurações já vieram por
+`carregarConfiguracoes`, então sem realtime a loja só perde atualização ao
+vivo. Derrubar a vitrine por causa de um canal é a troca errada.
+
+**Prova (modelo fiel das duas funções da lib, 3 consumidores no mesmo ms):**
+
+```
+ANTES : { quebrou: 'Header', mensagem: 'cannot add `postgres_changes` …' }
+DEPOIS: { quebrou: null, canais: 3 }
+```
+
+### 2. Modal de ordem das categorias
+
+`/admin/produtos` já tinha reordenação, escondida no "Detalhar", com quatro
+defeitos que produzem justamente os bugs de UI que o usuário pediu para evitar:
+
+1. `Reorder.Group` de produtos **dentro** de um `Reorder.Item` de categoria —
+   arrastar produto arrastava a categoria;
+2. `axis="y"` num `lg:grid-cols-2` — arrasto vertical em layout de duas colunas;
+3. scroll dentro de scroll;
+4. `touch-none` na linha inteira.
+
+O modal novo faz **uma tarefa só**: ordem das categorias, lista plana, um único
+container de rolagem. Superfície pelo `Dialog variant="responsive"` que o
+projeto já tem (Radix no desktop, Drawer vaul no mobile, overlay resolvido por
+`overlay-layer`) — nenhum componente de modal novo, nenhuma dependência nova.
+
+**Decisões tomadas:**
+- **Setas são o mecanismo principal; arrasto é conveniência de desktop.** No
+  mobile a superfície é um Drawer vaul, que tem o próprio gesto de arrastar —
+  lista arrastável ali disputa o gesto com o drawer e com o scroll.
+- **`dragListener={false}` + `useDragControls`**, conferido no fonte
+  (`render/html/use-props.mjs`): o framer-motion só escreve
+  `touch-action: pan-*` quando `dragListener !== false`. Com o listener
+  desligado ele não toca em `touch-action`, e o arrasto nasce só do punho. É
+  exatamente o defeito 4 acima, invertido.
+- **Confirmação de descarte no rodapé, não num segundo diálogo.** Empilhar
+  `AlertDialog` sobre Drawer é a classe de bug de overlay que o modal existe
+  para não ter.
+- **A lista de categorias do "Detalhar" deixou de ser arrastável** e virou
+  `<div>`. Não é remoção de recurso — é onde os defeitos 1 e 2 moravam; sem o
+  grupo externo, o arrasto dos produtos passa a ser o único da tela.
+- **Removi `aoReordenarCategorias`**, que ficou órfã com essa troca. Era a única
+  chamadora do `Reorder.Group` externo.
+
+**Verificação:** RED→GREEN nos dois módulos novos · `node --test tests/*.test.mjs`
+**279/279** · `npx tsc --noEmit` ✓ · `npm run build` ✓ · classes Tailwind do
+modal conferidas no CSS emitido (`max-h-[90dvh]`, `size-9`, `cursor-grabbing`,
+`overscroll-contain`) · reprodução red/green do crash de realtime.
+
+**Pendências / próximos passos:**
+- 🔴 **Não verifiquei o modal na tela.** A extensão do Chrome não estava
+  conectada nesta sessão. Markup, tipos, build e CSS conferidos; aparência e
+  gesto, não.
+- 🟡 `` `algo-${Date.now()}` `` continua em **12 outros canais**. Conferidos um
+  a um: nenhum quebra hoje, todos têm um consumidor montado por vez
+  (`ModalAbrirCaixa` importa só um `type` de `useCaixa`, não o hook). São
+  armadilhas latentes — basta um segundo consumidor. Trocar os 12 é tarefa
+  própria (§0.2.2).
+
+**Armadilhas descobertas:**
+- **`supabase.channel(nome)` não cria canal novo** quando o tópico já existe —
+  devolve o existente. Somado ao `.on()` que recusa canal assinado, `Date.now()`
+  como sufixo de unicidade é uma armadilha, não uma solução.
+- **Efeitos do mesmo commit do React compartilham o milissegundo.** Qualquer
+  unicidade baseada em relógio falha entre irmãos montados juntos.
+- **`$(find ...)` multi-linha quebra em loop de shell.** Segunda vez neste
+  projeto; usar `find -print0 | xargs -0`.
+
+
 ## [2026-08-18] Acesso `dzndev`, exclusão de acesso órfã, filtros do catálogo e pedido-presente
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)
