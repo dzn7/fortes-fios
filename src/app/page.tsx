@@ -44,6 +44,7 @@ import { Produto, supabase } from '@/lib/supabase'
 import { useStatusLoja } from '@/lib/useStatusLoja'
 import { useCarrinho } from '@/contexts/CarrinhoContext'
 import { produtoDisponivelParaCompra } from '@/lib/estoque-produto.mjs'
+import { cn } from '@/lib/utils'
 import {
   normalizarNomeCategoria,
 } from '@/lib/categoriasCardapio'
@@ -57,6 +58,15 @@ import {
   normalizarTipoOrdenacaoProdutos,
   TipoOrdenacaoProdutosSite,
 } from '@/lib/ordenacaoCardapio'
+import {
+  ORDENACAO_PADRAO,
+  ORDENACOES_CATALOGO,
+  aplicarFiltrosCatalogo,
+  contarFiltrosAtivos,
+  filtrarProdutos,
+  produtoEmOferta,
+  type OrdenacaoCatalogo,
+} from '@/lib/filtros-catalogo.mjs'
 import {
   CHAVE_MAIS_VENDIDOS_VITRINE,
   CONFIGURACAO_MAIS_VENDIDOS_PADRAO,
@@ -158,9 +168,9 @@ export default function Home() {
   const [busca, setBusca] = useState('')
   const [tipoOrdenacaoProdutos, setTipoOrdenacaoProdutos] =
     useState<TipoOrdenacaoProdutosSite>('manual')
-  const [ordenacaoCliente, setOrdenacaoCliente] = useState<
-    'recomendados' | 'menor_preco' | 'maior_preco'
-  >('recomendados')
+  const [ordenacaoCliente, setOrdenacaoCliente] =
+    useState<OrdenacaoCatalogo>(ORDENACAO_PADRAO)
+  const [apenasOfertas, setApenasOfertas] = useState(false)
   const [configuracaoMaisVendidos, setConfiguracaoMaisVendidos] =
     useState<ConfiguracaoMaisVendidos>(CONFIGURACAO_MAIS_VENDIDOS_PADRAO)
   const [rankingAutomaticoIds, setRankingAutomaticoIds] = useState<string[]>(
@@ -544,27 +554,54 @@ export default function Home() {
     }
   }, [categoriaAtiva, categorias, rotuloCategoriaTodos])
 
-  const buscaLower = busca.toLowerCase()
+  /**
+   * Busca, categoria, "só promoções" e ordenação em uma chamada só. A regra
+   * mora em `filtros-catalogo.mjs`, testada com `node --test`: aqui ficaria
+   * fora do alcance de qualquer teste que este projeto aceita.
+   *
+   * A categoria é comparada pelo módulo (sem acento, sem caixa), que é o mesmo
+   * critério de `normalizarCategoriaFortesFios` para os nomes reais do catálogo.
+   */
+  const produtosFiltrados = useMemo(
+    () =>
+      aplicarFiltrosCatalogo(produtos, {
+        busca,
+        categoria: categoriaAtiva === rotuloCategoriaTodos ? undefined : categoriaAtiva,
+        apenasOfertas,
+        ordenacao: ordenacaoCliente,
+      }),
+    [apenasOfertas, busca, categoriaAtiva, ordenacaoCliente, produtos, rotuloCategoriaTodos],
+  )
 
-  const produtosFiltrados = useMemo(() => {
-    const produtosDaCategoria =
-      categoriaAtiva === rotuloCategoriaTodos
-        ? produtos.filter(
-            (p) => !busca || p.nome.toLowerCase().includes(buscaLower),
-          )
-        : produtos.filter(
-            (p) =>
-              normalizarCategoriaFortesFios(p.categoria) ===
-                normalizarCategoriaFortesFios(categoriaAtiva) &&
-              (!busca || p.nome.toLowerCase().includes(buscaLower)),
-          )
+  /**
+   * Ofertas **dentro do que já está filtrado** por busca e categoria — e não no
+   * catálogo inteiro. Um botão global dizendo "48" numa categoria com 2 ofertas
+   * promete 48 e entrega 2; número que mente é pior que número nenhum.
+   *
+   * O próprio `apenasOfertas` é ignorado no cálculo de propósito: senão a
+   * contagem viraria "quantos estou vendo" e ficaria congelada em si mesma.
+   */
+  const totalEmOferta = useMemo(
+    () =>
+      filtrarProdutos(produtos, {
+        busca,
+        categoria: categoriaAtiva === rotuloCategoriaTodos ? undefined : categoriaAtiva,
+      }).filter(produtoEmOferta).length,
+    [busca, categoriaAtiva, produtos, rotuloCategoriaTodos],
+  )
 
-    if (ordenacaoCliente === 'menor_preco')
-      return [...produtosDaCategoria].sort((a, b) => a.preco - b.preco)
-    if (ordenacaoCliente === 'maior_preco')
-      return [...produtosDaCategoria].sort((a, b) => b.preco - a.preco)
-    return produtosDaCategoria
-  }, [busca, buscaLower, categoriaAtiva, ordenacaoCliente, produtos, rotuloCategoriaTodos])
+  const filtrosAtivos = contarFiltrosAtivos({
+    busca,
+    categoria: categoriaAtiva === rotuloCategoriaTodos ? undefined : categoriaAtiva,
+    apenasOfertas,
+  })
+
+  const limparFiltros = useCallback(() => {
+    setBusca('')
+    setCategoriaAtiva(rotuloCategoriaTodos)
+    setApenasOfertas(false)
+    setOrdenacaoCliente(ORDENACAO_PADRAO)
+  }, [rotuloCategoriaTodos])
 
   const produtosMaisVendidos = useMemo(() => {
     if (!configuracaoMaisVendidos.ativo) return []
@@ -997,22 +1034,74 @@ export default function Home() {
                   </p>
                 ) : null}
               </div>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Ordenar por</span>
-                <select
-                  value={ordenacaoCliente}
-                  onChange={(event) =>
-                    setOrdenacaoCliente(
-                      event.target.value as typeof ordenacaoCliente,
-                    )
-                  }
-                  className="h-11 rounded-lg border border-input bg-card px-3 text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="recomendados">Recomendados</option>
-                  <option value="menor_preco">Menor preço</option>
-                  <option value="maior_preco">Maior preço</option>
-                </select>
-              </label>
+              {/*
+                Controles na mesma linha da contagem: ordenar e filtrar são a
+                resposta ao número que se acabou de ler ("243 produtos"), não
+                uma seção à parte.
+              */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/*
+                  O atalho para promoção só existe quando existe promoção. Um
+                  filtro que sempre devolve lista vazia ensina o cliente a não
+                  confiar nos filtros.
+                */}
+                {totalEmOferta > 0 || apenasOfertas ? (
+                  <button
+                    type="button"
+                    onClick={() => setApenasOfertas((atual) => !atual)}
+                    aria-pressed={apenasOfertas}
+                    className={cn(
+                      'inline-flex h-11 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      apenasOfertas
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-input bg-card text-foreground hover:bg-accent',
+                    )}
+                  >
+                    <Tag className="size-4" strokeWidth={1.8} aria-hidden />
+                    Só promoções
+                    <span
+                      className={cn(
+                        'rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums',
+                        apenasOfertas
+                          ? 'bg-primary-foreground/20'
+                          : 'bg-muted text-muted-foreground',
+                      )}
+                    >
+                      {totalEmOferta}
+                    </span>
+                  </button>
+                ) : null}
+
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="sr-only sm:not-sr-only">Ordenar por</span>
+                  <select
+                    value={ordenacaoCliente}
+                    onChange={(event) =>
+                      setOrdenacaoCliente(event.target.value as OrdenacaoCatalogo)
+                    }
+                    aria-label="Ordenar produtos"
+                    className="h-11 rounded-lg border border-input bg-card px-3 text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {ORDENACOES_CATALOGO.map((opcao) => (
+                      <option key={opcao.id} value={opcao.id}>
+                        {opcao.rotulo}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {filtrosAtivos > 0 ? (
+                  <button
+                    type="button"
+                    onClick={limparFiltros}
+                    className="inline-flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <XIcon className="size-4" strokeWidth={1.8} aria-hidden />
+                    Limpar
+                    {filtrosAtivos > 1 ? ` (${filtrosAtivos})` : ''}
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             {carregando ? (
@@ -1044,10 +1133,7 @@ export default function Home() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setBusca('')
-                    setCategoriaAtiva(rotuloCategoriaTodos)
-                  }}
+                  onClick={limparFiltros}
                   className="mt-4 min-h-11 rounded-lg border border-border bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Ver todos os produtos

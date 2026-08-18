@@ -193,11 +193,16 @@ export async function criarUsuarioSistema(dados: {
   funcionarioId?: string
   permissoes?: Record<string, boolean>
 }): Promise<{ sucesso: boolean; id?: string; erro?: string }> {
+  // `funcionarioId` e `corAvatar` eram recebidos e descartados aqui: o vínculo
+  // com `funcionarios` nunca chegava ao banco, e por isso excluir um
+  // funcionário não tinha como achar o login dele para apagar junto.
   return chamarRotaAcessos('POST', {
     nome: dados.nome,
     nomeUsuario: dados.nomeUsuario,
     senha: dados.senha,
     papel: dados.papel,
+    ...(dados.funcionarioId ? { funcionarioId: dados.funcionarioId } : {}),
+    ...(dados.corAvatar ? { corAvatar: dados.corAvatar } : {}),
     ...(dados.permissoes ? { permissoes: dados.permissoes } : {}),
   })
 }
@@ -242,4 +247,23 @@ export async function excluirUsuarioSistema(
   id: string
 ): Promise<{ sucesso: boolean; erro?: string }> {
   return chamarRotaAcessos('DELETE', undefined, `?id=${encodeURIComponent(id)}`)
+}
+
+/**
+ * Apaga o acesso de login vinculado a um funcionário.
+ *
+ * Chamado ANTES de excluir o funcionário: um login que sobrevive à demissão
+ * continua aparecendo em `/admin/login` e continua entrando. Funcionário sem
+ * acesso devolve sucesso — não é erro, e a exclusão do funcionário segue.
+ *
+ * Spec: specs/exclusao-acesso-funcionario.md
+ */
+export async function excluirAcessoDoFuncionario(
+  funcionarioId: string
+): Promise<{ sucesso: boolean; erro?: string }> {
+  return chamarRotaAcessos(
+    'DELETE',
+    undefined,
+    `?funcionarioId=${encodeURIComponent(funcionarioId)}`,
+  )
 }

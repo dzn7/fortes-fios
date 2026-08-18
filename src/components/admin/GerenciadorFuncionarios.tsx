@@ -21,7 +21,11 @@ import { FiltroFuncionariosAdmin } from '@/components/admin/funcionarios/FiltroF
 import ModalRecorteAvatar from '@/components/admin/ModalRecorteAvatar'
 import { AvatarUsuario } from '@/components/admin/AvatarUsuario'
 import { supabase } from '@/lib/supabase'
-import { atualizarUsuarioSistema, type PapelUsuario } from '@/lib/autenticacao'
+import {
+  atualizarUsuarioSistema,
+  excluirAcessoDoFuncionario,
+  type PapelUsuario,
+} from '@/lib/autenticacao'
 import {
   criarAcessoParaFuncionario,
   rotuloTipoFuncionario as rotuloTipo,
@@ -311,14 +315,41 @@ export default function GerenciadorFuncionarios() {
     }
   }
 
+  /**
+   * Exclui o funcionário **e** o acesso de login dele.
+   *
+   * Antes, isto apagava só a linha de `funcionarios`. O `usuarios_sistema`
+   * criado junto sobrevivia: a pessoa sumia daqui, continuava no cartão de
+   * perfis de `/admin/login` e continuava entrando com a senha antiga.
+   *
+   * O acesso vai primeiro, de propósito. Se a exclusão dele for recusada — é o
+   * último administrador ativo, ou é o acesso de quem está operando —, o
+   * funcionário **não** é apagado: melhor não apagar nada do que apagar o
+   * cadastro e deixar o login órfão de novo.
+   *
+   * Spec: specs/exclusao-acesso-funcionario.md
+   */
   const excluirFuncionario = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este funcionário?')) return
+    if (
+      !confirm(
+        'Excluir este funcionário? O acesso de login dele, se existir, também será removido.',
+      )
+    ) {
+      return
+    }
 
     try {
       setProcessandoId(id)
+
+      const acesso = await excluirAcessoDoFuncionario(id)
+      if (!acesso.sucesso) {
+        toast.error(acesso.erro || 'Não foi possível remover o acesso deste funcionário')
+        return
+      }
+
       const { error } = await supabase.from('funcionarios').delete().eq('id', id)
       if (error) throw error
-      toast.success('Funcionário excluído')
+      toast.success('Funcionário e acesso excluídos')
       void carregarFuncionarios({ silencioso: true })
     } catch (erro) {
       console.error('Erro ao excluir funcionário:', erro)

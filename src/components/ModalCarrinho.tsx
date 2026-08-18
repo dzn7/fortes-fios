@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { X, Trash2, Minus, Plus, ShoppingBag, ChevronLeft, ChevronRight, MapPin, User, CreditCard, Check, Send, Phone, ChevronDown, CheckCircle2, AlertCircle, AlertTriangle, Info, QrCode, Banknote, Wallet } from 'lucide-react'
+import { X, Trash2, Minus, Plus, ShoppingBag, ChevronLeft, ChevronRight, MapPin, User, CreditCard, Check, Send, Phone, ChevronDown, CheckCircle2, AlertCircle, AlertTriangle, Info, QrCode, Banknote, Wallet, Gift } from 'lucide-react'
 import Image from 'next/image'
 import { useCarrinho } from '@/contexts/CarrinhoContext'
 import type { ItemCarrinho } from '@/lib/supabase'
@@ -272,6 +272,12 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
   const [formaPagamento, setFormaPagamento] = useState('')
   const [formasPagamentoDisponiveis, setFormasPagamentoDisponiveis] = useState<FormaPagamentoCheckout[]>([])
   const [observacoes, setObservacoes] = useState('')
+  /**
+   * Presente é uma marca do PEDIDO, não um texto de observação: a loja
+   * precisa ver isso como badge no card e como destaque na mensagem, não
+   * caçá-lo dentro de um parágrafo livre. Ver specs/pedido-presente.md.
+   */
+  const [ehPresente, setEhPresente] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [alerta, setAlerta] = useState<Alerta>({
     aberto: false,
@@ -946,6 +952,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
     setPontoLocalSelecionado(null)
     setFormaPagamento('')
     setObservacoes('')
+    setEhPresente(false)
     setPrecisaTroco(false)
     setTrocoPara('')
     removerCupomAplicado({ silencioso: true })
@@ -1470,6 +1477,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
           taxa_pagamento: taxaPagamentoConfirmada,
           total: totalComTaxaPagamentoConfirmado,
           observacoes: observacoes || null,
+          presente: ehPresente,
           status: 'confirmado',
           troco_para: valorTrocoPara,
           mesa: tipoEntrega === 'local' ? mesaSelecionada : null,
@@ -1615,6 +1623,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
         cidade: bairroSelecionado?.nome || '',
         pontoReferencia,
         observacoes,
+        presente: ehPresente,
         itens: itens.map((item) => ({
           nome: item.produto.nome,
           quantidade: item.quantidade,
@@ -1679,6 +1688,7 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
       setPontoLocalSelecionado(null)
       setFormaPagamento('')
       setObservacoes('')
+      setEhPresente(false)
       setPrecisaTroco(false)
       setTrocoPara('')
       removerCupomAplicado({ silencioso: true })
@@ -2403,6 +2413,48 @@ export default function ModalCarrinho({ aberto, onFechar, lojaFechada = false }:
                     )}
                   </div>
                 )}
+
+                {/*
+                  Antes das observações, de propósito: quem está comprando para
+                  presentear pensa nisso ao terminar os dados, e encontrar a
+                  opção aqui evita que a intenção vire texto solto no campo
+                  livre — que a loja teria de ler para descobrir.
+
+                  Botão inteiro clicável, não só a caixinha: alvo de 44px é o
+                  mínimo confortável no celular, que é onde a loja vende.
+                */}
+                <button
+                  type="button"
+                  onClick={() => setEhPresente((atual) => !atual)}
+                  aria-pressed={ehPresente}
+                  className={cn(
+                    'flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    ehPresente
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border bg-card hover:bg-accent/50',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border transition-colors',
+                      ehPresente
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-input bg-background',
+                    )}
+                    aria-hidden
+                  >
+                    {ehPresente ? <Check className="size-3.5" strokeWidth={3} /> : null}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                      <Gift className="size-4 text-primary" strokeWidth={1.8} aria-hidden />
+                      É para presente
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                      Avisamos a loja para preparar o pedido com cuidado extra.
+                    </span>
+                  </span>
+                </button>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

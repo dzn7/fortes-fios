@@ -1,5 +1,164 @@
 # Progress
 
+## [2026-08-18] Acesso `dzndev`, exclusão de acesso órfã, filtros do catálogo e pedido-presente
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Specs:** `specs/acesso-desenvolvedor.md` · `specs/exclusao-acesso-funcionario.md` · `specs/filtros-catalogo-cliente.md` · `specs/pedido-presente.md`
+**Arquivos criados:** `src/lib/server/acesso-desenvolvedor.mjs|.d.mts`, `src/lib/filtros-catalogo.mjs|.d.mts`, `tests/acesso-desenvolvedor.test.mjs`, `tests/filtros-catalogo.test.mjs`, `supabase/migrations/202608180001_vincular_acesso_funcionario.sql`, `supabase/migrations/202608180002_pedido_presente.sql`, as 4 specs.
+**Arquivos alterados:** `src/lib/server/sessao-admin.ts`, `src/app/api/admin/acessos/route.ts`, `src/lib/autenticacao.ts`, `src/components/admin/GerenciadorFuncionarios.tsx`, `src/app/page.tsx`, `src/lib/whatsapp.mjs|.d.mts`, `tests/whatsapp.test.mjs`, `src/components/ModalCarrinho.tsx`, `src/components/admin/CardPedido.tsx`, `src/app/admin/pedidos/page.tsx`, `src/app/admin/dashboard/page.tsx`, `UI.md`, `Progress.md`.
+
+### 1. `dzndev` / `1503` de volta — mas fora do bundle
+
+A credencial existia dentro de `AdminAuthContext.tsx`, um componente `'use
+client'`: a senha era **servida ao navegador de todo visitante**. Voltou como
+`src/lib/server/acesso-desenvolvedor.mjs`, importado só por `sessao-admin.ts`,
+que só é importado por route handler. Continua hardcoded, como pedido, e o
+build confirma **0 ocorrências de `dzndev` em `.next/static/`**.
+
+Perfil sintético com id sentinela `00000000-0000-4000-8000-000000000000`,
+reconhecido por `autenticar` (antes do banco) e por `lerSessao` (antes da
+consulta). Sem linha em `usuarios_sistema`, logo não aparece na lista de perfis
+do login — entra pelo "Entrar com usuário e senha".
+
+**A armadilha:** `acessos_auditoria.ator_id` é FK para `usuarios_sistema(id)`.
+Gravar o sentinela levantaria `23503` e derrubaria a operação — criar um acesso
+falharia **justamente quando quem cria é o dzndev**. Daí `idAtorParaAuditoria`,
+que devolve `null` para ele. Verificado: a linha de auditoria do teste saiu com
+`ator_id: null` e o INSERT passou.
+
+### 2. Excluir funcionário deixava o login vivo
+
+Duas telas criam a mesma pessoa (`funcionarios` + `usuarios_sistema`), e a
+Equipe apagava só uma. A pessoa sumia da Equipe, **continuava no cartão de
+perfis de `/admin/login`** e continuava entrando com a senha antiga.
+
+Antes de culpar a aba de Acessos, rodei o ciclo criar → conferir → apagar →
+conferir em `usuarios_sistema` pela Management API: **aquele caminho funciona**.
+Nenhum trigger na tabela e nenhuma FK restritiva. O caminho quebrado era o outro.
+
+Havia um segundo defeito que impedia até a correção óbvia: `criarUsuarioSistema`
+recebia `funcionarioId` e `corAvatar` e **descartava os dois** ao montar o POST,
+e a rota não lia nenhum. O vínculo nunca chegava ao banco — sem ele não há como
+achar o login do funcionário. A cor do avatar escolhida no cadastro também era
+perdida em silêncio.
+
+Correção: POST grava vínculo e cor; `DELETE /api/admin/acessos` ganha o seletor
+`?funcionarioId=`; a Equipe apaga o acesso **antes** do funcionário e aborta se
+a exclusão for recusada — melhor não apagar nada do que apagar o cadastro e
+deixar o login órfão de novo.
+
+### 3. Filtragem do catálogo do cliente
+
+A regra saiu do `useMemo` de `page.tsx` para `src/lib/filtros-catalogo.mjs`
+(28 asserções). Ganhos medidos **sobre o catálogo real** (246 produtos):
+
+| Busca | Antes | Agora |
+|---|---|---|
+| `mascara` | 1 resultado | **66** |
+| `hidratacao` | 0 | **55** |
+| `oleo` | 3 | **75** |
+
+A busca era sensível a acento e só olhava `produto.nome` — num teclado de
+celular sem acento, isso é o caso comum, não a exceção. Agora é
+acento-insensível, multi-termo e alcança descrição e categoria.
+
+Ordenações: Recomendados · **Maiores descontos** · Menor preço · Maior preço ·
+Novidades. Mais o filtro **"Só promoções"** (48 dos 246) e um "Limpar".
+
+### 4. Pedido para presente
+
+Coluna `pedidos.presente boolean not null default false`, marcação no carrinho,
+linha `🎁 *PEDIDO PARA PRESENTE*` no topo da mensagem do WhatsApp e badge
+`primary` no card do admin.
+
+**Decisões tomadas:**
+- **Coluna, não `observacoes`.** Aviso escondido em parágrafo não vira badge,
+  não vira filtro e não vira contagem.
+- **Marca no topo da mensagem, não no rodapé.** A mensagem é lida no celular; o
+  aviso que muda o preparo precisa chegar antes de quem lê começar a separar os
+  produtos. Pedido comum não ganha linha nenhuma.
+- **"Maiores descontos" usa a MESMA regra do `CartaoProduto`** (percentual > 0
+  *e* `preco_original` > `preco`). Critério mais frouxo levaria ao topo produtos
+  sem tarja no cartão — o cliente veria a promessa e não a promoção.
+- **`chaveTexto` substituiu `normalizarCategoriaFortesFios` na filtragem.**
+  Provado equivalente sobre as 9 categorias reais do banco: 0 divergências.
+- **Apagar, não desativar**, ao excluir funcionário: o verbo da tela é
+  "Excluir" e a aba de Acessos já apaga de fato. Duas telas com o mesmo botão e
+  efeitos diferentes é como se chega num bug destes.
+
+**Verificação:** RED→GREEN nos três módulos novos (`ERR_MODULE_NOT_FOUND` e
+falha de asserção antes) · `node --test tests/*.test.mjs` **255/255** ·
+`npx tsc --noEmit` ✓ · `npm run build` ✓ · login `dzndev` ponta a ponta contra o
+servidor (senha errada 401, cookie `HttpOnly`, `GET` devolve 41 permissões,
+`DZNDEV` com espaços entra) · ciclo real pela API: criar acesso vinculado como
+dzndev → `funcionario_id` e `cor_avatar` gravados → `DELETE ?funcionarioId`
+devolveu `excluidos: 1` → 0 resíduos, os 3 usuários reais intactos ·
+`?funcionarioId` inexistente devolve `excluidos: 0` sem erro, inválido 400, sem
+sessão 401 · filtros exercitados sobre os 246 produtos reais · `dzndev` ausente
+de `.next/static/`.
+
+**Pendências / próximos passos:**
+- 🔴 **`202608180001` (vínculo dos acessos antigos) NÃO foi aplicada** — o
+  classificador bloqueou o UPDATE em dados de produção. O ensaio somente-leitura
+  mostrou **1 vínculo** a criar: `MARÍLIA GABRYELLE` → funcionário homônimo.
+  Enquanto não rodar, excluir a Marília pela Equipe **não** apaga o login dela.
+  Acessos criados a partir de agora já nascem vinculados.
+- 🔴 `/admin/dev` continua com `dzn`/`1503` **dentro do bundle do navegador**
+  (`DEV_PASSWORD` em componente client) — pré-existente, fora do escopo desta
+  task, mas é a mesma classe de problema que o §1 resolveu.
+- `npm run lint` segue inexecutável no repo (`next lint` saiu no Next 16 e não
+  há config de ESLint) — pré-existente.
+
+**Armadilhas descobertas:**
+- **A Management API serializa `numeric` como string**; o PostgREST que o
+  navegador consome devolve número. Um teste de filtro contra a Management API
+  acusou "0 ofertas" quando o catálogo tem 48. Conferir tipo na fonte certa
+  antes de acreditar no resultado.
+- **`assert.ok(texto.indexOf(x) < texto.indexOf(y))` passa por vácuo:**
+  `indexOf` devolve `-1` quando não acha, e `-1` é menor que qualquer posição.
+  Três dos quatro testes de presente passaram no RED até eu exigir `>= 0`.
+- **`"      setObservacoes('')"` contém `"    setObservacoes('')"`.** Substituir
+  por texto com indentação exige âncora de contexto, não só a linha.
+- Grant por coluna e FK `on delete set null` deixam o `DELETE` passar — o que
+  parecia bloqueio de banco era ausência de código.
+
+
+## [2026-08-17] TikTok nas redes do menu e aviso de parcelamento no carrinho
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Arquivos criados:** `src/components/icons/IconeTikTok.tsx`.
+**Arquivos alterados:** `src/components/Header.tsx`, `src/components/ModalCarrinho.tsx`, `UI.md`, `Progress.md`.
+
+**TikTok.** Glifo oficial como SVG próprio, na mesma forma do `IconeWhatsApp`
+(monocromático em `currentColor`), porque o `lucide-react` não traz marcas. Entra
+como terceiro link do rodapé do Sheet, reaproveitando exatamente as classes de
+Instagram e WhatsApp — alvo de 44 px, hover e foco idênticos. Só existe no menu
+mobile: o desktop não exibe redes hoje, e ampliar isso não foi pedido.
+
+**Link normalizado** para `https://www.tiktok.com/@jamesfortes1`. O endereço
+enviado trazia `?_r=1&_t=ZS-98xuJyA55Lm`, parâmetros de rastreio do
+compartilhamento — apontam para o mesmo perfil e não pertencem a um link fixo.
+
+**Aviso de parcelamento.** Nota permanente ao final do bloco de pagamento
+(etapa 3), em tom neutro com ícone de cartão. Fica sempre visível, e não só com
+cartão selecionado, porque quem tem R$ 150 no carrinho e conta com parcelar
+precisa da regra **antes** de escolher a forma de pagamento. Os avisos acima dela
+reagem à seleção; esta é a nota de rodapé do bloco.
+
+**Puramente visual, como pedido:** não valida, não bloqueia envio e não entra em
+cálculo nenhum. Segue a mesma regra já registrada para a faixa promocional. O
+valor está na constante `VALOR_MINIMO_PARCELAMENTO` no topo do `ModalCarrinho`.
+
+**Sem teste automatizado, com justificativa (AGENTS §0.5):** as duas mudanças são
+markup — um link e um parágrafo estático. Não há função, ramo ou contrato novo
+para exercitar, e §3.4 proíbe teste de browser. A verificação foi: `tsc`, build,
+suíte existente intacta, classes Tailwind conferidas no CSS emitido, URL e texto
+conferidos no bundle, e o SVG do TikTok **renderizado em PNG e inspecionado** —
+path de marca não se valida por leitura.
+
+**Decisão para revisar:** o valor R$ 200 está no código, não em
+`configuracoes_loja`. Foi o que "apenas visual" pedia, mas mudar exige deploy.
+
 ## [2026-08-16] Service worker do site removido (worker-lápide)
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

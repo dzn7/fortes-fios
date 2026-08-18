@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { obterSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { ehRespostaNegada, exigirPermissao } from '@/lib/server/sessao-admin'
 import { normalizarPermissoes, PAPEIS_VALIDOS, resolverPermissoes } from '@/lib/rbac.mjs'
+import { idAtorParaAuditoria } from '@/lib/server/acesso-desenvolvedor.mjs'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,6 +82,8 @@ export async function POST(request: NextRequest) {
       senha?: unknown
       papel?: unknown
       permissoes?: unknown
+      funcionarioId?: unknown
+      corAvatar?: unknown
     }
 
     const nome = typeof corpo.nome === 'string' ? corpo.nome.trim() : ''
@@ -114,11 +117,30 @@ export async function POST(request: NextRequest) {
       throw new Error(erroCriar.message)
     }
 
+    // Vínculo e cor são cadastro, não privilégio: seguem por UPDATE, como no
+    // PATCH. Sem gravar `funcionario_id` aqui, excluir o funcionário não teria
+    // como achar o login dele — era metade do bug da Equipe.
+    const cadastro: Record<string, unknown> = {}
+    if (UUID_VALIDO.test(String(corpo.funcionarioId ?? ''))) {
+      cadastro.funcionario_id = corpo.funcionarioId
+    }
+    if (typeof corpo.corAvatar === 'string' && corpo.corAvatar.trim()) {
+      cadastro.cor_avatar = corpo.corAvatar.trim()
+    }
+
+    if (Object.keys(cadastro).length > 0) {
+      const { error: erroCadastro } = await supabase
+        .from('usuarios_sistema')
+        .update(cadastro)
+        .eq('id', novoId)
+      if (erroCadastro) throw new Error(erroCadastro.message)
+    }
+
     // Permissões só depois de existir a linha, e sempre pela função que audita.
     const overrides = normalizarPermissoes(corpo.permissoes)
     if (Object.keys(overrides).length > 0) {
       const { error: erroPermissoes } = await supabase.rpc('salvar_acesso_usuario', {
-        p_ator_id: autorizacao.usuario.id,
+        p_ator_id: idAtorParaAuditoria(autorizacao.usuario.id),
         p_alvo_id: novoId,
         p_permissoes: overrides,
       })
@@ -126,7 +148,7 @@ export async function POST(request: NextRequest) {
     }
 
     await supabase.from('acessos_auditoria').insert({
-      ator_id: autorizacao.usuario.id,
+      ator_id: idAtorParaAuditoria(autorizacao.usuario.id),
       alvo_id: novoId,
       acao: 'criado',
       depois: { papel, permissoes: overrides },
@@ -180,7 +202,7 @@ export async function PATCH(request: NextRequest) {
 
     if (mexeEmPrivilegio) {
       const { data, error } = await supabase.rpc('salvar_acesso_usuario', {
-        p_ator_id: autorizacao.usuario.id,
+        p_ator_id: idAtorParaAuditoria(autorizacao.usuario.id),
         p_alvo_id: id,
         p_papel: papel,
         p_permissoes:
@@ -245,7 +267,7 @@ export async function PUT(request: NextRequest) {
     if (!data) return erro('Usuário não encontrado.', 404)
 
     await supabase.from('acessos_auditoria').insert({
-      ator_id: autorizacao.usuario.id,
+      ator_id: idAtorParaAuditoria(autorizacao.usuario.id),
       alvo_id: id,
       acao: 'senha_alterada',
     })
@@ -256,6 +278,54 @@ export async function PUT(request: NextRequest) {
   }
 }
 
+/**
+ * Guardas de exclusão de acesso, compartilhadas pelos dois seletores.
+ *
+ * `alvos` é o conjunto inteiro que a requisição vai apagar: a contagem de
+ * administradores restantes precisa descontar todos eles de uma vez, senão dois
+ * acessos apagados juntos passariam pela checagem um cobrindo o outro.
+ */
+const recusarExclusaoDeAcesso = async (
+  supabase: ReturnType<typeof obterSupabaseAdmin>,
+  alvoId: string,
+  alvos: string[],
+  atorId: string,
+): Promise<NextResponse | null> => {
+  if (alvoId === atorId) return erro('Você não pode excluir o próprio acesso.', 403)
+
+  const { data: alvo } = await supabase
+    .from('usuarios_sistema')
+    .select('papel, ativo')
+    .eq('id', alvoId)
+    .maybeSingle()
+
+  // Mesma invariante do `salvar_acesso_usuario`: a loja não fica sem admin.
+  if (alvo?.papel === 'admin' && alvo.ativo) {
+    const { count } = await supabase
+      .from('usuarios_sistema')
+      .select('id', { count: 'exact', head: true })
+      .eq('papel', 'admin')
+      .eq('ativo', true)
+      .not('id', 'in', `(${alvos.join(',')})`)
+
+    if (!count) return erro('A loja precisa de pelo menos um administrador ativo.', 409)
+  }
+
+  return null
+}
+
+/**
+ * Exclusão de acesso por dois seletores:
+ *
+ *   ?id=<uuid>            → aquele acesso (a aba de Acessos)
+ *   ?funcionarioId=<uuid> → o(s) acesso(s) daquele funcionário (a tela de Equipe)
+ *
+ * O segundo existe porque excluir funcionário apagava só `funcionarios` e
+ * deixava o login vivo: a pessoa sumia da Equipe e continuava no cartão de
+ * perfis de `/admin/login`, entrando com a senha antiga.
+ *
+ * Spec: specs/exclusao-acesso-funcionario.md
+ */
 export async function DELETE(request: NextRequest) {
   if (!origemValida(request)) return erro('Origem inválida.', 403)
 
@@ -263,38 +333,40 @@ export async function DELETE(request: NextRequest) {
   if (ehRespostaNegada(autorizacao)) return autorizacao.resposta
 
   try {
-    const id = request.nextUrl.searchParams.get('id') || ''
-    if (!UUID_VALIDO.test(id)) return erro('Usuário inválido.', 400)
-    if (id === autorizacao.usuario.id) {
-      return erro('Você não pode excluir o próprio acesso.', 403)
-    }
-
     const supabase = obterSupabaseAdmin()
+    const parametros = request.nextUrl.searchParams
+    const id = parametros.get('id') || ''
+    const funcionarioId = parametros.get('funcionarioId') || ''
 
-    // Mesma invariante do `salvar_acesso_usuario`: a loja não fica sem admin.
-    const { data: alvo } = await supabase
-      .from('usuarios_sistema')
-      .select('papel, ativo')
-      .eq('id', id)
-      .maybeSingle()
+    let alvos: string[]
 
-    if (alvo?.papel === 'admin' && alvo.ativo) {
-      const { count } = await supabase
+    if (UUID_VALIDO.test(id)) {
+      alvos = [id]
+    } else if (UUID_VALIDO.test(funcionarioId)) {
+      const { data, error } = await supabase
         .from('usuarios_sistema')
-        .select('id', { count: 'exact', head: true })
-        .eq('papel', 'admin')
-        .eq('ativo', true)
-        .neq('id', id)
+        .select('id')
+        .eq('funcionario_id', funcionarioId)
 
-      if (!count) {
-        return erro('A loja precisa de pelo menos um administrador ativo.', 409)
-      }
+      if (error) throw new Error(error.message)
+      alvos = (data || []).map((linha) => (linha as { id: string }).id)
+
+      // Funcionário sem login é caso normal, não erro: a tela precisa seguir
+      // adiante e apagar o funcionário.
+      if (alvos.length === 0) return NextResponse.json({ sucesso: true, excluidos: 0 })
+    } else {
+      return erro('Usuário inválido.', 400)
     }
 
-    const { error } = await supabase.from('usuarios_sistema').delete().eq('id', id)
+    for (const alvo of alvos) {
+      const recusa = await recusarExclusaoDeAcesso(supabase, alvo, alvos, autorizacao.usuario.id)
+      if (recusa) return recusa
+    }
+
+    const { error } = await supabase.from('usuarios_sistema').delete().in('id', alvos)
     if (error) throw new Error(error.message)
 
-    return NextResponse.json({ sucesso: true })
+    return NextResponse.json({ sucesso: true, excluidos: alvos.length })
   } catch (e) {
     return erro(e instanceof Error ? e.message : 'Falha ao excluir acesso.', 500)
   }

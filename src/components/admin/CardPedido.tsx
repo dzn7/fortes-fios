@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
 import {
   BadgeCheck,
+  Gift,
   CheckCircle2,
   CheckSquare,
   Edit2,
@@ -86,6 +87,8 @@ export type Pedido = {
   pagamento_online_status?: string
   troco_para?: number | null
   observacoes?: string
+  /** Cliente marcou no carrinho. Ver specs/pedido-presente.md. */
+  presente?: boolean
   mesa?: number | null
   mesa_id?: string | null
   mesa_identificador?: string | null
@@ -310,6 +313,18 @@ export default function CardPedido({
               {isNovo && (
                 <Badge className="h-5 rounded-md bg-foreground px-1.5 text-[10px] font-semibold text-background shadow-none hover:bg-foreground">
                   Novo
+                </Badge>
+              )}
+              {/*
+                Ao lado do nome porque é a primeira linha lida e a única
+                visível na lista sem abrir o pedido. Em `primary` preenchido —
+                o "Novo" é foreground/background, então os dois não se
+                confundem quando aparecem juntos.
+              */}
+              {pedido.presente && (
+                <Badge className="h-5 gap-1 rounded-md bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground shadow-none hover:bg-primary">
+                  <Gift className="size-3" strokeWidth={2.2} aria-hidden />
+                  Presente
                 </Badge>
               )}
             </div>

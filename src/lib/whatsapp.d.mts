@@ -18,6 +18,7 @@ export type PedidoWhatsApp = {
   cidade?: string
   pontoReferencia?: string
   observacoes?: string
+  presente?: boolean
   itens?: ItemPedidoWhatsApp[]
 }
 

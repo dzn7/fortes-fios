@@ -169,3 +169,39 @@ test('pedido sem itens ainda gera mensagem válida', () => {
   assert.ok(texto.includes('#42'))
   assert.ok(typeof texto === 'string' && texto.length > 0)
 })
+
+// 8. pedido para presente
+test('presente vira uma linha de destaque logo abaixo do número do pedido', () => {
+  const linhas = mensagemPedidoParaLoja(pedido({ presente: true })).split('\n')
+  assert.match(linhas[0], /^\*Pedido #42\*$/)
+  assert.equal(linhas[1], '')
+  assert.equal(linhas[2], '🎁 *PEDIDO PARA PRESENTE*')
+})
+
+/*
+ * Antes dos itens de propósito: a mensagem é lida no celular, e o aviso que
+ * muda o preparo tem que chegar antes de quem lê começar a separar os produtos.
+ */
+test('a marca de presente vem antes do cliente e dos itens', () => {
+  const texto = mensagemPedidoParaLoja(pedido({ presente: true }))
+  const marca = texto.indexOf('PRESENTE')
+  // Sem esta linha o teste passaria por vácuo: indexOf devolve -1 quando a
+  // marca não existe, e -1 é menor que qualquer posição válida.
+  assert.ok(marca >= 0, 'a mensagem não trouxe a marca de presente')
+  assert.ok(marca < texto.indexOf('*Cliente:*'))
+  assert.ok(marca < texto.indexOf('*Itens'))
+})
+
+test('pedido comum não ganha linha nenhuma sobre presente', () => {
+  for (const valor of [undefined, false, null, 0, '']) {
+    const texto = mensagemPedidoParaLoja(pedido({ presente: valor }))
+    assert.doesNotMatch(texto, /PRESENTE/i, `presente=${String(valor)}`)
+  }
+})
+
+test('presente não interfere no resto da mensagem', () => {
+  const comum = mensagemPedidoParaLoja(pedido())
+  const presente = mensagemPedidoParaLoja(pedido({ presente: true }))
+  assert.notEqual(presente, comum)
+  assert.equal(presente.replace('\n🎁 *PEDIDO PARA PRESENTE*\n', ''), comum)
+})

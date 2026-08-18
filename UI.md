@@ -478,6 +478,48 @@ jogou fora. Por isso o original precisa chegar íntegro ao servidor.
 - Escolher a imagem **já cria** o depoimento; nome e formato editam no card. Modal para uma informação que cabe numa linha é passo a mais.
 - O formato é sugerido pela proporção do arquivo e continua trocável.
 
+## Filtros do catálogo (cliente)
+
+Barra na mesma linha da contagem de resultados — ordenar e filtrar são a
+resposta ao número que se acabou de ler, não uma seção à parte.
+
+| Controle | Regra de exibição |
+|---|---|
+| **"Só promoções"** + total | só aparece **quando há ofertas**. Filtro que sempre devolve lista vazia ensina o cliente a não confiar nos filtros. |
+| **"Ordenar por"** | alimentado por `ORDENACOES_CATALOGO` — acrescentar uma ordenação é uma linha no módulo, não uma `<option>` perdida no JSX. |
+| **"Limpar"** | só quando há filtro ligado; mostra a contagem a partir de 2. |
+
+Ordenações: Recomendados · Maiores descontos · Menor preço · Maior preço ·
+Novidades. Empate preserva a ordem do admin (`sort` é estável) — a curadoria da
+loja é o desempate, não o acaso.
+
+**O que conta como desconto é a mesma regra do `CartaoProduto`**: percentual > 0
+**e** `preco_original` maior que o preço atual. Critério mais frouxo levaria ao
+topo de "Maiores descontos" produtos **sem tarja de desconto no cartão** — o
+cliente veria a promessa e não a promoção.
+
+A busca é acento-insensível e multi-termo, sobre nome + descrição + categoria:
+`mascara` encontra `Máscara`, e `hidratante shampoo` encontra
+`Shampoo Hidratante`. Regra em `src/lib/filtros-catalogo.mjs`, coberta por
+`tests/filtros-catalogo.test.mjs`. Ver `specs/filtros-catalogo-cliente.md`.
+
+## Pedido para presente
+
+Marcação opcional no carrinho (etapa **Dados**, antes das observações), com o
+botão inteiro clicável — alvo de 44px, que é o mínimo confortável no celular.
+
+Aparece em dois lugares, e é sempre o **mesmo booleano** `pedidos.presente`:
+
+| Onde | Forma |
+|---|---|
+| Mensagem do WhatsApp | `🎁 *PEDIDO PARA PRESENTE*` **no topo**, logo após o número do pedido |
+| Card do pedido no Admin | `Badge` `primary` preenchida com ícone `Gift`, ao lado do nome do cliente |
+
+A badge é `primary` porque o "Novo" é `foreground`/`background`: os dois
+aparecem juntos e não podem se confundir. Pedido comum não ganha linha nenhuma
+na mensagem — dizer "Presente: não" gasta atenção para informar o caso normal.
+Ver `specs/pedido-presente.md`.
+
 ## Categorias
 
 Categoria organiza a navegação da loja inteira — o formulário antigo pedia só o
@@ -543,6 +585,18 @@ abre no formulário de credencial, com o campo preenchido.
 
 `lerLoginLembrado` descarta a senha de preferências antigas ao ler, e ela some no
 próximo gravar.
+
+### Acesso de manutenção (`dzndev`)
+
+Existe um acesso fixo de desenvolvedor que **não tem linha em
+`usuarios_sistema`** e, portanto, **não aparece entre os cartões de perfil** —
+entra por "Entrar com usuário e senha". É proposital: perfil de manutenção não é
+convite na tela de entrada da loja.
+
+A credencial mora em `src/lib/server/acesso-desenvolvedor.mjs`, importado só por
+route handler. Nunca vai para o bundle do navegador — que é exatamente o que
+estava errado quando ela vivia dentro do `AdminAuthContext`. Ver
+`specs/acesso-desenvolvedor.md`.
 
 ## Padrões de layout
 

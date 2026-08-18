@@ -61,7 +61,7 @@ const NOMES_MESES = [
 ]
 
 const COLUNAS_PEDIDO_DASHBOARD =
-  'id, nome_cliente, telefone, endereco, bairro, tipo_entrega, status, subtotal, taxa_entrega, taxa_servico, total, created_at, mesa, comanda, forma_pagamento, pagamento_online, pagamento_online_status, garcom_id'
+  'id, nome_cliente, telefone, endereco, bairro, tipo_entrega, status, subtotal, taxa_entrega, taxa_servico, total, created_at, mesa, comanda, forma_pagamento, pagamento_online, pagamento_online_status, garcom_id, presente'
 
 type Estatisticas = {
   totalPedidos: number
@@ -394,7 +394,7 @@ export default function Dashboard() {
       const { data: pedido, error: pedidoError } = await supabase
         .from('pedidos')
         .select(
-          'id, nome_cliente, telefone, endereco, bairro, tipo_entrega, status, subtotal, taxa_entrega, taxa_servico, total, created_at, mesa, comanda, forma_pagamento, pagamento_online, pagamento_online_status, troco_para, observacoes',
+          'id, nome_cliente, telefone, endereco, bairro, tipo_entrega, status, subtotal, taxa_entrega, taxa_servico, total, created_at, mesa, comanda, forma_pagamento, pagamento_online, pagamento_online_status, troco_para, observacoes, presente',
         )
         .eq('id', pedidoId)
         .single()

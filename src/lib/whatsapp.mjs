@@ -155,6 +155,7 @@ const ROTULO_TIPO_ENTREGA = {
  *   cidade?: string,
  *   pontoReferencia?: string,
  *   observacoes?: string,
+ *   presente?: boolean,
  *   itens?: Array<{ nome?: string, quantidade?: number, subtotal?: number }>,
  * }} pedido
  */
@@ -163,11 +164,16 @@ export const mensagemPedidoParaLoja = (pedido) => {
   const itens = Array.isArray(dados.itens) ? dados.itens : []
   const totalUnidades = itens.reduce((soma, item) => soma + (Number(item?.quantidade) || 0), 0)
 
-  const linhas = [
-    `*Pedido #${dados.numeroPedido ?? '—'}*`,
-    '',
-    `*Cliente:* ${String(dados.nomeCliente || '').trim() || 'não informado'}`,
-  ]
+  const linhas = [`*Pedido #${dados.numeroPedido ?? '—'}*`]
+
+  // No topo, antes de cliente e itens: a mensagem é lida no celular, e o aviso
+  // que muda o PREPARO precisa chegar antes de quem lê começar a separar os
+  // produtos. No rodapé ele chegaria depois da decisão. Pedido comum não ganha
+  // linha nenhuma — dizer "Presente: não" em toda mensagem gasta atenção para
+  // informar o caso normal.
+  if (dados.presente) linhas.push('', '🎁 *PEDIDO PARA PRESENTE*')
+
+  linhas.push('', `*Cliente:* ${String(dados.nomeCliente || '').trim() || 'não informado'}`)
 
   if (dados.telefone) linhas.push(`*Telefone:* ${dados.telefone}`)
 
