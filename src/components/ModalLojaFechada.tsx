@@ -1,8 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+/**
+ * Rede para o caso de `animationend` não chegar — aba em segundo plano, motion
+ * reduzido, navegador que pula a animação. Sem ela o aviso ficaria montado para
+ * sempre. Folga sobre os 250 ms de `slide-down-out`.
+ */
+const ESPERA_SAIDA_MS = 400
 
 type ModalLojaFechadaProps = {
   aberto: boolean
@@ -15,16 +22,53 @@ const IconeWhatsApp = ({ className }: { className?: string }) => (
   </svg>
 )
 
+/**
+ * Aviso de loja fechada.
+ *
+ * **É um banner, não um modal** — `role="status"` e `aria-live="polite"`, sem
+ * overlay e sem prender o foco. Por isso não usa o `Dialog` do projeto.
+ *
+ * A animação é CSS, e não `framer-motion`. Este arquivo era o **único** ponto
+ * de entrada do framer-motion na árvore do site do cliente, e custava 42 kB
+ * gzip do bundle inicial (391 → 349 kB, medidos em build limpo) — pago por todo
+ * visitante para um aviso que só aparece com a loja fechada.
+ *
+ * `next/dynamic` **não** resolve, e isso foi medido antes de descartar: o Next
+ * pré-carrega o chunk dinâmico no HTML inicial e o total subiu (391 → 393 kB).
+ *
+ * `animate-slide-up` já é o idioma do projeto para banner fixo — os três
+ * `PWAManager` usam a mesma estrutura de className.
+ *
+ * Spec: specs/desempenho-catalogo-mobile.md
+ */
 export default function ModalLojaFechada({ aberto, numeroWhatsApp }: ModalLojaFechadaProps) {
   const [fechadoPeloUsuario, setFechadoPeloUsuario] = useState(false)
   const numeroFormatado = numeroWhatsApp.replace(/\D/g, '')
   const podeFalarNoWhatsApp = numeroFormatado.length > 0
+
+  const deveAparecer = aberto && !fechadoPeloUsuario
+  const [renderizado, setRenderizado] = useState(deveAparecer)
+  const [saindo, setSaindo] = useState(false)
 
   useEffect(() => {
     if (!aberto) {
       setFechadoPeloUsuario(false)
     }
   }, [aberto])
+
+  // O que o `AnimatePresence` fazia: adiar a desmontagem até a saída terminar.
+  useEffect(() => {
+    if (deveAparecer) {
+      setRenderizado(true)
+      setSaindo(false)
+      return
+    }
+    if (!renderizado) return
+
+    setSaindo(true)
+    const espera = window.setTimeout(() => setRenderizado(false), ESPERA_SAIDA_MS)
+    return () => window.clearTimeout(espera)
+  }, [deveAparecer, renderizado])
 
   const abrirWhatsApp = () => {
     if (!podeFalarNoWhatsApp) return
@@ -34,56 +78,60 @@ export default function ModalLojaFechada({ aberto, numeroWhatsApp }: ModalLojaFe
     window.open(url, '_blank')
   }
 
+  if (!renderizado) return null
+
   return (
-    <AnimatePresence>
-      {aberto && !fechadoPeloUsuario && (
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 24 }}
-          transition={{ duration: 0.25 }}
-          className="fixed inset-x-0 bottom-0 z-[70] px-3 pb-3 sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-24 sm:w-full sm:max-w-md sm:px-0 sm:pb-0"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="max-h-[calc(100vh-1.5rem)] overflow-y-auto rounded-2xl border border-amber-300/80 bg-amber-50/95 p-4 shadow-2xl backdrop-blur dark:border-amber-700 dark:bg-amber-950/90">
-            <div className="flex items-start justify-between gap-3">
-              <div className="pr-2">
-                <h2 className="text-base font-bold leading-tight text-amber-900 dark:text-amber-200">
-                  Loja fechada no momento
-                </h2>
-                <p className="mt-1 text-sm leading-snug text-amber-800 dark:text-amber-300">
-                  O catálogo continua disponível para consulta, mas novos pedidos só voltam quando a loja reabrir.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setFechadoPeloUsuario(true)}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-amber-800 transition-colors hover:bg-amber-200/70 dark:text-amber-300 dark:hover:bg-amber-800/40"
-                aria-label="Fechar aviso"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {podeFalarNoWhatsApp && (
-              <div className="mt-3">
-                <button
-                  onClick={abrirWhatsApp}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-700"
-                >
-                  <IconeWhatsApp className="h-5 w-5" />
-                  <span>Falar no WhatsApp</span>
-                </button>
-              </div>
-            )}
-
-            <p className="mt-2 text-center text-xs text-amber-700/90 dark:text-amber-400/90">
-              Pedidos online indisponiveis enquanto a loja estiver fechada.
+    <div
+      className={cn(
+        'fixed inset-x-0 bottom-0 z-[70] px-3 pb-3 sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-24 sm:w-full sm:max-w-md sm:px-0 sm:pb-0',
+        saindo ? 'animate-slide-down-out' : 'animate-slide-up',
+      )}
+      role="status"
+      aria-live="polite"
+      /*
+        `currentTarget` porque `animationend` borbulha: animação de um filho
+        desmontaria o aviso no meio da entrada.
+      */
+      onAnimationEnd={(evento) => {
+        if (saindo && evento.target === evento.currentTarget) setRenderizado(false)
+      }}
+    >
+      <div className="max-h-[calc(100vh-1.5rem)] overflow-y-auto rounded-2xl border border-amber-300/80 bg-amber-50/95 p-4 shadow-2xl backdrop-blur dark:border-amber-700 dark:bg-amber-950/90">
+        <div className="flex items-start justify-between gap-3">
+          <div className="pr-2">
+            <h2 className="text-base font-bold leading-tight text-amber-900 dark:text-amber-200">
+              Loja fechada no momento
+            </h2>
+            <p className="mt-1 text-sm leading-snug text-amber-800 dark:text-amber-300">
+              O catálogo continua disponível para consulta, mas novos pedidos só voltam quando a loja reabrir.
             </p>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+
+          <button
+            onClick={() => setFechadoPeloUsuario(true)}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-amber-800 transition-colors hover:bg-amber-200/70 dark:text-amber-300 dark:hover:bg-amber-800/40"
+            aria-label="Fechar aviso"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {podeFalarNoWhatsApp && (
+          <div className="mt-3">
+            <button
+              onClick={abrirWhatsApp}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-700"
+            >
+              <IconeWhatsApp className="h-5 w-5" />
+              <span>Falar no WhatsApp</span>
+            </button>
+          </div>
+        )}
+
+        <p className="mt-2 text-center text-xs text-amber-700/90 dark:text-amber-400/90">
+          Pedidos online indisponiveis enquanto a loja estiver fechada.
+        </p>
+      </div>
+    </div>
   )
 }

@@ -161,6 +161,9 @@ module.exports = {
         'fade-in': 'fadeIn 0.6s ease-out',
         'fade-in-delay': 'fadeIn 0.8s ease-out 0.2s both',
         'slide-up': 'slideUp 0.5s ease-out',
+        /* Saída do aviso de loja fechada. Espelha `slideUp`; `ease-in` porque
+           sair acelerando lê melhor que sair desacelerando. */
+        'slide-down-out': 'slideDownOut 0.25s ease-in forwards',
         'bounce-subtle': 'bounceSubtle 2s ease-in-out infinite',
         'rotate-slow': 'rotateSlow 20s linear infinite',
         'fadeIn': 'fadeInOverlay 0.2s ease-out',
@@ -189,6 +192,10 @@ module.exports = {
         slideUp: {
           '0%': { opacity: '0', transform: 'translateY(20px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        slideDownOut: {
+          '0%': { opacity: '1', transform: 'translateY(0)' },
+          '100%': { opacity: '0', transform: 'translateY(20px)' },
         },
         bounceSubtle: {
           '0%, 100%': { transform: 'translateY(0)' },

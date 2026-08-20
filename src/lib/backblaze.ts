@@ -94,7 +94,29 @@ export async function comprimirImagem(
     const img = new Image()
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
-    
+
+    /*
+      A object URL prende o `File` original no blob URL store até ser revogada
+      ou a aba morrer. Esta função tem QUATRO saídas — `onerror`, canvas sem
+      contexto, blob nulo e o sucesso — e nenhuma revogava. No Admin, que é uma
+      SPA longeva, cada imagem editada ficava presa (o limite de upload é 5 MB,
+      e 15 MB nas pastas com texto).
+
+      `concluir`/`falhar` existem para que a revogação seja por construção: não
+      há como sair daqui sem passar por uma das duas. Era o único
+      `createObjectURL` do `src/` sem `revokeObjectURL` — os outros oito já
+      revogavam.
+    */
+    const urlOrigem = URL.createObjectURL(arquivo)
+    const concluir = (resultado: File) => {
+      URL.revokeObjectURL(urlOrigem)
+      resolve(resultado)
+    }
+    const falhar = (erro: Error) => {
+      URL.revokeObjectURL(urlOrigem)
+      reject(erro)
+    }
+
     img.onload = () => {
       let largura = img.width
       let altura = img.height
@@ -109,7 +131,7 @@ export async function comprimirImagem(
       canvas.height = altura
       
       if (!ctx) {
-        reject(new Error('Erro ao criar contexto do canvas'))
+        falhar(new Error('Erro ao criar contexto do canvas'))
         return
       }
       
@@ -130,11 +152,11 @@ export async function comprimirImagem(
       */
       const aceitar = (blob: Blob | null) => {
         if (!blob) {
-          reject(new Error('Erro ao converter imagem'))
+          falhar(new Error('Erro ao converter imagem'))
           return
         }
 
-        resolve(
+        concluir(
           new File([blob], arquivo.name, {
             type: blob.type || 'image/jpeg',
             lastModified: Date.now(),
@@ -156,8 +178,8 @@ export async function comprimirImagem(
       )
     }
     
-    img.onerror = () => reject(new Error('Erro ao carregar imagem'))
-    img.src = URL.createObjectURL(arquivo)
+    img.onerror = () => falhar(new Error('Erro ao carregar imagem'))
+    img.src = urlOrigem
   })
 }
 

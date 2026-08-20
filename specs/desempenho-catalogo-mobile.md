@@ -119,10 +119,75 @@ toque que o cliente sente.
 10. Lista maior devolve só o lote e marca que há mais.
 11. Trocar de filtro reinicia a contagem.
 
+## Segunda rodada — 2026-08-20
+
+As duas pendências registradas na primeira rodada foram atacadas.
+
+### D5 — framer-motion inteiro no bundle por causa de um banner
+
+A varredura transitiva de imports a partir de `page.tsx` + `layout.tsx` (71
+arquivos) mostrou **um único** ponto de entrada de `framer-motion` no site do
+cliente: `ModalLojaFechada.tsx`, que usa `motion.div` + `AnimatePresence` para
+um fade/slide de 250 ms.
+
+O aviso só aparece com a loja fechada — todo visitante pagava a biblioteca por
+algo que a maioria nunca vê.
+
+**Duas medições decidiram a solução, e a primeira derrubou a opção óbvia:**
+
+| Experimento | Resultado |
+| --- | --- |
+| baseline | 16 chunks · 391 kB gzip |
+| `next/dynamic` no componente | 18 chunks · **393 kB** — piorou |
+| componente removido (só para medir) | 15 chunks · 348 kB |
+| **entregue: animação em CSS** | 15 chunks · **349 kB** |
+
+`next/dynamic` não serve aqui porque o Next pré-carrega o chunk dinâmico no HTML
+inicial. Sem a medição, essa teria sido a correção — e não teria corrigido nada.
+
+`animate-slide-up` já existia no `tailwind.config.js` e já é o idioma do projeto
+para banner fixo: `PWAManagerAdmin`, `PWAManagerGarcom` e `PWAManagerEntregador`
+usam a **mesma estrutura de className**. `ModalLojaFechada` era o único fora do
+padrão. Só a saída precisou de keyframe novo (`slide-down-out`).
+
+A desmontagem adiada — o que o `AnimatePresence` fazia — virou máquina de
+estados com `animationend` **e** timeout de rede: se a animação não rodar (aba
+em segundo plano, motion reduzido, navegador que pula), `animationend` nunca
+chega e o aviso ficaria montado para sempre.
+
+**Nota:** a entrada passa de 250 ms para os 500 ms de `animate-slide-up`, que é
+o valor dos três banners irmãos. Foi escolha de reuso (§5), não descuido.
+
+### D6 — object URL nunca revogada no upload do Admin
+
+`comprimirImagem` (`src/lib/backblaze.ts`) fazia `URL.createObjectURL(arquivo)`
+e tinha **quatro** saídas — `onerror`, canvas sem contexto, blob nulo e o
+sucesso — sem `revokeObjectURL` em nenhuma. A object URL prende o `File`
+original no blob URL store até a aba morrer; no Admin, que é SPA longeva, cada
+imagem editada ficava presa (limite de upload: 5 MB, 15 MB nas pastas com
+texto).
+
+Era o **único** `createObjectURL` do `src/` sem revogação — os outros oito já
+revogavam. `concluir`/`falhar` tornam a revogação estrutural: não há como sair
+da função sem passar por uma das duas.
+
+**Sem teste de regressão, e por quê** (exigido pelo §0.5): a função depende de
+`Image`, `document.createElement('canvas')` e `canvas.toBlob`. O projeto não tem
+DOM em teste, o §3.4 proíbe teste de browser e adicionar jsdom seria dependência
+nova (§3.2). A verificação foi leitura do diff mais a comparação com os outros
+oito pontos da base. Inventar uma abstração só para ter o que testar seria
+simular TDD, que o §0.5 proíbe explicitamente.
+
 ## Fora de escopo
 
 - trocar o provedor de armazenamento;
 - reprocessar em massa as imagens já gravadas (os dois banners pesados são
   corrigidos pela rota, sem reupload);
 - redesenho do hero, do cartão ou do catálogo;
-- redução do bundle de 390 kB gzip — medido e registrado, não atacado aqui.
+- os 349 kB gzip restantes: react-dom, `@supabase/supabase-js` + phoenix
+  (realtime, com 5 canais na home) e o runtime do Next. Nenhum é removível sem
+  mudar o desenho da página;
+- `tailwindcss-animate` **não está instalado** e `plugins: []`, então
+  `animate-in`, `fade-in-0` e `zoom-in-95` no `src/components/ui/dialog.tsx` não
+  geram CSS nenhum — os diálogos do projeto não têm animação de entrada/saída.
+  Defeito pré-existente, encontrado nesta investigação, **não corrigido aqui**.
