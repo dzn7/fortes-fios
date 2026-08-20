@@ -1,5 +1,56 @@
 # Progress
 
+## [2026-08-19] Lentidão do site do cliente no celular
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Spec:** `specs/desempenho-catalogo-mobile.md`
+**Arquivos alterados:** `src/app/api/upload/route.ts`, `src/lib/imagem-publica.mjs`, `src/lib/backblaze.ts`, `src/components/HeroVitrine.tsx`, `src/app/page.tsx`, `tests/imagens-publicas.test.mjs`, `UI.md`, `Progress.md`. **Criados:** `src/lib/dimensoes-imagem.mjs` (+`.d.mts`), `src/lib/paginacao-catalogo.mjs` (+`.d.mts`), `tests/dimensoes-imagem.test.mjs`, `tests/paginacao-catalogo.test.mjs`, `specs/desempenho-catalogo-mobile.md`.
+
+**O diagnóstico saiu de medição, não de palpite.** Produção, 2026-08-19: 505
+produtos disponíveis, 14,1 MB de fotos de produto (mediana 23 kB) e **5,6 MB de
+banners** — dos quais dois sozinhos somam 3,0 MB.
+
+O banner mais pesado tem 1 893 kB para 960×1200. Os banners 1–3, de dimensão
+idêntica, têm 36–110 kB. A diferença estava nos bytes:
+
+```
+$ curl -s -r 0-11 ".../vitrine/…_cgt9wq.webp" | xxd
+00000000: 8950 4e47 0d0a 1a0a 0000 000d            .PNG........
+```
+
+Nome `.webp`, `Content-Type: image/webp`, **bytes PNG**. `canvas.toBlob` cai para
+`image/png` quando o navegador não sabe codificar WebP — e PNG ignora o argumento
+de qualidade. O upload afirmava `type: 'image/webp'` sem conferir `blob.type`, e a
+mentira viajou até o CDN.
+
+**Quatro defeitos, todos no caminho do que o cliente reclamou:**
+
+| | Defeito | Efeito medido |
+|---|---|---|
+| D1 | Upload afirma WebP sem conferir o que o canvas devolveu | 2 banners PNG de 1,9 MB e 1,15 MB |
+| D2 | `GET /api/upload` ignorava `w` e `q` | nenhuma imagem redimensionada; 15 larguras por foto devolvendo o arquivo cheio, cada uma pagando um miss frio de cache |
+| D3 | Hero não declarava largura nenhuma | arte inteira num aparelho de 390 px |
+| D4 | 505 cartões montados no primeiro quadro | 505 `<img>` com `srcset` de 15 URLs e 505 raízes de `Dialog` |
+
+**Resultado, medido ponta a ponta contra as imagens reais de produção:**
+
+- hero no celular: **3 231 kB → 222 kB (93% menor)**;
+- primeiro lote do catálogo: **1 368 kB → 527 kB (61% menor)**;
+- o banner de 1 893 kB vira 62 kB em `w=640` e 94 kB em `w=828`, agora WebP de verdade.
+
+**Decisões tomadas:** (1) A rota continua sendo um proxy — ela existe para
+absorver o 503 transitório do Backblaze (spec `hero-responsivo-imagens-resilientes`),
+e falha do `sharp` devolve o original em vez de quebrar. (2) `w` só é aceito
+dentro de uma lista fechada; largura arbitrária abriria chave de cache e
+invocação serverless novas a cada requisição. (3) As duas imagens pesadas **não
+foram reenviadas**: a rota as corrige na entrega, e o defeito de origem foi
+fechado para não gerar novas. (4) O catálogo pagina com sentinela **e** botão —
+o botão é o caminho de quem usa teclado ou leitor de tela.
+
+**Verificação:** `tsc --noEmit` ✓ 0 erros · `npm run build` ✓ · `node --test tests/*.test.mjs` 315/316 · rota exercitada contra as imagens reais de produção em servidor local ✓
+**Pendências / próximos passos:** O JS da home tem 390 kB gzip — medido e registrado, **não atacado** nesta task. `comprimirImagem` nunca faz `URL.revokeObjectURL` do blob que cria (vazamento no upload do Admin); fica anotado, fora do escopo daqui.
+**Armadilhas descobertas:** O `Content-Type` gravado no bucket **não é confiável** — quem decide o formato de saída é o `sharp`, lendo os bytes. E o teste `validade no passado é recusada` (`tests/cupom-formulario.test.mjs`) já falhava no HEAD limpo: depende da data corrente, não desta mudança.
+
 ## [2026-08-18] A ordem das categorias salva no Admin não chegava ao site
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

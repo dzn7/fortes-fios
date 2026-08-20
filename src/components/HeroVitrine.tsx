@@ -135,10 +135,16 @@ function ImagemResponsivaBanner({
   return (
     <picture>
       {fontes.srcMobile ? (
-        <source media={fontes.mediaMobile} srcSet={fontes.srcMobile} />
+        <source
+          media={fontes.mediaMobile}
+          srcSet={fontes.srcSetMobile || fontes.srcMobile}
+          sizes={fontes.tamanhos}
+        />
       ) : null}
       <img
         src={fontes.srcDesktop}
+        srcSet={fontes.srcSetDesktop || undefined}
+        sizes={fontes.srcSetDesktop ? fontes.tamanhos : undefined}
         alt={banner.titulo || 'Destaque Fortes Fios'}
         className="absolute inset-0 h-full w-full object-contain"
         decoding="async"

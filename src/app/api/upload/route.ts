@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import sharp from 'sharp'
+import {
+  deveConverter,
+  larguraDeSaida,
+  normalizarLargura,
+  normalizarQualidade,
+} from '@/lib/dimensoes-imagem.mjs'
 
 // Tipos de arquivo permitidos
 const TIPOS_PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
@@ -107,12 +113,62 @@ async function processarImagemComTexto(entrada: Uint8Array): Promise<ImagemProce
   return { buffer, tipoMime: 'image/webp', extensao: 'webp' }
 }
 
+const CACHE_IMAGEM_PUBLICA =
+  'public, max-age=86400, s-maxage=31536000, stale-while-revalidate=604800, immutable'
+
 /**
- * GET - Serve imagens públicas do B2 pela mesma origem para permitir recorte no Canvas.
+ * Redimensiona e converte para WebP.
+ *
+ * Devolve `null` — e não lança — quando o `sharp` não dá conta do arquivo. Esta
+ * rota nasceu para absorver o 503 transitório do Backblaze; ela não pode passar
+ * a quebrar por causa da otimização. Falhou, serve o original.
+ */
+async function otimizarImagem(
+  original: Buffer,
+  tipoOrigem: string,
+  largura: number,
+  qualidade: number,
+): Promise<{ buffer: Buffer; tipoMime: string } | null> {
+  if (!deveConverter(tipoOrigem)) return null
+
+  try {
+    const fonte = sharp(original)
+    const { width } = await fonte.metadata()
+    const buffer = await fonte
+      .rotate()
+      .resize({
+        width: larguraDeSaida(largura, width),
+        // Ampliar não cria detalhe, só peso.
+        withoutEnlargement: true,
+      })
+      .webp({ quality: qualidade })
+      .toBuffer()
+
+    return { buffer, tipoMime: 'image/webp' }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * GET - Serve imagens públicas do B2 pela mesma origem.
+ *
+ * Aceita `w` e `q`. Antes os dois eram ignorados: o loader do Next montava um
+ * `srcset` de 15 larguras por imagem e as 15 devolviam o mesmo arquivo em
+ * tamanho cheio, cada uma ocupando uma chave de cache diferente. Em produção
+ * isso significava dois banners de 1,9 MB e 1,15 MB chegando inteiros num
+ * aparelho de 390 px, e foto de produto lenta justamente na largura que ainda
+ * não estava quente no CDN.
+ *
+ * `w` só é aceito dentro da lista fechada de `dimensoes-imagem.mjs`; fora dela
+ * o original é servido, para largura arbitrária não abrir chave de cache nova.
+ *
+ * Spec: specs/desempenho-catalogo-mobile.md
  */
 export async function GET(requisicao: NextRequest) {
   try {
-    const nomeArquivo = new URL(requisicao.url).searchParams.get('arquivo') || ''
+    const parametros = new URL(requisicao.url).searchParams
+    const nomeArquivo = parametros.get('arquivo') || ''
     if (!CHAVE_IMAGEM_PERMITIDA.test(nomeArquivo) || nomeArquivo.includes('..')) {
       return NextResponse.json({ erro: 'Arquivo inválido' }, { status: 400 })
     }
@@ -126,12 +182,33 @@ export async function GET(requisicao: NextRequest) {
       return NextResponse.json({ erro: 'Imagem indisponível para edição' }, { status: 422 })
     }
 
-    const conteudo = Buffer.from(await resposta.Body.transformToByteArray())
-    return new NextResponse(conteudo, {
+    const original = Buffer.from(await resposta.Body.transformToByteArray())
+    const tipoOrigem = resposta.ContentType || 'application/octet-stream'
+    const largura = normalizarLargura(parametros.get('w'))
+
+    /*
+      O tipo declarado pelo bucket não é confiável: dois banners estão gravados
+      com `Content-Type: image/webp` e bytes que começam em `\x89PNG`, porque o
+      upload afirmava WebP sem conferir o que o canvas devolveu. Quem decide o
+      formato de saída aqui é o `sharp`, lendo os bytes.
+    */
+    const otimizada = largura
+      ? await otimizarImagem(
+          original,
+          tipoOrigem,
+          largura,
+          normalizarQualidade(parametros.get('q')),
+        )
+      : null
+
+    // `Uint8Array` explícito: `BodyInit` não aceita o `Buffer<ArrayBufferLike>`
+    // que o `sharp` devolve.
+    const corpo = new Uint8Array(otimizada ? otimizada.buffer : original)
+
+    return new NextResponse(corpo, {
       headers: {
-        'Content-Type': resposta.ContentType || 'application/octet-stream',
-        'Cache-Control':
-          'public, max-age=86400, s-maxage=31536000, stale-while-revalidate=604800, immutable',
+        'Content-Type': otimizada ? otimizada.tipoMime : tipoOrigem,
+        'Cache-Control': CACHE_IMAGEM_PUBLICA,
         'X-Content-Type-Options': 'nosniff',
       },
     })

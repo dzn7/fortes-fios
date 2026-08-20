@@ -567,6 +567,43 @@ A busca é acento-insensível e multi-termo, sobre nome + descrição + categori
 `Shampoo Hidratante`. Regra em `src/lib/filtros-catalogo.mjs`, coberta por
 `tests/filtros-catalogo.test.mjs`. Ver `specs/filtros-catalogo-cliente.md`.
 
+## Carregamento do catálogo (cliente)
+
+A grade cresce **de 24 em 24**, não de uma vez. Com 505 produtos disponíveis, a
+aba "Todos" montava 505 `<article>`, 505 `<img>` com `srcset` de 15 URLs cada e
+505 raízes de `Dialog` no primeiro quadro — custo de main thread, que aparece
+como rolagem travada no celular. Nenhum produto some da lista.
+
+| Elemento | Regra |
+|---|---|
+| **Sentinela** | `<div>` abaixo da grade, com `rootMargin: 600px` — o lote chega antes de a pessoa ver o fim. |
+| **Botão "Ver mais"** | sempre visível junto da sentinela, com a contagem do que falta. É o caminho de quem usa teclado ou leitor de tela, não um plano B. |
+| **Troca de filtro** | recomeça do primeiro lote; manter o teto anterior faria a busca abrir já com centenas de cartões montados. |
+
+Regra em `src/lib/paginacao-catalogo.mjs`, coberta por
+`tests/paginacao-catalogo.test.mjs`.
+
+## Imagens públicas
+
+Toda imagem do bucket passa por `/api/upload`, que **redimensiona e converte para
+WebP**. A rota nasceu como proxy de resiliência (503 transitório do Backblaze) e
+continua sendo: se o `sharp` falhar, ela devolve o original em vez de quebrar.
+
+- `w` só é aceito dentro da lista fechada de `src/lib/dimensoes-imagem.mjs` —
+  exatamente as larguras que o projeto emite. Largura arbitrária abriria uma
+  chave de cache e uma invocação serverless novas a cada requisição.
+- **Nunca amplia.** GIF passa intacto: reencodar congelaria a animação.
+- O hero declara `srcset` com largura real e `sizes="100vw"`, arte mobile e
+  desktop separadas. Sem isso, `<img>` puro pede a arte inteira.
+
+**O `Content-Type` gravado no bucket não é confiável.** Dois banners estão
+gravados como `image/webp` com bytes que começam em `\x89PNG`, porque o upload
+afirmava o formato sem conferir `blob.type` — `canvas.toBlob` cai para PNG quando
+o navegador não sabe codificar WebP, e PNG ignora a qualidade. O upload foi
+corrigido; quem decide o formato de saída na entrega é o `sharp`, lendo os bytes.
+
+Ver `specs/desempenho-catalogo-mobile.md`.
+
 ## Pedido para presente
 
 Marcação opcional no carrinho (etapa **Dados**, antes das observações), com o

@@ -114,20 +114,42 @@ export async function comprimirImagem(
       }
       
       ctx.drawImage(img, 0, 0, largura, altura)
-      
+
+      /*
+        `canvas.toBlob` cai para `image/png` quando o navegador não sabe
+        codificar o formato pedido — e PNG IGNORA o argumento de qualidade.
+
+        O código anterior pedia WebP e depois afirmava `type: 'image/webp'` sem
+        conferir o que voltou. Dois banners do hero foram gravados assim: nome
+        `.webp`, `Content-Type: image/webp`, bytes começando em `\x89PNG`,
+        1,9 MB e 1,15 MB — contra 36–110 kB dos banners de dimensão idêntica que
+        pegaram um navegador com encoder de WebP.
+
+        Agora quem manda é `blob.type`. Se o WebP não saiu, refaz em JPEG, que
+        todo navegador codifica e que respeita a qualidade.
+      */
+      const aceitar = (blob: Blob | null) => {
+        if (!blob) {
+          reject(new Error('Erro ao converter imagem'))
+          return
+        }
+
+        resolve(
+          new File([blob], arquivo.name, {
+            type: blob.type || 'image/jpeg',
+            lastModified: Date.now(),
+          }),
+        )
+      }
+
       canvas.toBlob(
         (blob) => {
-          if (!blob) {
-            reject(new Error('Erro ao converter imagem'))
+          if (blob && blob.type === 'image/webp') {
+            aceitar(blob)
             return
           }
-          
-          const arquivoComprimido = new File([blob], arquivo.name, {
-            type: 'image/webp',
-            lastModified: Date.now(),
-          })
-          
-          resolve(arquivoComprimido)
+
+          canvas.toBlob(aceitar, 'image/jpeg', qualidade)
         },
         'image/webp',
         qualidade

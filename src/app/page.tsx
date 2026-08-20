@@ -60,6 +60,11 @@ import {
   type OrdenacaoCatalogo,
 } from '@/lib/filtros-catalogo.mjs'
 import {
+  TAMANHO_LOTE_CATALOGO,
+  fatiarCatalogo,
+  proximoLimite,
+} from '@/lib/paginacao-catalogo.mjs'
+import {
   CHAVE_MAIS_VENDIDOS_VITRINE,
   CONFIGURACAO_MAIS_VENDIDOS_PADRAO,
   ConfiguracaoMaisVendidos,
@@ -143,6 +148,8 @@ export default function Home() {
   const [ordenacaoCliente, setOrdenacaoCliente] =
     useState<OrdenacaoCatalogo>(ORDENACAO_PADRAO)
   const [apenasOfertas, setApenasOfertas] = useState(false)
+  const [limiteCatalogo, setLimiteCatalogo] = useState(TAMANHO_LOTE_CATALOGO)
+  const sentinelaCatalogoRef = useRef<HTMLDivElement>(null)
   const [configuracaoMaisVendidos, setConfiguracaoMaisVendidos] =
     useState<ConfiguracaoMaisVendidos>(CONFIGURACAO_MAIS_VENDIDOS_PADRAO)
   const [rankingAutomaticoIds, setRankingAutomaticoIds] = useState<string[]>(
@@ -558,6 +565,55 @@ export default function Home() {
       }),
     [apenasOfertas, busca, categoriaAtiva, ordenacaoCliente, produtos, rotuloCategoriaTodos],
   )
+
+  /**
+   * O catálogo cresce por lote em vez de montar tudo de uma vez.
+   *
+   * Com 505 produtos disponíveis, a aba "Todos" montava 505 `<article>`, 505
+   * `<img>` com `srcset` de 15 URLs cada e 505 raízes de `Dialog` no primeiro
+   * quadro. Custo de main thread, não de rede — era a rolagem travada que o
+   * cliente relatou no celular. Nenhum produto some: o lote cresce sozinho.
+   *
+   * Spec: specs/desempenho-catalogo-mobile.md
+   */
+  const catalogoVisivel = useMemo(
+    () => fatiarCatalogo(produtosFiltrados, limiteCatalogo),
+    [limiteCatalogo, produtosFiltrados],
+  )
+
+  // Filtro trocado recomeça do primeiro lote: manter o teto anterior faria a
+  // busca abrir já com centenas de cartões montados.
+  useEffect(() => {
+    setLimiteCatalogo(TAMANHO_LOTE_CATALOGO)
+  }, [apenasOfertas, busca, categoriaAtiva, ordenacaoCliente])
+
+  /*
+    A sentinela fica abaixo da grade; entrar na viewport pede o próximo lote.
+    `rootMargin` generoso para o lote chegar antes de a pessoa ver o fim.
+
+    `limiteCatalogo` entra nas dependências de propósito: o IntersectionObserver
+    só avisa quando a interseção MUDA. Numa tela alta, o lote novo pode não
+    empurrar a sentinela para fora da margem — sem reobservar, ela seguiria
+    visível e calada, e a lista travaria no meio. Reobservar reavalia o estado
+    atual e continua preenchendo até a sentinela sair de vista.
+  */
+  useEffect(() => {
+    const alvo = sentinelaCatalogoRef.current
+    if (!alvo || !catalogoVisivel.temMais) return
+
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        if (!entradas.some((entrada) => entrada.isIntersecting)) return
+        setLimiteCatalogo((atual) =>
+          proximoLimite(atual, produtosFiltrados.length, TAMANHO_LOTE_CATALOGO),
+        )
+      },
+      { rootMargin: '600px 0px' },
+    )
+
+    observador.observe(alvo)
+    return () => observador.disconnect()
+  }, [catalogoVisivel.temMais, limiteCatalogo, produtosFiltrados.length])
 
   /**
    * Ofertas **dentro do que já está filtrado** por busca e categoria — e não no
@@ -1135,15 +1191,49 @@ export default function Home() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
-                {produtosFiltrados.map((produto) => (
-                  <CartaoProduto
-                    key={produto.id}
-                    produto={produto}
-                    onAdicionar={adicionarProdutoAoCarrinho}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
+                  {catalogoVisivel.visiveis.map((produto) => (
+                    <CartaoProduto
+                      key={produto.id}
+                      produto={produto}
+                      onAdicionar={adicionarProdutoAoCarrinho}
+                    />
+                  ))}
+                </div>
+
+                {catalogoVisivel.temMais ? (
+                  <div
+                    ref={sentinelaCatalogoRef}
+                    className="flex flex-col items-center gap-3 pt-8"
+                  >
+                    <div
+                      className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-primary"
+                      aria-hidden
+                    />
+                    {/*
+                      O botão é o caminho de quem não rola: teclado, leitor de
+                      tela e o navegador sem IntersectionObserver.
+                    */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLimiteCatalogo((atual) =>
+                          proximoLimite(
+                            atual,
+                            produtosFiltrados.length,
+                            TAMANHO_LOTE_CATALOGO,
+                          ),
+                        )
+                      }
+                      className="min-h-11 rounded-lg border border-border bg-card px-5 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      Ver mais {catalogoVisivel.restantes === 1 ? 'produto' : 'produtos'} (
+                      {catalogoVisivel.restantes})
+                    </button>
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         </section>
