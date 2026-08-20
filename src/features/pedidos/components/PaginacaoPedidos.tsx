@@ -12,8 +12,9 @@ import {
   PaginationPrevious,
 } from '@/components/ui/pagination'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-
-type ItemPagina = number | 'inicio-ellipsis' | 'fim-ellipsis'
+// A janela de páginas subiu para `src/lib` no segundo uso (o catálogo do
+// cliente): dentro deste arquivo ela ficava fora do alcance do `node --test`.
+import { janelaDePaginas } from '@/lib/paginacao.mjs'
 
 type PaginacaoPedidosProps = {
   paginaAtual: number
@@ -27,38 +28,6 @@ type PaginacaoPedidosProps = {
 
 const OPCOES_POR_PAGINA = [15, 30, 50, 100] as const
 
-const criarItensPaginacao = (paginaAtual: number, totalPaginas: number): ItemPagina[] => {
-  if (totalPaginas <= 7) {
-    return Array.from({ length: totalPaginas }, (_, indice) => indice + 1)
-  }
-
-  if (paginaAtual <= 4) {
-    return [1, 2, 3, 4, 5, 'fim-ellipsis', totalPaginas]
-  }
-
-  if (paginaAtual >= totalPaginas - 3) {
-    return [
-      1,
-      'inicio-ellipsis',
-      totalPaginas - 4,
-      totalPaginas - 3,
-      totalPaginas - 2,
-      totalPaginas - 1,
-      totalPaginas,
-    ]
-  }
-
-  return [
-    1,
-    'inicio-ellipsis',
-    paginaAtual - 1,
-    paginaAtual,
-    paginaAtual + 1,
-    'fim-ellipsis',
-    totalPaginas,
-  ]
-}
-
 export default function PaginacaoPedidos({
   paginaAtual,
   totalPaginas,
@@ -70,7 +39,7 @@ export default function PaginacaoPedidos({
 }: PaginacaoPedidosProps) {
   if (totalItens === 0) return null
 
-  const itens = criarItensPaginacao(paginaAtual, totalPaginas)
+  const itens = janelaDePaginas(paginaAtual, totalPaginas)
   const primeiroItem = (paginaAtual - 1) * itensPorPagina + 1
   const ultimoItem = Math.min(paginaAtual * itensPorPagina, totalItens)
 

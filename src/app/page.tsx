@@ -59,11 +59,8 @@ import {
   produtoEmOferta,
   type OrdenacaoCatalogo,
 } from '@/lib/filtros-catalogo.mjs'
-import {
-  TAMANHO_LOTE_CATALOGO,
-  fatiarCatalogo,
-  proximoLimite,
-} from '@/lib/paginacao-catalogo.mjs'
+import PaginacaoCatalogo from '@/components/PaginacaoCatalogo'
+import { fatiarPagina } from '@/lib/paginacao.mjs'
 import {
   CHAVE_MAIS_VENDIDOS_VITRINE,
   CONFIGURACAO_MAIS_VENDIDOS_PADRAO,
@@ -113,6 +110,12 @@ type RespostaCategorias = {
   rotuloTodos?: string
 }
 
+/**
+ * 24 e não 25: a grade é `grid-cols-2 md:grid-cols-3 lg:grid-cols-4`, e 24
+ * divide exato por 2, 3 e 4. Com 25 sobra órfão nos três tamanhos de tela.
+ */
+const PRODUTOS_POR_PAGINA = 24
+
 const calcularProgressoTrilha = (trilha: HTMLDivElement) => {
   if (trilha.scrollWidth <= trilha.clientWidth) return 1
   return Math.min(
@@ -148,8 +151,7 @@ export default function Home() {
   const [ordenacaoCliente, setOrdenacaoCliente] =
     useState<OrdenacaoCatalogo>(ORDENACAO_PADRAO)
   const [apenasOfertas, setApenasOfertas] = useState(false)
-  const [limiteCatalogo, setLimiteCatalogo] = useState(TAMANHO_LOTE_CATALOGO)
-  const sentinelaCatalogoRef = useRef<HTMLDivElement>(null)
+  const [paginaCatalogo, setPaginaCatalogo] = useState(1)
   const [configuracaoMaisVendidos, setConfiguracaoMaisVendidos] =
     useState<ConfiguracaoMaisVendidos>(CONFIGURACAO_MAIS_VENDIDOS_PADRAO)
   const [rankingAutomaticoIds, setRankingAutomaticoIds] = useState<string[]>(
@@ -567,53 +569,48 @@ export default function Home() {
   )
 
   /**
-   * O catálogo cresce por lote em vez de montar tudo de uma vez.
+   * O catálogo é paginado por número de página.
    *
-   * Com 505 produtos disponíveis, a aba "Todos" montava 505 `<article>`, 505
-   * `<img>` com `srcset` de 15 URLs cada e 505 raízes de `Dialog` no primeiro
-   * quadro. Custo de main thread, não de rede — era a rolagem travada que o
-   * cliente relatou no celular. Nenhum produto some: o lote cresce sozinho.
+   * Com 505 produtos, a aba "Todos" montava os 505 de uma vez: 505 `<article>`,
+   * 505 `<img>` com `srcset` de 15 URLs cada e 505 raízes de `Dialog` no
+   * primeiro quadro. A primeira tentativa foi lote crescente por rolagem, e foi
+   * recusada — lista que não acaba não deixa saber onde se está nem voltar.
    *
-   * Spec: specs/desempenho-catalogo-mobile.md
+   * Paginar aqui, e não no banco: a busca, os filtros, a ordenação, a contagem
+   * de ofertas e os carrosséis precisam da lista inteira em memória. O
+   * raciocínio completo está na spec.
+   *
+   * Spec: specs/paginacao-catalogo-cliente.md
    */
   const catalogoVisivel = useMemo(
-    () => fatiarCatalogo(produtosFiltrados, limiteCatalogo),
-    [limiteCatalogo, produtosFiltrados],
+    () => fatiarPagina(produtosFiltrados, paginaCatalogo, PRODUTOS_POR_PAGINA),
+    [paginaCatalogo, produtosFiltrados],
   )
 
-  // Filtro trocado recomeça do primeiro lote: manter o teto anterior faria a
-  // busca abrir já com centenas de cartões montados.
+  // Filtro trocado volta para a primeira página: buscar e continuar na página 9
+  // mostraria "nenhum resultado" numa busca que tem resultados.
   useEffect(() => {
-    setLimiteCatalogo(TAMANHO_LOTE_CATALOGO)
+    setPaginaCatalogo(1)
   }, [apenasOfertas, busca, categoriaAtiva, ordenacaoCliente])
 
   /*
-    A sentinela fica abaixo da grade; entrar na viewport pede o próximo lote.
-    `rootMargin` generoso para o lote chegar antes de a pessoa ver o fim.
-
-    `limiteCatalogo` entra nas dependências de propósito: o IntersectionObserver
-    só avisa quando a interseção MUDA. Numa tela alta, o lote novo pode não
-    empurrar a sentinela para fora da margem — sem reobservar, ela seguiria
-    visível e calada, e a lista travaria no meio. Reobservar reavalia o estado
-    atual e continua preenchendo até a sentinela sair de vista.
+    A lista pode encolher sem o filtro mudar — produto esgotado chega pelo
+    realtime. `fatiarPagina` já corrige a página fora do intervalo na hora de
+    cortar; isto traz o estado de volta para o mesmo número, senão os botões
+    ficariam marcando uma página que não existe mais.
   */
   useEffect(() => {
-    const alvo = sentinelaCatalogoRef.current
-    if (!alvo || !catalogoVisivel.temMais) return
+    if (catalogoVisivel.pagina !== paginaCatalogo) {
+      setPaginaCatalogo(catalogoVisivel.pagina)
+    }
+  }, [catalogoVisivel.pagina, paginaCatalogo])
 
-    const observador = new IntersectionObserver(
-      (entradas) => {
-        if (!entradas.some((entrada) => entrada.isIntersecting)) return
-        setLimiteCatalogo((atual) =>
-          proximoLimite(atual, produtosFiltrados.length, TAMANHO_LOTE_CATALOGO),
-        )
-      },
-      { rootMargin: '600px 0px' },
-    )
-
-    observador.observe(alvo)
-    return () => observador.disconnect()
-  }, [catalogoVisivel.temMais, limiteCatalogo, produtosFiltrados.length])
+  const irParaPagina = useCallback((pagina: number) => {
+    setPaginaCatalogo(pagina)
+    // Sem isto a pessoa troca de página e continua no meio da grade nova. Mesmo
+    // caminho que `selecionarCategoria` já usa — a seção tem `scroll-mt-20`.
+    document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
 
   /**
    * Ofertas **dentro do que já está filtrado** por busca e categoria — e não no
@@ -1202,37 +1199,14 @@ export default function Home() {
                   ))}
                 </div>
 
-                {catalogoVisivel.temMais ? (
-                  <div
-                    ref={sentinelaCatalogoRef}
-                    className="flex flex-col items-center gap-3 pt-8"
-                  >
-                    <div
-                      className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-primary"
-                      aria-hidden
-                    />
-                    {/*
-                      O botão é o caminho de quem não rola: teclado, leitor de
-                      tela e o navegador sem IntersectionObserver.
-                    */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setLimiteCatalogo((atual) =>
-                          proximoLimite(
-                            atual,
-                            produtosFiltrados.length,
-                            TAMANHO_LOTE_CATALOGO,
-                          ),
-                        )
-                      }
-                      className="min-h-11 rounded-lg border border-border bg-card px-5 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      Ver mais {catalogoVisivel.restantes === 1 ? 'produto' : 'produtos'} (
-                      {catalogoVisivel.restantes})
-                    </button>
-                  </div>
-                ) : null}
+                <PaginacaoCatalogo
+                  paginaAtual={catalogoVisivel.pagina}
+                  totalPaginas={catalogoVisivel.totalPaginas}
+                  primeiroItem={catalogoVisivel.primeiro}
+                  ultimoItem={catalogoVisivel.ultimo}
+                  totalItens={produtosFiltrados.length}
+                  onPaginaChange={irParaPagina}
+                />
               </>
             )}
           </div>
