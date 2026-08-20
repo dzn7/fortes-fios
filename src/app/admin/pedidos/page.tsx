@@ -246,7 +246,7 @@ function PedidosContent() {
       let query = supabase
         .from('pedidos')
         .select(
-          'id, nome_cliente, telefone, endereco, bairro, tipo_entrega, status, subtotal, taxa_entrega, taxa_servico, total, created_at, forma_pagamento, pagamento_online, pagamento_online_status, presente',
+          'id, nome_cliente, telefone, endereco, bairro, tipo_entrega, status, subtotal, taxa_entrega, taxa_servico, total, created_at, forma_pagamento, pagamento_online, pagamento_online_status, presente, cupom_id, cupom_codigo, desconto_cupom',
           { count: 'exact' },
         )
 
@@ -427,7 +427,7 @@ function PedidosContent() {
       const { data: pedido, error: pedidoError } = await supabase
         .from('pedidos')
         .select(
-          'id, nome_cliente, telefone, endereco, bairro, tipo_entrega, status, subtotal, taxa_entrega, taxa_servico, total, created_at, mesa, comanda, forma_pagamento, pagamento_online, pagamento_online_status, troco_para, observacoes, presente',
+          'id, nome_cliente, telefone, endereco, bairro, tipo_entrega, status, subtotal, taxa_entrega, taxa_servico, total, created_at, mesa, comanda, forma_pagamento, pagamento_online, pagamento_online_status, troco_para, observacoes, presente, cupom_id, cupom_codigo, desconto_cupom',
         )
         .eq('id', pedidoId)
         .single()

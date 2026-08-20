@@ -1,5 +1,129 @@
 # Progress
 
+## [2026-08-20] Paginação numerada do catálogo e cupom visível no pedido
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Specs:** `specs/paginacao-catalogo-cliente.md` · `specs/cupom-no-pedido-admin.md`
+**Arquivos alterados:** `src/app/page.tsx`, `src/features/pedidos/components/PaginacaoPedidos.tsx`, `src/components/admin/CardPedido.tsx`, `src/components/admin/ModalDetalhesPedido.tsx`, `src/app/admin/pedidos/page.tsx`, `src/app/admin/dashboard/page.tsx`, `UI.md`, `Progress.md`
+**Criados:** `src/lib/paginacao.mjs` (+`.d.mts`), `src/lib/cupom-pedido.mjs` (+`.d.mts`), `src/components/PaginacaoCatalogo.tsx`, `tests/paginacao.test.mjs`, `tests/cupom-pedido.test.mjs`, as duas specs
+**Removidos:** `src/lib/paginacao-catalogo.mjs` (+`.d.mts`) e `tests/paginacao-catalogo.test.mjs` — a rolagem infinita da rodada anterior, recusada pelo usuário e substituída aqui
+
+### Paginação
+
+A rolagem infinita entregue na rodada anterior foi recusada: lista que não acaba
+não deixa a pessoa saber onde está nem voltar a um ponto. Trocada por paginação
+numerada, no desenho da paginação do Admin.
+
+**Paginar na tela, não no banco.** A skill `supabase-postgres-best-practices`
+(`data-pagination`) recomenda keyset em vez de `OFFSET` — e isso vale para
+paginação **no banco**. Aqui a decisão certa foi não introduzir query paginada
+nenhuma: a home precisa da lista inteira em memória para a busca, os filtros, a
+ordenação, a contagem de ofertas dentro do filtro e para os carrosséis
+resolverem ids. Com `range`, cada um viraria ida ao servidor. São 505 produtos e
+368 kB de JSON (≈60–80 kB comprimidos) numa requisição só, e o custo que a
+pessoa sentia era de renderização. Limiar registrado na spec: acima de ~2 000
+produtos a conta muda.
+
+**24 por página, não 25.** A grade é `grid-cols-2 md:grid-cols-3 lg:grid-cols-4`;
+24 divide exato por 2, 3 e 4, e 25 deixa órfão nos três tamanhos.
+
+`criarItensPaginacao` vivia presa dentro de `PaginacaoPedidos.tsx`. Este foi o
+segundo uso, então subiu para `src/lib/paginacao.mjs` — "generalizar o
+existente" (§5), e agora está ao alcance do `node --test`. O Admin passou a
+consumi-la, sem mudança de comportamento.
+
+### Cupom
+
+O pedido já gravava `cupom_id`, `cupom_codigo`, `tipo_desconto_cupom` e
+`desconto_cupom`, e nada aparecia no Admin. Em produção, **4 dos 11 pedidos**
+usaram cupom.
+
+**`desconto_cupom` guarda o valor em REAIS já calculado, não o percentual** —
+conferido: 40 − 2 = 38, 60 − 3 = 57, 48 − 2,4 = 45,6, 54,5 − 2,73 = 51,77. O
+percentual original não é gravado no pedido, então a tela mostra o código e o
+valor descontado; exibir porcentagem exigiria inventar.
+
+**Decisões tomadas:** (1) Selo de cupom em `outline`, ao lado do de presente que
+é preenchido — quando os dois aparecem juntos (acontece em pedido real), dá para
+ler os dois. (2) O cupom aparece mesmo com desconto zero: ter usado cupom é o
+fato que explica o total. (3) Código ausente com desconto presente mostra
+"Cupom" sem nome, em vez de esconder a linha e deixar a conta sem explicação.
+
+**Verificação:** `tsc --noEmit` ✓ 0 erros · build limpo ✓ ·
+`node --test tests/*.test.mjs` **331/331** · a janela de páginas é conferida por
+invariante sobre **todas** as combinações até 60 páginas, não por casos isolados ·
+o `select` novo foi executado contra a produção pelo PostgREST e o resultado
+passado pelo módulo: `subtotal − desconto = total` bate nos 3 pedidos ·
+lint indisponível (`next lint` saiu no Next 16)
+**Pendências / próximos passos:** **Achado, não corrigido:** o `select` do
+`/admin/pdv` não traz `presente` **nem** os campos de cupom, embora renderize o
+mesmo `CardPedido` — o selo de presente já não aparecia lá antes desta task.
+Corrigir é uma linha, mas está fora do escopo pedido; decisão do usuário.
+**Armadilhas descobertas:** `TicketPercent` **não existe** no `lucide-react`
+instalado — conferido em runtime antes de importar, senão teria quebrado o
+build. Usei `Ticket`. `BadgePercent`, que existe, já é o ícone das taxas no
+mesmo modal, então reusá-lo para cupom confundiria.
+
+## [2026-08-20] Bundle da home e vazamento de object URL no upload
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Spec:** `specs/desempenho-catalogo-mobile.md` (§Segunda rodada)
+**Arquivos alterados:** `src/components/ModalLojaFechada.tsx`, `tailwind.config.js`, `src/lib/backblaze.ts`, `specs/desempenho-catalogo-mobile.md`, `UI.md`, `Progress.md`
+**Orçamento:** previsto 3 arquivos de código (ModalLojaFechada, page.tsx, backblaze) — gastos 3, mas `page.tsx` não precisou mudar e `tailwind.config.js` entrou no lugar. Dentro do orçamento.
+
+**A medição derrubou a correção óbvia.** A varredura transitiva de imports
+(71 arquivos a partir de `page.tsx` + `layout.tsx`) mostrou **um único** ponto de
+entrada de `framer-motion` no site do cliente: `ModalLojaFechada`, um banner de
+aviso que só aparece com a loja fechada.
+
+| Experimento | Resultado |
+|---|---|
+| baseline | 16 chunks · 391 kB gzip |
+| `next/dynamic` no componente | 18 chunks · **393 kB — piorou** |
+| componente removido (só para medir o teto) | 15 chunks · 348 kB |
+| **entregue: animação em CSS** | 15 chunks · **349 kB** |
+
+`next/dynamic` era a resposta óbvia e **não funciona aqui**: o Next pré-carrega o
+chunk dinâmico no HTML inicial. Sem medir, teria sido a correção — e não teria
+corrigido nada.
+
+O reuso veio de graça: `animate-slide-up` já existe no `tailwind.config.js` e os
+três `PWAManager` usam a **mesma estrutura de className** para banner fixo.
+`ModalLojaFechada` era o único fora do padrão. Só a saída precisou de keyframe
+novo.
+
+**O vazamento:** `comprimirImagem` criava object URL e tinha **quatro** saídas
+sem revogar nenhuma — a URL prende o `File` original no blob URL store até a aba
+morrer, e o Admin é SPA longeva. Era o único `createObjectURL` do `src/` sem
+`revokeObjectURL`; os outros oito já revogavam.
+
+**Decisões tomadas:** (1) Entrada passa de 250 ms para os 500 ms de
+`animate-slide-up` — escolha de reuso (§5) para alinhar com os três banners
+irmãos, não descuido. (2) A saída virou máquina de estados com `animationend`
+**e** timeout de rede: sem o timeout, animação que não roda (aba em segundo
+plano, motion reduzido) deixaria o aviso montado para sempre. (3) Não usei o
+`Dialog` do projeto: isto é banner (`role="status"`, `aria-live="polite"`), e o
+Dialog prenderia foco e criaria overlay.
+
+**Verificação:** `tsc --noEmit` ✓ 0 erros · build limpo (`rm -rf .next`) ✓ ·
+`node --test tests/*.test.mjs` **316/316** · marcadores de framer-motion nos 15
+chunks JS da home: **0** · CSS conferido no bundle
+(`@keyframes slideDownOut` e `.animate-slide-down-out{animation:.25s ease-in forwards}`) ·
+lint indisponível (`next lint` saiu no Next 16, sem config de ESLint)
+**Pendências / próximos passos:** Os 349 kB restantes são react-dom,
+`@supabase/supabase-js` + phoenix (5 canais realtime na home) e o runtime do
+Next — nenhum removível sem mudar o desenho da página. **Achado novo, não
+corrigido:** `tailwindcss-animate` não está instalado e `plugins: []`, então
+`animate-in`/`fade-in-0`/`zoom-in-95` no `src/components/ui/dialog.tsx` não geram
+CSS — os diálogos do projeto não animam. Fora do escopo desta task.
+**Armadilhas descobertas:** (1) Marcador textual em chunk minificado **não** mede
+peso: inferi ~100 kB de framer-motion por `grep` em chunks mistos e o valor real
+era 42 kB. Só o experimento de remoção mede. (2) O teste
+`validade no passado é recusada` que falhava ontem passou hoje sem eu tocar nele
+— era dependente da data corrente, como eu havia diagnosticado. (3) `comprimirImagem`
+segue sem resolver a promise se nem `onload` nem `onerror` dispararem; é
+pré-existente e ficou fora do escopo.
+
 ## [2026-08-19] Lentidão do site do cliente no celular
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

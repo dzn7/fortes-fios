@@ -567,21 +567,53 @@ A busca é acento-insensível e multi-termo, sobre nome + descrição + categori
 `Shampoo Hidratante`. Regra em `src/lib/filtros-catalogo.mjs`, coberta por
 `tests/filtros-catalogo.test.mjs`. Ver `specs/filtros-catalogo-cliente.md`.
 
-## Carregamento do catálogo (cliente)
+## Paginação do catálogo (cliente)
 
-A grade cresce **de 24 em 24**, não de uma vez. Com 505 produtos disponíveis, a
-aba "Todos" montava 505 `<article>`, 505 `<img>` com `srcset` de 15 URLs cada e
-505 raízes de `Dialog` no primeiro quadro — custo de main thread, que aparece
-como rolagem travada no celular. Nenhum produto some da lista.
+A grade mostra **24 produtos por página**, com navegação numerada — os mesmos
+primitivos `components/ui/pagination` e o mesmo desenho do Admin.
+
+**24 e não 25:** a grade é `grid-cols-2 md:grid-cols-3 lg:grid-cols-4`, e 24
+divide exato por 2, 3 e 4. Com 25 sobra órfão nos três tamanhos de tela.
 
 | Elemento | Regra |
 |---|---|
-| **Sentinela** | `<div>` abaixo da grade, com `rootMargin: 600px` — o lote chega antes de a pessoa ver o fim. |
-| **Botão "Ver mais"** | sempre visível junto da sentinela, com a contagem do que falta. É o caminho de quem usa teclado ou leitor de tela, não um plano B. |
-| **Troca de filtro** | recomeça do primeiro lote; manter o teto anterior faria a busca abrir já com centenas de cartões montados. |
+| Barra | Primeira · Anterior · números com elipse · Próxima · Última, e "25–48 de 505 produtos" abaixo |
+| Uma página só | Não desenha paginação nenhuma |
+| Sem seletor de itens por página | Ao contrário do Admin: deixar escolher 100 reabriria o problema que a paginação veio resolver |
+| Trocar filtro | Volta para a página 1 — buscar e continuar na página 9 mostraria "nenhum resultado" numa busca que tem resultados |
+| Trocar de página | Rola até `#catalogo` (mesmo caminho de `selecionarCategoria`) |
+| Lista encolheu (produto esgotado via realtime) | A página é corrigida para a última válida |
 
-Regra em `src/lib/paginacao-catalogo.mjs`, coberta por
-`tests/paginacao-catalogo.test.mjs`.
+A janela de páginas mora em `src/lib/paginacao.mjs`, compartilhada com
+`PaginacaoPedidos` do Admin, e é conferida por invariante sobre todas as
+combinações até 60 páginas em `tests/paginacao.test.mjs`.
+
+> **Paginação é de tela, não de banco.** A home precisa da lista inteira em
+> memória para busca, filtros, ordenação, contagem de ofertas e para os
+> carrosséis resolverem ids. Ver `specs/paginacao-catalogo-cliente.md`.
+
+## Cupom no pedido (Admin)
+
+Quando o pedido usou cupom, ele aparece em dois lugares — o mesmo par que o
+"Presente" já ocupa.
+
+| Onde | Como |
+|---|---|
+| **Card** | Selo ao lado do nome com o código (`PRIMEIRACOMPRA`), ícone `Ticket`, variante `outline` |
+| **Modal de detalhes** | Linha no Resumo Financeiro logo abaixo do subtotal: `Cupom CÓDIGO` · `− R$ 2,73` |
+
+O selo é `outline` porque o de presente é preenchido: os dois aparecem juntos em
+pedido real, e assim dá para ler os dois.
+
+**`desconto_cupom` guarda o valor em reais já calculado, não o percentual.** O
+percentual original não é gravado no pedido — exibi-lo exigiria inventar.
+
+Regras em `src/lib/cupom-pedido.mjs`. Cupom com desconto zero **aparece**: ter
+usado cupom é o fato que explica o total. Código ausente vira o rótulo `Cupom`,
+em vez de esconder a linha.
+
+> ⚠️ O `select` do `/admin/pdv` não traz `presente` nem os campos de cupom,
+> embora renderize o mesmo `CardPedido`. Lacuna pré-existente, não corrigida.
 
 ## Imagens públicas
 

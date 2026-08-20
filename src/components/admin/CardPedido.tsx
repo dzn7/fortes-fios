@@ -16,6 +16,7 @@ import {
   Package,
   Printer,
   Square,
+  Ticket,
   Trash2,
   Truck,
   Wallet,
@@ -30,6 +31,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { pedidoUsouCupom, rotuloCupom } from '@/lib/cupom-pedido.mjs'
 import {
   pedidoEstaEmCrediarioAberto,
   pedidoEstaEncerrado,
@@ -89,6 +91,10 @@ export type Pedido = {
   observacoes?: string
   /** Cliente marcou no carrinho. Ver specs/pedido-presente.md. */
   presente?: boolean
+  /** Cupom aplicado na compra. Ver specs/cupom-no-pedido-admin.md. */
+  cupom_id?: string | null
+  cupom_codigo?: string | null
+  desconto_cupom?: number | null
   mesa?: number | null
   mesa_id?: string | null
   mesa_identificador?: string | null
@@ -325,6 +331,21 @@ export default function CardPedido({
                 <Badge className="h-5 gap-1 rounded-md bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground shadow-none hover:bg-primary">
                   <Gift className="size-3" strokeWidth={2.2} aria-hidden />
                   Presente
+                </Badge>
+              )}
+              {/*
+                Cupom ao lado do presente, pelo mesmo motivo: é o que muda o
+                valor cobrado e a única pista na lista sem abrir o pedido. Em
+                `outline` para não competir com o presente, que é preenchido —
+                quando os dois aparecem juntos, dá para ler os dois.
+              */}
+              {pedidoUsouCupom(pedido) && (
+                <Badge
+                  variant="outline"
+                  className="h-5 gap-1 rounded-md border-primary/40 px-1.5 text-[10px] font-semibold text-primary"
+                >
+                  <Ticket className="size-3" strokeWidth={2.2} aria-hidden />
+                  {rotuloCupom(pedido)}
                 </Badge>
               )}
             </div>

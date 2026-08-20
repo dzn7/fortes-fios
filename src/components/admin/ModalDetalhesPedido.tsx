@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { X, FileText, Edit2, Package, User, MapPin, CreditCard, Banknote, QrCode, Truck, Store, UtensilsCrossed, Clock, Plus, Minus, Split, Printer, BadgePercent, Wallet, Check, ListChecks, Loader2, CircleDollarSign, RotateCcw } from 'lucide-react'
+import { X, FileText, Edit2, Package, User, MapPin, CreditCard, Banknote, QrCode, Truck, Store, UtensilsCrossed, Clock, Plus, Minus, Split, Printer, BadgePercent, Ticket, Wallet, Check, ListChecks, Loader2, CircleDollarSign, RotateCcw } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { gerarTicketPDF } from '@/lib/pdf-generator'
 import { cn } from '@/lib/utils'
+import { pedidoUsouCupom, rotuloCupom, valorDescontadoCupom } from '@/lib/cupom-pedido.mjs'
 import { ModalSheet } from '@/components/ui/modal-sheet'
 import { ModalFormaPagamentoItens } from '@/components/admin/pagamento/ModalFormaPagamentoItens'
 import {
@@ -66,6 +67,10 @@ type Pedido = {
   comanda?: number | null
   itens?: ItemPedido[]
   garcom_id?: string | null
+  /** Cupom aplicado na compra. Ver specs/cupom-no-pedido-admin.md. */
+  cupom_id?: string | null
+  cupom_codigo?: string | null
+  desconto_cupom?: number | null
 }
 
 type ModalDetalhesPedidoProps = {
@@ -892,7 +897,17 @@ export default function ModalDetalhesPedido({
 
   const resumoFinanceiro = useMemo(() => {
     if (!pedido) {
-      return { subtotal: 0, taxaEntrega: 0, taxaPagamento: 0, taxaServico: 0, total: 0, meioPagamento: '' }
+      return {
+        subtotal: 0,
+        taxaEntrega: 0,
+        taxaPagamento: 0,
+        taxaServico: 0,
+        total: 0,
+        meioPagamento: '',
+        usouCupom: false,
+        cupom: '',
+        descontoCupom: 0,
+      }
     }
     return {
       subtotal: Number(pedido.subtotal || 0),
@@ -901,6 +916,9 @@ export default function ModalDetalhesPedido({
       taxaServico: Number(pedido.taxa_servico || 0),
       total: Number(pedido.total || 0),
       meioPagamento: pedido.forma_pagamento || 'meio não informado',
+      usouCupom: pedidoUsouCupom(pedido),
+      cupom: rotuloCupom(pedido),
+      descontoCupom: valorDescontadoCupom(pedido),
     }
   }, [pedido])
 
@@ -1693,6 +1711,28 @@ export default function ModalDetalhesPedido({
                             R$ {resumoFinanceiro.subtotal.toFixed(2)}
                           </span>
                         </div>
+                        {/*
+                          Logo abaixo do subtotal porque é dele que o desconto
+                          sai. Aparece mesmo com valor zero: ter usado cupom é o
+                          fato que explica o total, e esconder a linha deixaria a
+                          conta sem explicação.
+                        */}
+                        {resumoFinanceiro.usouCupom && (
+                          <div className="flex items-center justify-between rounded-md bg-card px-3 py-2">
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                              <Ticket strokeWidth={1.6} className="size-3.5" />
+                              <span>
+                                Cupom{' '}
+                                <span className="font-medium text-foreground">
+                                  {resumoFinanceiro.cupom}
+                                </span>
+                              </span>
+                            </div>
+                            <span className="font-mono font-medium tabular-nums text-primary">
+                              − R$ {resumoFinanceiro.descontoCupom.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
                         {resumoFinanceiro.taxaEntrega > 0 && (
                           <div className="flex items-center justify-between rounded-md bg-card px-3 py-2">
                             <span className="text-muted-foreground">Taxa de entrega</span>
