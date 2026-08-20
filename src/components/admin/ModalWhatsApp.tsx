@@ -23,28 +23,28 @@ type ModalWhatsAppProps = {
 const mensagensPredefinidas = [
   {
     titulo: 'Pedido Confirmado',
-    template: (pedido: Pedido) => 
-      `Olá ${pedido.nome_cliente}! 😊\n\nSeu pedido #${pedido.id.slice(0, 8).toUpperCase()} foi confirmado!\n\n💰 Valor: R$ ${pedido.total.toFixed(2)}\n\nEstamos preparando com muito carinho! 🍔`
+    template: (pedido: Pedido) =>
+      `Olá ${pedido.nome_cliente}! 😊\n\nSeu pedido #${pedido.id.slice(0, 8).toUpperCase()} foi confirmado!\n\n💰 Valor: R$ ${pedido.total.toFixed(2)}\n\nJá vamos separar e preparar seus produtos com todo cuidado! 💇‍♀️`
   },
   {
     titulo: 'Pedido em Preparo',
-    template: (pedido: Pedido) => 
-      `Oi ${pedido.nome_cliente}! 👨‍🍳\n\nSeu pedido #${pedido.id.slice(0, 8).toUpperCase()} está sendo preparado agora!\n\nEm breve estará prontinho! ⏰`
+    template: (pedido: Pedido) =>
+      `Oi ${pedido.nome_cliente}! ✨\n\nSeu pedido #${pedido.id.slice(0, 8).toUpperCase()} está sendo separado e embalado agora!\n\nEm breve estará pronto! ⏰`
   },
   {
     titulo: 'Pedido Pronto',
-    template: (pedido: Pedido) => 
-      `${pedido.nome_cliente}, tudo pronto! 🎉\n\nSeu pedido #${pedido.id.slice(0, 8).toUpperCase()} está prontinho e quentinho!\n\nPode vir buscar! 😋`
+    template: (pedido: Pedido) =>
+      `${pedido.nome_cliente}, tudo pronto! 🎉\n\nSeu pedido #${pedido.id.slice(0, 8).toUpperCase()} já está separado e embalado!\n\nPode vir buscar! 💖`
   },
   {
     titulo: 'Saiu para Entrega',
-    template: (pedido: Pedido) => 
-      `Olá ${pedido.nome_cliente}! 🚗\n\nSeu pedido #${pedido.id.slice(0, 8).toUpperCase()} saiu para entrega!\n\nChega aí rapidinho! 🍔💨`
+    template: (pedido: Pedido) =>
+      `Olá ${pedido.nome_cliente}! 🚗\n\nSeu pedido #${pedido.id.slice(0, 8).toUpperCase()} saiu para entrega!\n\nChega aí rapidinho! 💨`
   },
   {
     titulo: 'Agradecimento',
-    template: (pedido: Pedido) => 
-      `Muito obrigado pela preferência, ${pedido.nome_cliente}! 🙏\n\nEsperamos que tenha gostado do seu pedido!\n\nVolte sempre! ❤️🍔`
+    template: (pedido: Pedido) =>
+      `Muito obrigado pela preferência, ${pedido.nome_cliente}! 🙏\n\nEsperamos que ame seus produtos!\n\nVolte sempre! ❤️✨`
   },
   {
     titulo: 'Mensagem Personalizada',
