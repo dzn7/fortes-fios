@@ -37,6 +37,7 @@ import {
   type DadosSalvarProduto,
 } from '@/components/admin/produtos/ModalFormularioProduto'
 import { ControleEstoqueProduto } from '@/components/admin/produtos/ControleEstoqueProduto'
+import BotaoCopiarLinkProduto from '@/components/admin/produtos/BotaoCopiarLinkProduto'
 import { supabase } from '@/lib/supabase'
 import type { CategoriaCardapio, TipoCategoriaCardapio } from '@/lib/supabase'
 import {
@@ -2153,7 +2154,7 @@ export default function ProdutosPage() {
                             key={produto.id}
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-border/70 bg-card p-2.5 sm:p-3"
+                            className="group grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-border/70 bg-card p-2.5 sm:p-3"
                           >
                             <div className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-muted sm:size-16">
                               {produto.imagem_url ? (
@@ -2210,6 +2211,17 @@ export default function ProdutosPage() {
                               </div>
                             </div>
 
+                            {/*
+                              Só para a tabela `produtos`: bebidas vivem em outra
+                              tabela e a página pública consulta `produtos`, então
+                              o link cairia em 404.
+                            */}
+                            {produto.tabela !== 'bebidas' ? (
+                              <BotaoCopiarLinkProduto
+                                produto={{ id: produto.id, nome: produto.nome }}
+                                publicado={Boolean(produto.disponivel)}
+                              />
+                            ) : null}
                             {podeEditarProdutos ? (
                               <Button
                                 type="button"

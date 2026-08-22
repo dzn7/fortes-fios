@@ -2,13 +2,14 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { ImageOff, Plus, Sparkles } from 'lucide-react'
 import { Produto } from '@/lib/supabase'
-import ModalIngredientes from './ModalIngredientes'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { produtoBloqueadoPorEstoque } from '@/lib/estoque-produto.mjs'
+import { caminhoDoProduto } from '@/lib/link-produto.mjs'
 import {
   calcularValorParcelaProduto,
   normalizarQuantidadeParcelas,
@@ -33,7 +34,6 @@ export default function CartaoProduto({
 }: CartaoProdutoProps) {
   const [imagemCarregada, setImagemCarregada] = useState(false)
   const [erroImagem, setErroImagem] = useState(false)
-  const [modalIngredientesAberto, setModalIngredientesAberto] = useState(false)
 
   const precoOriginal =
     typeof produto.preco_original === 'number' ? produto.preco_original : null
@@ -64,11 +64,19 @@ export default function CartaoProduto({
             : 'rounded-xl border border-border/70 hover:border-primary/30 hover:shadow-[0_12px_28px_-20px_hsl(var(--foreground)/0.3)]',
         )}
       >
-        <button
-          type="button"
-          onClick={() => setModalIngredientesAberto(true)}
+        {/*
+          Link, e não botão: o produto tem endereço próprio agora. Clicando no
+          catálogo a rota é interceptada e o produto abre por cima da lista;
+          abrir em nova aba ou copiar o endereço leva à página inteira. Um
+          `onClick` não daria nada disso.
+
+          Ver specs/pagina-publica-produto.md
+        */}
+        <Link
+          href={caminhoDoProduto(produto)}
+          scroll={false}
           className={cn(
-            'relative w-full overflow-hidden bg-muted text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+            'relative block w-full overflow-hidden bg-muted text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
             ehDestaque ? 'aspect-square' : 'aspect-[4/5]',
           )}
           aria-label={`Ver detalhes de ${produto.nome}`}
@@ -132,7 +140,7 @@ export default function CartaoProduto({
               </span>
             </div>
           ) : null}
-        </button>
+        </Link>
 
         <div
           className={cn(
@@ -228,12 +236,6 @@ export default function CartaoProduto({
         </div>
       </article>
 
-      <ModalIngredientes
-        produto={produto}
-        aberto={modalIngredientesAberto}
-        onFechar={() => setModalIngredientesAberto(false)}
-        onAdicionar={onAdicionar}
-      />
     </>
   )
 }

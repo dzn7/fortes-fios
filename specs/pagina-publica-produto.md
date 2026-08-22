@@ -1,0 +1,100 @@
+# Spec — Página pública do produto
+
+**Status:** implementada e validada
+**Data:** 2026-08-21
+
+## Objetivo
+
+Cada produto ganha um endereço próprio, compartilhável. No catálogo, clicar
+expande o produto por cima da lista; abrir o link direto mostra a página inteira.
+A quantidade é escolhida ali, antes de o item entrar no carrinho. No Admin, o
+card do produto oferece copiar esse link.
+
+## Formato do link — decidido com o usuário
+
+```
+/produto/mascara-hidratacao-profunda-9ceea5e4-5fa6-4677-b85d-d89bcb22b7ce
+         └────────── decoração legível ──────────┘└──────── a chave ────────┘
+```
+
+O nome é decoração; **quem identifica o produto é o uuid no fim**. Consequências:
+
+- **nenhuma migração**: não há coluna `slug` para criar, preencher nem manter;
+- **renomear o produto não quebra link já compartilhado** — o id não muda, e a
+  parte legível é recalculada sozinha;
+- a busca é pela **chave primária**.
+
+Alternativa descartada pelo usuário: coluna `slug` com índice único (link curto,
+mas migração em produção e o dilema do link antigo ao renomear).
+
+## Consulta — o que a skill `supabase-postgres-best-practices` disse aqui
+
+Plano real, medido em produção antes de escrever código:
+
+```
+Index Scan using produtos_pkey on produtos  (cost=0.27..2.49 rows=1)
+  Index Cond: (id = '9ceea5e4-…'::uuid)
+  Filter: disponivel
+  Buffers: shared hit=3          Execution Time: 1.305 ms
+```
+
+A regra `query-covering-indexes` mira 2–5× em consulta com heap fetch pesado.
+Com 3 buffers e 1,3 ms, **não há o que ganhar**: nenhum índice novo, nenhuma
+migração. A regra `data-pagination` não se aplica (busca de uma linha só).
+
+Seguindo o §3.9 do AGENTS e a regra `security-privileges`, a leitura é
+**server-side** (server component com `obterSupabaseAdmin`), e não mais uma
+consulta anon no browser. Só colunas já públicas do catálogo são selecionadas —
+`custo_unitario` fica de fora de propósito.
+
+## Comportamento esperado
+
+### Página `/produto/[slug]`
+
+- Mostra nome, categoria, foto, descrição, preço, preço original e desconto
+  quando houver, parcelas quando ativas, e o estado de estoque.
+- Seletor de quantidade com − e +, preso ao estoque disponível.
+- "Adicionar ao carrinho" leva a quantidade escolhida.
+- `generateMetadata` com título, descrição e `openGraph`/`twitter` apontando a
+  foto — é o que faz o link virar cartão no WhatsApp.
+- Produto **indisponível** (`disponivel = false`) → 404. É o interruptor com que
+  o Admin tira o produto do catálogo; manter a página viva o contradiria.
+- Produto **esgotado** (estoque) → a página existe e mostra "Esgotado", sem
+  permitir adicionar. Esgotado é estado de venda, não remoção.
+- Slug inválido, id inexistente ou uuid malformado → 404.
+
+### Expansão no catálogo
+
+- Clicar no cartão navega para o link do produto **interceptado**: abre por cima
+  do catálogo, sem remontar a lista nem perder a página/rolagem.
+- Voltar (botão do navegador ou gesto do celular) fecha e devolve ao catálogo.
+- Recarregar com o modal aberto cai na página inteira — mesma URL, mesmo conteúdo.
+
+### Admin
+
+- O card do produto ganha "copiar link": **aparece no hover no desktop** e fica
+  **sempre visível no toque**, porque no celular não existe hover.
+- Copiado confirma na própria UI e volta ao estado normal sozinho.
+
+## Regras testáveis (`src/lib/link-produto.mjs`)
+
+1. `slugDoProduto` junta nome higienizado + id.
+2. Acento vira letra simples; maiúscula vira minúscula; pontuação e espaço viram
+   `-`; `-` repetido colapsa; sobra nas pontas é aparada.
+3. Nome vazio, ausente ou só símbolos devolve apenas o id — nunca `-uuid`.
+4. Nome muito longo é cortado, para a URL não crescer sem limite.
+5. `idDoSlug` devolve o uuid do fim, aceitando maiúsculas.
+6. `idDoSlug` devolve `null` para slug sem uuid, uuid malformado, vazio ou não
+   string — nunca lança.
+7. `slugDoProduto` → `idDoSlug` devolve o id original (ida e volta), inclusive
+   para nome com acento, emoji e barra.
+8. `caminhoDoProduto` começa com `/produto/`.
+9. `urlPublicaDoProduto` junta origem sem barra dupla e sem barra sobrando.
+
+## Fora de escopo
+
+- coluna `slug`, índice novo, qualquer migração;
+- checkout, frete, cupom na página do produto;
+- listar produtos relacionados;
+- `ModalIngredientes` continua no repositório (§3.7) mesmo deixando de ser
+  aberto pelo cartão do catálogo.

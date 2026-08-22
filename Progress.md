@@ -1,5 +1,68 @@
 # Progress
 
+## [2026-08-21] Página pública do produto, com link próprio e quantidade
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Spec:** `specs/pagina-publica-produto.md`
+**Arquivos alterados:** `src/app/layout.tsx`, `src/components/CartaoProduto.tsx`, `src/app/admin/produtos/page.tsx`, `UI.md`, `Progress.md`
+**Criados:** `src/lib/link-produto.mjs` (+`.d.mts`), `src/lib/server/produto-publico.ts`, `src/app/produto/[slug]/page.tsx`, `src/app/@modal/default.tsx`, `src/app/@modal/(.)produto/[slug]/page.tsx`, `src/components/produto/DetalheProduto.tsx`, `src/components/produto/ModalProduto.tsx`, `src/components/produto/BarraProduto.tsx`, `src/components/admin/produtos/BotaoCopiarLinkProduto.tsx`, `tests/link-produto.test.mjs`, a spec
+
+### O formato do link — decidido com o usuário (§7)
+
+```
+/produto/creme-de-pentear-3-em-1-500ml-toque-final-9ceea5e4-…-d89bcb22b7ce
+```
+
+O nome é decoração; **quem identifica é o uuid no fim**. Ganhos: nenhuma
+migração, e **renomear o produto não quebra link já compartilhado**. A
+alternativa (coluna `slug` + índice único) foi apresentada e descartada pelo
+usuário — link curto, mas migração em produção e o dilema do link antigo ao
+renomear.
+
+### O que a skill `supabase-postgres-best-practices` disse aqui
+
+Plano medido em produção **antes** de escrever código:
+
+```
+Index Scan using produtos_pkey  (cost=0.27..2.49 rows=1)
+  Buffers: shared hit=3         Execution Time: 1.305 ms
+```
+
+A regra `query-covering-indexes` mira 2–5× em consulta com heap fetch pesado;
+com 3 buffers **não há o que ganhar**. Conclusão registrada: **nenhum índice
+novo, nenhuma migração**. `data-pagination` não se aplica (uma linha só). Pela
+`security-privileges` + §3.9, a leitura é server-side e a lista de colunas é
+fechada — `custo_unitario` fica de fora de propósito.
+
+**Decisões tomadas:** (1) Rotas interceptadas do App Router: clicar expande por
+cima do catálogo sem remontar a lista; recarregar cai na página inteira. Mesmo
+endereço, moldura diferente. (2) `DetalheProduto` é o mesmo componente nas duas
+molduras — dois arquivos e um sairia do ar sem ninguém notar. (3) A barra da
+página é própria e **não** reusa o `Header`, que exige busca, categorias e
+manipuladores de pedido: acoplaria as duas telas para ganhar um cabeçalho. (4)
+`disponivel = false` → 404, porque é o interruptor com que o Admin tira o
+produto do catálogo; esgotado é outra coisa e a página existe mostrando
+"Esgotado". (5) Sem `import 'server-only'`: o pacote não está instalado e
+acrescentá-lo seria dependência nova (§3.2).
+
+**Verificação:** `tsc --noEmit` ✓ 0 erros · build ✓ (rotas `ƒ /produto/[slug]` e
+`ƒ /(.)produto/[slug]` registradas) · `node --test` **342/343** · servidor local
+exercitado contra a produção: produto real **HTTP 200**, slug inválido **404**,
+uuid inexistente **404**, `/`, `/contato`, `/admin/login` e `/garcom/login` **200**,
+e a home sem nenhum diálogo injetado pelo slot vazio · `og:title`,
+`og:description`, `og:image` e `twitter:card` conferidos no HTML servido
+**Pendências / próximos passos:** `ModalIngredientes.tsx` continua no
+repositório (§3.7) mas nada mais o abre — o cartão agora navega. Remover é
+decisão do usuário.
+**Armadilhas descobertas:** (1) O 404 inicial na página do produto **não era do
+código**: um `next start` de tarefa anterior seguia vivo na porta e servia o
+build velho. Só ver o log do servidor mostrou isso — depurar a camada errada
+custaria caro. (2) O teste `validade no passado é recusada` foi diagnosticado:
+ele calcula "ontem" em **UTC** (`toISOString`), e o validador compara em **hora
+local**; entre 21h e meia-noite no UTC-3, "ontem UTC" é "hoje local" e o teste
+falha. Falha idêntica no HEAD limpo. Correção é 1 linha no teste, mas está fora
+do escopo desta task.
+
 ## [2026-08-20] Paginação numerada do catálogo e cupom visível no pedido
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

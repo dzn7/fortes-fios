@@ -567,6 +567,52 @@ A busca é acento-insensível e multi-termo, sobre nome + descrição + categori
 `Shampoo Hidratante`. Regra em `src/lib/filtros-catalogo.mjs`, coberta por
 `tests/filtros-catalogo.test.mjs`. Ver `specs/filtros-catalogo-cliente.md`.
 
+## Página do produto (cliente)
+
+Cada produto tem endereço próprio e compartilhável:
+
+```
+/produto/creme-de-pentear-3-em-1-500ml-toque-final-9ceea5e4-5fa6-4677-b85d-d89bcb22b7ce
+         └───────────── decoração legível ─────────────┘└──────── a chave ────────┘
+```
+
+**O nome é decoração; quem identifica o produto é o uuid no fim.** Renomear o
+produto não quebra link já compartilhado, e não existe coluna `slug` para manter.
+
+| Situação | Comportamento |
+|---|---|
+| Clique no cartão do catálogo | Rota **interceptada**: abre por cima da lista, a URL muda, o catálogo continua montado atrás (página e rolagem preservadas) |
+| Voltar (navegador ou gesto) | Fecha e devolve ao catálogo |
+| Link direto / recarregar | Página inteira, com `og:` para o link virar cartão no WhatsApp |
+| Produto oculto (`disponivel = false`) | 404 — é o interruptor com que o Admin tira o produto do catálogo |
+| Produto esgotado (estoque) | A página existe e mostra "Esgotado"; não dá para adicionar |
+
+A **quantidade é escolhida na página, antes do carrinho**, com a mesma trava de
+estoque do `ModalComplementos` (`avaliarCompraProduto`). Adicionar não abre o
+carrinho — quem levou mais de um provavelmente quer continuar comprando.
+
+`DetalheProduto` é o **mesmo** componente na página e no modal: se fossem dois,
+um sairia do ar sem ninguém notar. A barra da página é própria
+(`BarraProduto`) e não reusa o `Header` do catálogo, que exige busca, categorias
+e manipuladores de pedido — estado que só a home tem.
+
+### Copiar link (Admin › Produtos)
+
+| Tela | Visibilidade |
+|---|---|
+| Desktop | Aparece no **hover** do card (`sm:opacity-0 sm:group-hover:opacity-100`) |
+| Mobile | **Sempre visível** — não existe hover no toque |
+| Teclado | `sm:group-focus-within:opacity-100` traz o botão de volta ao focar |
+
+Produto oculto mostra o botão **desabilitado** com "Sem link": copiar levaria a
+um 404. Bebidas não têm botão — vivem em outra tabela, e a página consulta
+`produtos`.
+
+O endereço sai de `window.location.origin`, não de uma env: o link tem de
+apontar para o domínio por onde a pessoa entrou, produção ou preview.
+
+Ver `specs/pagina-publica-produto.md`.
+
 ## Paginação do catálogo (cliente)
 
 A grade mostra **24 produtos por página**, com navegação numerada — os mesmos

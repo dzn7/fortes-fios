@@ -67,8 +67,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({
   children,
+  modal,
 }: {
   children: React.ReactNode
+  /**
+   * Slot da rota paralela `@modal`. Recebe a rota interceptada
+   * `(.)produto/[slug]`, que abre o produto por cima do catálogo; em qualquer
+   * outra rota, `@modal/default.tsx` devolve `null`.
+   *
+   * Spec: specs/pagina-publica-produto.md
+   */
+  modal: React.ReactNode
 }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
@@ -90,6 +99,7 @@ export default function RootLayout({
             <ManifestManager />
             <AppToaster />
             {children}
+            {modal}
           </CarrinhoProvider>
         </ThemeProvider>
       </body>
