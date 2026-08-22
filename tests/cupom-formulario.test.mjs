@@ -143,8 +143,22 @@ test('cupom de produto exige o produto escolhido', () => {
   )
 })
 
+/**
+ * Data `AAAA-MM-DD` no fuso LOCAL.
+ *
+ * `toISOString()` devolve a data em UTC, e era esse o defeito: o validador
+ * compara `${validade}T23:59:59` em hora local, então entre 21h e a meia-noite
+ * no UTC-3 o "ontem" calculado em UTC ainda era **hoje** localmente, o limite
+ * caía no futuro e o teste falhava. Não falhava sempre — só nessa janela de
+ * três horas, o que fazia parecer instabilidade aleatória.
+ */
+const dataLocal = (instante) => {
+  const local = new Date(instante.getTime() - instante.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
 test('validade no passado é recusada', () => {
-  const ontem = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const ontem = dataLocal(new Date(Date.now() - 24 * 60 * 60 * 1000))
   const erros = validarFormularioCupom(form({ validadeFim: ontem }))
   assert.ok(erros.some((erro) => erro.campo === 'validadeFim'))
 })
