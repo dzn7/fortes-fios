@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useStatusLoja } from '@/lib/useStatusLoja'
+import type { Produto } from '@/lib/supabase'
+import BuscaProdutos from '@/components/BuscaProdutos'
 import { linkWhatsApp } from '@/lib/whatsapp.mjs'
 import { IconeCategoria } from '@/components/icons/IconeCategoria'
 import Image from 'next/image'
@@ -14,6 +16,7 @@ import {
   Menu,
   Moon,
   ReceiptText,
+  Search,
   ShoppingBag,
   Sun,
 } from 'lucide-react'
@@ -42,6 +45,14 @@ type HeaderProps = {
   onSelecionarCategoria: (categoria: string) => void
   ofertasDisponiveis: boolean
   onAbrirOfertas: () => void
+  /**
+   * Catálogo já carregado, para a busca da lupa.
+   *
+   * Vem por prop, e não de uma consulta própria: a home já o tem em memória, e
+   * buscar aqui custa ~1,7 ms por tecla contra 50–300 ms de uma requisição.
+   * Ver specs/busca-no-header.md.
+   */
+  produtos?: readonly Produto[]
 }
 
 export default function Header({
@@ -54,6 +65,7 @@ export default function Header({
   onSelecionarCategoria,
   ofertasDisponiveis,
   onAbrirOfertas,
+  produtos = [],
 }: HeaderProps) {
   const { theme, setTheme } = useTheme()
   const { quantidadeTotal } = useCarrinho()
@@ -67,6 +79,7 @@ export default function Header({
   const [mounted, setMounted] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [menuAberto, setMenuAberto] = useState(false)
+  const [buscaAberta, setBuscaAberta] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -89,7 +102,7 @@ export default function Header({
     >
       <FaixaRodape />
       <div className="mx-auto max-w-7xl px-3 py-2.5 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 md:flex md:justify-between md:gap-3">
+        <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem_2.75rem] items-center gap-1 md:flex md:justify-between md:gap-3">
           <Sheet open={menuAberto} onOpenChange={setMenuAberto}>
             <SheetTrigger asChild>
               <Button
@@ -274,6 +287,17 @@ export default function Header({
             type="button"
             variant="ghost"
             size="icon"
+            onClick={() => setBuscaAberta(true)}
+            className="size-11 md:hidden"
+            aria-label="Buscar produtos"
+          >
+            <Search className="size-5" aria-hidden />
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
             onClick={onAbrirCarrinho}
             className="relative size-11 md:hidden"
             aria-label={
@@ -291,6 +315,16 @@ export default function Header({
           </Button>
 
           <div className="hidden items-center gap-1.5 md:flex">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setBuscaAberta(true)}
+              aria-label="Buscar produtos"
+              className="size-11 shrink-0 md:size-10"
+            >
+              <Search className="h-5 w-5 text-muted-foreground" />
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -347,6 +381,12 @@ export default function Header({
           </div>
         </div>
       </div>
+
+      <BuscaProdutos
+        aberto={buscaAberta}
+        onFechar={() => setBuscaAberta(false)}
+        produtos={produtos}
+      />
     </header>
   )
 }

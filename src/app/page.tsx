@@ -732,6 +732,7 @@ export default function Home() {
         iconesCategoria={iconesCategoria}
         categoriaAtiva={categoriaAtiva}
         onSelecionarCategoria={selecionarCategoria}
+        produtos={produtos}
         ofertasDisponiveis={produtosEmOferta.length > 0}
         onAbrirOfertas={() =>
           document

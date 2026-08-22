@@ -1,5 +1,67 @@
 # Progress
 
+## [2026-08-22] Lupa de busca no header
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Spec:** `specs/busca-no-header.md` · **Skill:** `supabase-postgres-best-practices`
+**Arquivos alterados:** `src/components/Header.tsx`, `src/app/page.tsx`, `UI.md`, `Progress.md`
+**Criados:** `src/lib/busca-produtos.mjs` (+`.d.mts`), `src/components/BuscaProdutos.tsx`, `tests/busca-produtos.test.mjs`, a spec
+
+### O que a skill decidiu: não consultar o banco
+
+Pedido explícito de "sem queries pesadas e sem travar". Medido **antes** de
+escrever código, sobre os 510 produtos reais:
+
+| Opção | Custo por tecla |
+|---|---|
+| **Cliente**, catálogo já em memória | **1,7 ms**, **zero** queries |
+| Servidor com `ilike '%termo%'` | `Seq Scan` + **ida e volta de rede** (50–300 ms no celular) + invocação serverless |
+| Servidor com `tsvector` + GIN | migração e índice novo, e **continua pagando a rede** |
+
+Plano real do `ilike`, colhido em produção:
+
+```
+Limit  (cost=0.00..8.80 rows=20)
+  ->  Seq Scan on produtos  (cost=0.00..39.62 rows=90)
+        Filter: (disponivel AND ((nome ~~* '%shampoo%') OR (descricao ~~* '%shampoo%')))
+```
+
+A regra `advanced-full-text-search` está certa e explica o `Seq Scan`: curinga à
+esquerda não usa índice. Mas ela vale **quando é preciso consultar o banco** —
+aqui o catálogo inteiro já está no browser. Índice nenhum torna uma requisição
+mais rápida que varrer 510 itens em memória. **Nenhuma migração, nenhum índice,
+nenhuma query nova.**
+
+**Limiar registrado:** o argumento se inverte quando o catálogo não couber em
+memória (~2 000 produtos, o mesmo limiar da paginação). Aí a busca vai ao
+servidor **com `tsvector` + GIN**, nunca com `ilike`.
+
+### Ordenação
+
+`filtrarProdutos` devolvia na ordem do catálogo: "sh" traria 92 produtos com o
+primeiro sendo quem estivesse na frente da lista. `buscarProdutos` ordena por
+proximidade — nome começa > nome contém > categoria > só descrição — e o empate
+preserva a ordem do catálogo, que é a curadoria da loja.
+
+**Decisões tomadas:** (1) Sem debounce e sem estado de carregamento: a 1,7 ms
+não há o que esperar, e um spinner só mentiria. (2) Teto de 20 desenhados com o
+total exibido — lista de 500 linhas trava o toque. (3) Mínimo de 2 letras. (4)
+Esgotado aparece marcado, não sumido: o produto existe e a pessoa procurou por
+ele. (5) A superfície é o mesmo `Sheet side="bottom"` do menu de categorias.
+
+**Verificação:** `tsc --noEmit` ✓ 0 erros · build ✓ 0 erros · `node --test`
+**353/353** · busca exercitada contra os 510 produtos de produção: "sh" → 92 em
+1,76 ms com shampoos no topo, "oleo" → 101 achando `Óleo` com acento, "manga
+rosa" → 1 · nenhuma chamada de rede nos arquivos novos (só `import type`) ·
+classes arbitrárias conferidas no CSS gerado
+**Pendências / próximos passos:** A conferência visual depende do navegador e a
+extensão do Chrome segue desconectada.
+**Armadilhas descobertas:** Meu primeiro regex de verificação disse que
+`grid-cols-[2.75rem_minmax(0,1fr)_2.75rem_2.75rem]` não gerava CSS — era erro de
+escape no **regex**, não no Tailwind; a classe estava lá. Quase "corrigi" um
+problema que não existia. Conferir é bom; conferir a própria conferência,
+melhor.
+
 ## [2026-08-21] O produto expandido vira drawer único, com rodapé fixo
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

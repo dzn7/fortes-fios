@@ -567,6 +567,29 @@ A busca é acento-insensível e multi-termo, sobre nome + descrição + categori
 `Shampoo Hidratante`. Regra em `src/lib/filtros-catalogo.mjs`, coberta por
 `tests/filtros-catalogo.test.mjs`. Ver `specs/filtros-catalogo-cliente.md`.
 
+## Busca no header (cliente)
+
+Lupa ao lado do carrinho, no mobile e no desktop. Abre um `Sheet side="bottom"`
+— a mesma superfície do menu de categorias deste header, uma linguagem só para
+as duas gavetas que saem dali.
+
+| Elemento | Regra |
+|---|---|
+| Campo | Faixa fixa no topo da folha; foco automático ao abrir; `Escape` fecha |
+| Resultados | O **único** container de rolagem; miniatura, categoria, nome, preço |
+| Ordenação | nome começa com o termo → nome contém → categoria → só descrição. Empate preserva a ordem do catálogo |
+| Teto | 20 desenhados, com o total exibido. Lista de 500 linhas trava o toque |
+| Mínimo | 2 letras — "a" traria quase o catálogo inteiro |
+| Esgotado | Aparece **marcado**, não sumido: o produto existe e a pessoa procurou |
+| Tocar num resultado | Fecha a busca e abre aquele produto |
+
+> **Sem debounce e sem estado de carregamento, de propósito.** A busca é sobre o
+> catálogo já em memória: **1,7 ms por tecla, zero queries**, medido sobre os 510
+> produtos reais. Não há o que esperar.
+
+Regra em `src/lib/busca-produtos.mjs`, coberta por `tests/busca-produtos.test.mjs`.
+Ver `specs/busca-no-header.md`.
+
 ## Página do produto (cliente)
 
 Cada produto tem endereço próprio e compartilhável:
