@@ -590,9 +590,28 @@ vitrine atrás, sem busca, sem as outras categorias.
 | Produto oculto (`disponivel = false`) | 404 — é o interruptor com que o Admin tira o produto do catálogo |
 | Produto esgotado (estoque) | Aparece e mostra "Esgotado"; não dá para adicionar |
 
-> ⚠️ O `DialogPortal` do Radix só monta no cliente: no link direto, o HTML
-> servido traz o catálogo e o produto só aparece depois da hidratação. É o preço
-> de o produto morar num diálogo.
+### A superfície
+
+**Drawer em toda tela**, não o `Dialog variant="responsive"` — aquele vira
+diálogo centrado acima de 768px, dando duas telas para o mesmo conteúdo. Sobe de
+baixo com a mesma transição em qualquer largura; no desktop, contido em
+`sm:max-w-lg`.
+
+| Faixa | Regra |
+|---|---|
+| Moldura | `p-0` e **uma** `max-h-[92dvh]` |
+| Corpo | o **único** `overflow-y-auto`, com `min-h-0` |
+| Rodapé | `shrink-0`, fora do scroller — quantidade e "Adicionar ao carrinho" sempre visíveis, com `env(safe-area-inset-bottom)` |
+
+- Imagem com teto `max-h-[34dvh]`: quadrada, ela ocupava a tela inteira em 430px.
+- Botões − e + em `size-11` (44px, mínimo de toque). Eram 36px.
+- "Copiar link" é só ícone: o rótulo roubava largura do CTA e quebrava a linha.
+
+> ⚠️ Centralizar o drawer no desktop é `mx-auto`, **nunca** `-translate-x-1/2`:
+> o vaul escreve `transform` inline para animar, e inline vence classe.
+
+> ⚠️ O portal só monta no cliente: no link direto o HTML servido traz o catálogo
+> e o produto aparece depois da hidratação.
 
 A **quantidade é escolhida na página, antes do carrinho**, com a mesma trava de
 estoque do `ModalComplementos` (`avaliarCompraProduto`). Adicionar não abre o

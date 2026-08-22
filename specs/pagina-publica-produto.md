@@ -77,12 +77,43 @@ Nos dois casos o conteúdo é o mesmo `DetalheProduto`; só muda quem o emoldura
   adicionar.
 - Slug inválido, id inexistente ou uuid malformado → 404.
 
-**Limitação conhecida.** O `DialogPortal` do Radix só monta no cliente, então o
-HTML servido traz o catálogo mas **não** o produto expandido: no link direto, o
-produto aparece depois da hidratação. Medido no HTML servido — `id="catalogo"` e
-a busca presentes, `role="dialog"` ausente. É o preço de o produto morar num
-diálogo; a tela separada não tinha esse atraso, mas foi recusada por tirar a
-pessoa da loja.
+### A superfície: drawer em toda tela
+
+**Uma superfície só.** O `Dialog variant="responsive"` do projeto troca para
+diálogo centrado acima de 768px — duas telas diferentes para o mesmo conteúdo.
+Aqui o produto usa o `Drawer` (vaul) direto: sobe de baixo, com a mesma
+transição em qualquer largura, e no desktop fica contido em `sm:max-w-lg`.
+
+**Centralizar no desktop é `mx-auto`, nunca `-translate-x-1/2`.** O vaul escreve
+`transform` inline para animar e arrastar, e estilo inline vence classe: a folha
+apareceria deslocada meia largura. Com `inset-x-0` + `max-w`, a margem
+automática centraliza sem tocar no transform.
+
+**Uma altura, um scroller.** A versão anterior empilhava `max-h-[96dvh]` do
+`DrawerContent`, o `overflow-y-auto p-6` do branch drawer do `DialogContent` e um
+`max-h-[92dvh] overflow-y-auto` por cima: três limites brigando e dois
+containers de rolagem aninhados. O conteúdo ficava cortado sem rolar e o botão
+de comprar, fora de alcance. Agora:
+
+| Faixa | Regra |
+|---|---|
+| Moldura (`DrawerContent`) | `p-0`, uma única `max-h-[92dvh]` |
+| Corpo | **o único** `overflow-y-auto`, com `min-h-0` — sem ele o filho estica o pai e empurra o rodapé para fora da folha |
+| Rodapé | `shrink-0`, fora do scroller: quantidade e "Adicionar ao carrinho" **sempre visíveis**, com `env(safe-area-inset-bottom)` para escapar da barra de gestos do iPhone |
+
+A imagem tem teto em `max-h-[34dvh]`: numa tela de 430px a versão quadrada
+ocupava a altura inteira e empurrava tudo para fora da vista.
+
+Os botões − e + são `size-11` (44px), o mínimo de alvo de toque; antes eram
+`size-9` (36px). O "copiar link" virou só ícone — o rótulo roubava largura do
+CTA principal e quebrava os dois em duas linhas.
+
+**Limitação conhecida.** O portal (Radix no `Dialog`, vaul no `Drawer`) só monta
+no cliente, então o HTML servido traz o catálogo mas **não** o produto
+expandido: no link direto, o produto aparece depois da hidratação. Medido no
+HTML servido — `id="catalogo"` e a busca presentes, o conteúdo do drawer
+ausente. É o preço de o produto morar numa superfície sobreposta; a tela
+separada não tinha esse atraso, mas foi recusada por tirar a pessoa da loja.
 
 
 ### Admin

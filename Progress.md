@@ -1,5 +1,49 @@
 # Progress
 
+## [2026-08-21] O produto expandido vira drawer único, com rodapé fixo
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Spec:** `specs/pagina-publica-produto.md` · **Skill:** `ui-review`
+**Arquivos alterados:** `src/components/produto/ModalProduto.tsx`, `src/components/produto/DetalheProduto.tsx`, `specs/pagina-publica-produto.md`, `UI.md`, `Progress.md`
+
+**O defeito, achado pela revisão.** Três limites de altura brigavam pela mesma
+folha — `max-h-[96dvh]` do `DrawerContent`, o `overflow-y-auto p-6` do branch
+drawer do `DialogContent`, e um `max-h-[92dvh] overflow-y-auto` por cima — com
+dois containers de rolagem aninhados. Resultado: conteúdo cortado que não rolava
+e o botão de comprar fora de alcance, exatamente o que o print mostrava.
+
+| # | Problema | Correção |
+|---|---|---|
+| 1 | Três alturas e dois scrollers aninhados | Moldura `p-0` com **uma** `max-h-[92dvh]`; corpo é o **único** `overflow-y-auto`, com `min-h-0` |
+| 2 | CTA exigia rolar até o fim | Rodapé `shrink-0` **fora** do scroller, sempre visível |
+| 3 | Duas telas: drawer no mobile, diálogo no desktop | `Drawer` do vaul em toda largura, contido em `sm:max-w-lg` |
+| 4 | Imagem quadrada engolia a tela em 430px | Teto `max-h-[34dvh]` |
+| 5 | Alvo de toque de 36px nos − e + | `size-11` (44px) |
+| 6 | Rótulo "Copiar link" quebrava a linha do CTA | Vira só ícone |
+
+`min-h-0` é a peça central e não um detalhe: sem ele o filho estica o pai no
+flex e o rodapé sai empurrado para fora da folha — era essa a razão de o CTA
+sumir.
+
+**Decisão tomada:** centralizar o drawer no desktop com `mx-auto` + `inset-x-0`,
+e **não** com `-translate-x-1/2`. O vaul escreve `transform` inline para animar e
+arrastar, e estilo inline vence classe: a folha apareceria deslocada meia
+largura. Escrevi a versão errada primeiro e corrigi antes de fechar.
+
+**Verificação:** `tsc --noEmit` ✓ 0 erros · build ✓ 0 erros · `node --test`
+**343/343** · link direto **HTTP 200** · as 10 classes arbitrárias conferidas no
+CSS gerado (`max-h-[34dvh]`, `max-h-[92dvh]`, `min-h-0`, `overscroll-contain`,
+`env(safe-area-inset-bottom)`, `-webkit-overflow-scrolling`, `sm:mx-auto`,
+`sm:max-w-lg`, `size-11`, `size-12`) · conflito de altura resolvido conferido no
+`twMerge`: `96dvh` não sobrevive, `92dvh` vence
+**Pendências / próximos passos:** A conferência visual dependeria do navegador,
+e a extensão do Chrome segue desconectada — o que dá para provar por código foi
+provado, mas **quem precisa olhar a tela é você**.
+**Armadilhas descobertas:** Classe arbitrária que não gera CSS é falha muda —
+foi assim que as animações do `ui/dialog` viraram classes mortas (sem
+`tailwindcss-animate`). Por isso as 10 foram conferidas no CSS do build, e não
+assumidas.
+
 ## [2026-08-21] Correção: o link do produto abre a loja, não uma tela solta
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

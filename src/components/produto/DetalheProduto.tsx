@@ -29,13 +29,14 @@ type DetalheProdutoProps = {
 /**
  * Conteúdo do produto expandido.
  *
- * O **mesmo** componente serve ao link direto e à rota interceptada — se fossem
- * dois, um sairia do ar sem ninguém notar. Nas duas o produto aparece por cima
- * do catálogo, então não há variante de layout a manter.
+ * **Duas faixas: uma que rola e uma que não.** O erro da versão anterior era não
+ * ter essa separação — tudo num fluxo só, dentro de containers de rolagem
+ * aninhados. Numa tela de 430 px a imagem quadrada ocupava a altura inteira e o
+ * botão de comprar nascia fora da vista, sem rolagem que o alcançasse.
  *
- * A quantidade é escolhida **aqui, antes do carrinho**, com a trava de estoque
- * que o `ModalComplementos` já usava (`avaliarCompraProduto`). Adicionar não
- * abre o carrinho: quem quis mais de um provavelmente quer continuar comprando.
+ * Agora o rodapé com quantidade e "Adicionar ao carrinho" é `shrink-0` e fica
+ * sempre visível; só a faixa de cima rola, e é o **único** container de rolagem
+ * da tela. A imagem ganha teto em `dvh` para nunca engolir a folha.
  *
  * Spec: specs/pagina-publica-produto.md
  */
@@ -80,56 +81,61 @@ export default function DetalheProduto({ produto }: DetalheProdutoProps) {
   }
 
   return (
-    <div className="grid gap-6 sm:grid-cols-2 sm:gap-8">
-      <div className="relative aspect-square overflow-hidden rounded-xl border border-border/70 bg-muted">
-        {temImagem ? (
-          <Image
-            src={produto.imagem_url}
-            alt={produto.nome}
-            fill
-            // A foto do produto é o maior elemento da tela: prioridade alta para
-            // ela não chegar depois do texto.
-            priority
-            sizes="(max-width: 640px) 100vw, 45vw"
-            className={cn('object-contain p-4', esgotado && 'opacity-45 grayscale')}
-          />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-            <ImageOff className="size-10 opacity-50" strokeWidth={1.5} aria-hidden />
-            <span className="text-sm">Foto em breve</span>
-          </div>
-        )}
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/*
+        O único container de rolagem da tela. `min-h-0` é o que permite ele
+        encolher dentro do flex — sem isso o filho estica o pai e o rodapé sai
+        empurrado para fora da folha, que era o defeito.
+      */}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-2 [-webkit-overflow-scrolling:touch] sm:px-6">
+        <div className="relative mx-auto aspect-square max-h-[34dvh] w-full overflow-hidden rounded-xl bg-muted">
+          {temImagem ? (
+            <Image
+              src={produto.imagem_url}
+              alt={produto.nome}
+              fill
+              // A foto é o maior elemento da folha: prioridade alta para ela não
+              // chegar depois do texto.
+              priority
+              sizes="(max-width: 640px) 100vw, 32rem"
+              className={cn('object-contain p-3', esgotado && 'opacity-45 grayscale')}
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              <ImageOff className="size-9 opacity-50" strokeWidth={1.5} aria-hidden />
+              <span className="text-sm">Foto em breve</span>
+            </div>
+          )}
 
-        {possuiDesconto && (
-          <Badge className="absolute right-3 top-3 bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground">
-            {produto.desconto}% OFF
-          </Badge>
-        )}
+          {possuiDesconto && (
+            <Badge className="absolute left-2 top-2 bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground">
+              {produto.desconto}% OFF
+            </Badge>
+          )}
 
-        {esgotado && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/40">
-            <span className="rounded-full border border-foreground/15 bg-background/90 px-4 py-2 text-xs font-semibold tracking-[0.18em] text-foreground shadow-sm">
-              ESGOTADO
-            </span>
-          </div>
-        )}
-      </div>
+          {esgotado && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/40">
+              <span className="rounded-full border border-foreground/15 bg-background/90 px-4 py-2 text-xs font-semibold tracking-[0.18em] text-foreground shadow-sm">
+                ESGOTADO
+              </span>
+            </div>
+          )}
+        </div>
 
-      <div className="flex flex-col">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <p className="mt-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           {produto.categoria}
         </p>
-        <h1 className="mt-1 text-xl font-semibold leading-tight text-foreground sm:text-2xl">
+        <h2 className="mt-1 text-lg font-semibold leading-snug text-foreground sm:text-xl">
           {produto.nome}
-        </h1>
+        </h2>
 
         {produto.descricao ? (
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             {produto.descricao}
           </p>
         ) : null}
 
-        <div className="mt-5 flex items-baseline gap-2.5">
+        <div className="mt-4 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
           {possuiDesconto && (
             <span className="text-sm text-muted-foreground line-through">
               {formatarMoeda(precoOriginal || 0)}
@@ -137,7 +143,7 @@ export default function DetalheProduto({ produto }: DetalheProdutoProps) {
           )}
           <span
             className={cn(
-              'text-3xl font-semibold tabular-nums',
+              'text-2xl font-semibold tabular-nums',
               possuiDesconto ? 'text-primary' : 'text-foreground',
             )}
           >
@@ -154,73 +160,86 @@ export default function DetalheProduto({ produto }: DetalheProdutoProps) {
             sem juros
           </p>
         ) : null}
+      </div>
 
-        <div className="mt-auto space-y-3 pt-6">
-          {!esgotado && (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">Quantidade</span>
-              <div className="flex items-center gap-1 rounded-lg border border-border/70 p-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-9"
-                  onClick={() => setQuantidade((atual) => Math.max(1, atual - 1))}
-                  disabled={quantidade <= 1}
-                  aria-label="Diminuir quantidade"
-                >
-                  <Minus className="size-4" />
-                </Button>
-                <span
-                  className="w-8 text-center text-sm font-semibold tabular-nums text-foreground"
-                  aria-live="polite"
-                >
-                  {quantidade}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-9"
-                  onClick={() => setQuantidade((atual) => atual + 1)}
-                  disabled={!podeAumentar}
-                  aria-label="Aumentar quantidade"
-                >
-                  <Plus className="size-4" />
-                </Button>
-              </div>
-              {/* Só avisa do limite quando ele foi realmente alcançado. */}
-              {!podeAumentar && (
-                <span className="text-xs text-muted-foreground">
-                  Limite do estoque
-                </span>
-              )}
+      {/*
+        Faixa fixa. `shrink-0` para o flex nunca a comprimir, e o
+        `env(safe-area-inset-bottom)` para o botão não ficar sob a barra de
+        gestos do iPhone.
+      */}
+      <div className="shrink-0 border-t border-border/70 bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">
+        {!esgotado && (
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">Quantidade</span>
+            <div className="flex items-center gap-1 rounded-lg border border-border/70 p-1">
+              {/* size-11 = 44px, o mínimo de alvo de toque. */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-11"
+                onClick={() => setQuantidade((atual) => Math.max(1, atual - 1))}
+                disabled={quantidade <= 1}
+                aria-label="Diminuir quantidade"
+              >
+                <Minus className="size-4" />
+              </Button>
+              <span
+                className="w-9 text-center text-base font-semibold tabular-nums text-foreground"
+                aria-live="polite"
+              >
+                {quantidade}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-11"
+                onClick={() => setQuantidade((atual) => atual + 1)}
+                disabled={!podeAumentar}
+                aria-label="Aumentar quantidade"
+              >
+                <Plus className="size-4" />
+              </Button>
             </div>
-          )}
-
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button
-              type="button"
-              className="h-12 flex-1 gap-2 text-sm"
-              onClick={adicionar}
-              disabled={esgotado}
-            >
-              <ShoppingBag className="size-4" />
-              {esgotado ? 'Esgotado' : 'Adicionar ao carrinho'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12 gap-2 text-sm"
-              onClick={() => void copiarLink()}
-              aria-label="Copiar link deste produto"
-            >
-              {copiado ? <Check className="size-4" /> : <Link2 className="size-4" />}
-              {copiado ? 'Link copiado' : 'Copiar link'}
-            </Button>
           </div>
+        )}
 
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            className="h-12 flex-1 gap-2 text-sm"
+            onClick={adicionar}
+            disabled={esgotado}
+          >
+            <ShoppingBag className="size-4" />
+            {esgotado ? 'Esgotado' : 'Adicionar ao carrinho'}
+          </Button>
+          {/*
+            Ícone só: o rótulo roubava largura do CTA principal numa tela de
+            430px e empurrava os dois para duas linhas.
+          */}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-12 shrink-0"
+            onClick={() => void copiarLink()}
+            aria-label={copiado ? 'Link copiado' : 'Copiar link deste produto'}
+          >
+            {copiado ? (
+              <Check className="size-4 text-primary" />
+            ) : (
+              <Link2 className="size-4" />
+            )}
+          </Button>
         </div>
+
+        {!esgotado && !podeAumentar && (
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            Você atingiu o limite do estoque disponível.
+          </p>
+        )}
       </div>
     </div>
   )
