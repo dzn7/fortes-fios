@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import Link from 'next/link'
 import { Check, ImageOff, Link2, Minus, Plus, ShoppingBag } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Produto } from '@/lib/supabase'
@@ -25,15 +24,14 @@ const formatarMoeda = (valor: number) =>
 
 type DetalheProdutoProps = {
   produto: Produto
-  /** Modal ganha respiro menor; a página cheia usa a largura toda. */
-  variante?: 'pagina' | 'modal'
 }
 
 /**
- * Conteúdo da página do produto.
+ * Conteúdo do produto expandido.
  *
- * O **mesmo** componente serve a `/produto/[slug]` e à rota interceptada que
- * abre por cima do catálogo — se fossem dois, um sairia do ar sem ninguém notar.
+ * O **mesmo** componente serve ao link direto e à rota interceptada — se fossem
+ * dois, um sairia do ar sem ninguém notar. Nas duas o produto aparece por cima
+ * do catálogo, então não há variante de layout a manter.
  *
  * A quantidade é escolhida **aqui, antes do carrinho**, com a trava de estoque
  * que o `ModalComplementos` já usava (`avaliarCompraProduto`). Adicionar não
@@ -41,7 +39,7 @@ type DetalheProdutoProps = {
  *
  * Spec: specs/pagina-publica-produto.md
  */
-export default function DetalheProduto({ produto, variante = 'pagina' }: DetalheProdutoProps) {
+export default function DetalheProduto({ produto }: DetalheProdutoProps) {
   const { adicionarItem } = useCarrinho()
   const [quantidade, setQuantidade] = useState(1)
   const [copiado, setCopiado] = useState(false)
@@ -82,12 +80,7 @@ export default function DetalheProduto({ produto, variante = 'pagina' }: Detalhe
   }
 
   return (
-    <div
-      className={cn(
-        'grid gap-6 sm:grid-cols-2 sm:gap-8',
-        variante === 'pagina' && 'sm:gap-10',
-      )}
-    >
+    <div className="grid gap-6 sm:grid-cols-2 sm:gap-8">
       <div className="relative aspect-square overflow-hidden rounded-xl border border-border/70 bg-muted">
         {temImagem ? (
           <Image
@@ -126,12 +119,7 @@ export default function DetalheProduto({ produto, variante = 'pagina' }: Detalhe
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           {produto.categoria}
         </p>
-        <h1
-          className={cn(
-            'mt-1 font-semibold leading-tight text-foreground',
-            variante === 'pagina' ? 'text-2xl sm:text-3xl' : 'text-xl sm:text-2xl',
-          )}
-        >
+        <h1 className="mt-1 text-xl font-semibold leading-tight text-foreground sm:text-2xl">
           {produto.nome}
         </h1>
 
@@ -232,14 +220,6 @@ export default function DetalheProduto({ produto, variante = 'pagina' }: Detalhe
             </Button>
           </div>
 
-          {variante === 'pagina' && (
-            <Link
-              href="/#catalogo"
-              className="inline-block pt-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
-            >
-              Ver todo o catálogo
-            </Link>
-          )}
         </div>
       </div>
     </div>

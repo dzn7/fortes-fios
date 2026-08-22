@@ -579,22 +579,27 @@ Cada produto tem endereço próprio e compartilhável:
 **O nome é decoração; quem identifica o produto é o uuid no fim.** Renomear o
 produto não quebra link já compartilhado, e não existe coluna `slug` para manter.
 
+**Nunca existe tela separada de produto** — em toda entrada, o produto aparece
+**por cima do catálogo**. Uma tela solta tirava a pessoa da loja: cartão sem
+vitrine atrás, sem busca, sem as outras categorias.
+
 | Situação | Comportamento |
 |---|---|
-| Clique no cartão do catálogo | Rota **interceptada**: abre por cima da lista, a URL muda, o catálogo continua montado atrás (página e rolagem preservadas) |
-| Voltar (navegador ou gesto) | Fecha e devolve ao catálogo |
-| Link direto / recarregar | Página inteira, com `og:` para o link virar cartão no WhatsApp |
+| Clique no cartão do catálogo | Rota **interceptada**: abre por cima da lista, a URL muda, o catálogo continua montado atrás (página e rolagem preservadas). Fechar volta ao ponto exato |
+| Link direto / recarregar | `/produto/[slug]` renderiza o catálogo **e** o produto por cima. Fechar vai para `/` — quem chegou pelo WhatsApp não tem catálogo na pilha, e voltar o jogaria para fora do site |
 | Produto oculto (`disponivel = false`) | 404 — é o interruptor com que o Admin tira o produto do catálogo |
-| Produto esgotado (estoque) | A página existe e mostra "Esgotado"; não dá para adicionar |
+| Produto esgotado (estoque) | Aparece e mostra "Esgotado"; não dá para adicionar |
+
+> ⚠️ O `DialogPortal` do Radix só monta no cliente: no link direto, o HTML
+> servido traz o catálogo e o produto só aparece depois da hidratação. É o preço
+> de o produto morar num diálogo.
 
 A **quantidade é escolhida na página, antes do carrinho**, com a mesma trava de
 estoque do `ModalComplementos` (`avaliarCompraProduto`). Adicionar não abre o
 carrinho — quem levou mais de um provavelmente quer continuar comprando.
 
-`DetalheProduto` é o **mesmo** componente na página e no modal: se fossem dois,
-um sairia do ar sem ninguém notar. A barra da página é própria
-(`BarraProduto`) e não reusa o `Header` do catálogo, que exige busca, categorias
-e manipuladores de pedido — estado que só a home tem.
+`DetalheProduto` é o **mesmo** componente nas duas entradas: se fossem dois, um
+sairia do ar sem ninguém notar.
 
 ### Copiar link (Admin › Produtos)
 

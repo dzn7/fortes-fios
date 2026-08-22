@@ -1,5 +1,52 @@
 # Progress
 
+## [2026-08-21] Correção: o link do produto abre a loja, não uma tela solta
+
+**Agente/Modelo:** Claude Opus 5 (Claude Code)
+**Spec:** `specs/pagina-publica-produto.md`
+**Arquivos alterados:** `src/app/produto/[slug]/page.tsx`, `src/components/produto/ModalProduto.tsx`, `src/components/produto/DetalheProduto.tsx`, `tests/cupom-formulario.test.mjs`, `specs/pagina-publica-produto.md`, `UI.md`, `Progress.md`
+**Removidos:** `src/components/produto/BarraProduto.tsx` — era a barra da tela solta, criada na mesma sessão e obsoleta com a correção
+
+**O que estava errado.** O link direto abria uma tela separada: cartão do produto
+sozinho, sem vitrine atrás, sem busca, sem as outras categorias, e "voltar ao
+catálogo" como clique obrigatório. Tirava a pessoa da loja bem no momento em que
+ela acabava de chegar por um link compartilhado.
+
+Agora `/produto/[slug]` renderiza **o catálogo com o produto por cima** — o mesmo
+que o clique dentro do site entrega. A rota interceptada continua servindo o
+clique, em que o catálogo já está montado e não precisa remontar.
+
+Fechar passou a depender de como se chegou: pela interceptação, `router.back()`
+devolve à página e à rolagem exatas; pelo link direto, `router.push('/')`, porque
+não há catálogo na pilha e `back()` jogaria quem veio do WhatsApp para fora do
+site.
+
+**Limitação registrada:** o `DialogPortal` do Radix só monta no cliente, então o
+HTML servido traz o catálogo mas não o produto expandido — no link direto o
+produto aparece depois da hidratação. Conferido no HTML servido: `id="catalogo"`
+e a busca presentes, `role="dialog"` ausente.
+
+**O teste do cupom, corrigido.** `validade no passado é recusada` calculava
+"ontem" com `toISOString()` (UTC) enquanto o validador compara
+`${validade}T23:59:59` em **hora local**. Entre 21h e a meia-noite no UTC-3,
+"ontem UTC" ainda é hoje local, o limite caía no futuro e o teste falhava — só
+nessa janela de três horas, o que fazia parecer instabilidade aleatória. A
+correção calcula a data no fuso local. Verificado às **21h28**, dentro da janela
+em que falhava: vermelho → verde.
+
+**Verificação:** `tsc --noEmit` ✓ 0 erros · build ✓ (rotas `ƒ /produto/[slug]` e
+`ƒ /(.)produto/[slug]`) · `node --test` **343/343** — a suíte inteira verde ·
+link direto servido em servidor local: **HTTP 200** com `id="catalogo"`, a busca
+da home e o carrossel de categorias no HTML, sem resquício da tela solta, e
+`og:image`/`title` preservados
+**Pendências / próximos passos:** `ModalIngredientes.tsx` segue no repositório
+(§3.7) sem ninguém abri-lo. Se o atraso do produto no link direto incomodar, dá
+para servir o conteúdo do produto no HTML em vez de esperar a hidratação — é
+mudança de moldura, não de dado.
+**Armadilhas descobertas:** `role="dialog"` ausente do HTML servido **não** é
+defeito de renderização: portal do Radix não existe no servidor. Confundir isso
+com bug levaria a caçar um problema que não existe.
+
 ## [2026-08-21] Página pública do produto, com link próprio e quantidade
 
 **Agente/Modelo:** Claude Opus 5 (Claude Code)

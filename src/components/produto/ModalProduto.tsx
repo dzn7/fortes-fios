@@ -13,6 +13,15 @@ import {
 
 type ModalProdutoProps = {
   produto: Produto
+  /**
+   * Para onde fechar.
+   *
+   * `historico` é o caso da rota interceptada: o catálogo está atrás na pilha,
+   * então voltar devolve exatamente onde a pessoa estava. `catalogo` é o caso
+   * do link direto — aí não há nada atrás, e `router.back()` jogaria a pessoa
+   * para fora do site (o WhatsApp, por exemplo).
+   */
+  aoFechar?: 'historico' | 'catalogo'
 }
 
 /**
@@ -24,14 +33,25 @@ type ModalProdutoProps = {
  *
  * `Dialog` do projeto: vira Radix no desktop e Drawer vaul no mobile sozinho.
  */
-export default function ModalProduto({ produto }: ModalProdutoProps) {
+export default function ModalProduto({
+  produto,
+  aoFechar = 'historico',
+}: ModalProdutoProps) {
   const router = useRouter()
+
+  const fechar = () => {
+    if (aoFechar === 'catalogo') {
+      router.push('/')
+      return
+    }
+    router.back()
+  }
 
   return (
     <Dialog
       open
       onOpenChange={(aberto) => {
-        if (!aberto) router.back()
+        if (!aberto) fechar()
       }}
     >
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-3xl">
@@ -43,7 +63,7 @@ export default function ModalProduto({ produto }: ModalProdutoProps) {
           <DialogTitle>{produto.nome}</DialogTitle>
           <DialogDescription>Detalhes e quantidade do produto</DialogDescription>
         </DialogHeader>
-        <DetalheProduto produto={produto} variante="modal" />
+        <DetalheProduto produto={produto} />
       </DialogContent>
     </Dialog>
   )

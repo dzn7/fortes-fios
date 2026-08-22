@@ -49,26 +49,41 @@ consulta anon no browser. Só colunas já públicas do catálogo são selecionad
 
 ## Comportamento esperado
 
-### Página `/produto/[slug]`
+### Sempre o catálogo com o produto por cima
+
+**Não existe tela separada de produto.** A primeira versão tinha uma, e foi
+recusada: caía num cartão sem vitrine atrás, sem busca e sem as outras
+categorias, e "voltar ao catálogo" virava um clique obrigatório. O link
+compartilhado tem de entregar o mesmo que o clique dentro do site — a loja
+aberta, com aquele produto em destaque.
+
+| Entrada | Quem renderiza | Fechar |
+|---|---|---|
+| Clique no cartão | rota interceptada `@modal/(.)produto/[slug]`; o catálogo já está montado e não remonta | `router.back()`, devolve à página e à rolagem exatas |
+| Link direto / recarregar | `/produto/[slug]`, que renderiza o catálogo **e** o produto por cima | `router.push('/')` — não há catálogo na pilha, e `back()` jogaria para fora do site |
+
+Nos dois casos o conteúdo é o mesmo `DetalheProduto`; só muda quem o emoldura.
 
 - Mostra nome, categoria, foto, descrição, preço, preço original e desconto
   quando houver, parcelas quando ativas, e o estado de estoque.
 - Seletor de quantidade com − e +, preso ao estoque disponível.
 - "Adicionar ao carrinho" leva a quantidade escolhida.
 - `generateMetadata` com título, descrição e `openGraph`/`twitter` apontando a
-  foto — é o que faz o link virar cartão no WhatsApp.
+  foto — é o que faz o link virar cartão no WhatsApp. Fica no servidor porque o
+  robô que monta a prévia não executa JavaScript.
 - Produto **indisponível** (`disponivel = false`) → 404. É o interruptor com que
   o Admin tira o produto do catálogo; manter a página viva o contradiria.
-- Produto **esgotado** (estoque) → a página existe e mostra "Esgotado", sem
-  permitir adicionar. Esgotado é estado de venda, não remoção.
+- Produto **esgotado** (estoque) → aparece e mostra "Esgotado", sem permitir
+  adicionar.
 - Slug inválido, id inexistente ou uuid malformado → 404.
 
-### Expansão no catálogo
+**Limitação conhecida.** O `DialogPortal` do Radix só monta no cliente, então o
+HTML servido traz o catálogo mas **não** o produto expandido: no link direto, o
+produto aparece depois da hidratação. Medido no HTML servido — `id="catalogo"` e
+a busca presentes, `role="dialog"` ausente. É o preço de o produto morar num
+diálogo; a tela separada não tinha esse atraso, mas foi recusada por tirar a
+pessoa da loja.
 
-- Clicar no cartão navega para o link do produto **interceptado**: abre por cima
-  do catálogo, sem remontar a lista nem perder a página/rolagem.
-- Voltar (botão do navegador ou gesto do celular) fecha e devolve ao catálogo.
-- Recarregar com o modal aberto cai na página inteira — mesma URL, mesmo conteúdo.
 
 ### Admin
 
